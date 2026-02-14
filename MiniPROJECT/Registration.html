@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Modern Auth Experience</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @keyframes fadeInScale {
+        from { opacity: 0; transform: scale(0.95) translateY(10px); }
+        to { opacity: 1; transform: scale(1) translateY(0); }
+      }
+      .animate-form { animation: fadeInScale 0.4s ease-out forwards; }
+      
+      .toggle-bg { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+      
+      .input-focus-effect {
+        transition: all 0.3s ease;
+      }
+      .input-focus-effect:focus {
+        box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+        border-color: #818cf8;
+      }
+    </style>
+  </head>
+  <body class="bg-gradient-to-br from-indigo-600 via-gray-950 to-blue-500 flex items-center justify-center min-h-screen p-4">
+    
+    <div class="animate-form bg-white/10 backdrop-blur-xl rounded-3xl shadow-2xl p-8 max-w-md w-full border border-white/10">
+      
+      <div class="relative flex items-center bg-white/5 rounded-xl p-1 mb-8 w-full border border-white/10 h-12">
+        <div id="slider" class="absolute w-[calc(50%-4px)] h-10 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg shadow-lg toggle-bg"></div>
+        
+        <button id="loginToggle" class="relative z-10 flex-1 text-sm font-bold text-white h-full focus:outline-none">Login</button>
+        <button id="signupToggle" class="relative z-10 flex-1 text-sm font-bold text-white h-full focus:outline-none">Sign Up</button>
+      </div>
+
+      <h2 id="formTitle" class="text-3xl font-extrabold text-white text-center mb-2 tracking-tight">Welcome Back</h2>
+      <p id="formSubtitle" class="text-gray-400 text-center text-sm mb-8">Please enter your details to continue</p>
+
+      <form id="authForm" class="space-y-4">
+        <div id="usernameField" class="hidden transform transition-all duration-300">
+          <label class="block text-indigo-300 text-xs font-bold uppercase tracking-wider mb-1 ml-1">Username</label>
+          <input type="text" class="input-focus-effect bg-white/5 border border-white/10 rounded-xl w-full py-3 px-4 text-white placeholder-gray-500 outline-none" placeholder="johndoe" />
+        </div>
+
+        <div>
+          <label class="block text-indigo-300 text-xs font-bold uppercase tracking-wider mb-1 ml-1">Email Address</label>
+          <input type="email" class="input-focus-effect bg-white/5 border border-white/10 rounded-xl w-full py-3 px-4 text-white placeholder-gray-500 outline-none" placeholder="name@company.com" />
+        </div>
+
+        <div>
+          <label class="block text-indigo-300 text-xs font-bold uppercase tracking-wider mb-1 ml-1">Password</label>
+          <input type="password" id="password" class="input-focus-effect bg-white/5 border border-white/10 rounded-xl w-full py-3 px-4 text-white placeholder-gray-500 outline-none" placeholder="••••••••" />
+          <p id="password-requirements" class="text-rose-400 text-[10px] mt-2 hidden italic">
+            Must contain 8+ characters, a letter, and a number.
+          </p>
+        </div>
+
+        <div id="confirmPasswordField" class="hidden">
+          <label class="block text-indigo-300 text-xs font-bold uppercase tracking-wider mb-1 ml-1">Confirm Password</label>
+          <input type="password" id="confirmPassword" class="input-focus-effect bg-white/5 border border-white/10 rounded-xl w-full py-3 px-4 text-white placeholder-gray-500 outline-none" placeholder="••••••••" />
+        </div>
+
+        <button id="mainButton" class="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white font-bold py-3 px-4 rounded-xl transition-all duration-300 transform active:scale-95 shadow-lg shadow-indigo-500/20" type="submit">
+          Sign In
+        </button>
+      </form>
+
+      <div class="relative my-8">
+        <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-white/10"></div></div>
+        <div class="relative flex justify-center text-xs uppercase"><span class="bg-[#1a1c2e] px-2 text-gray-500">Or continue with</span></div>
+      </div>
+
+      <div class="grid grid-cols-1 gap-3">
+        <button class="flex items-center justify-center gap-3 w-full bg-white text-gray-900 font-semibold py-3 px-4 rounded-xl hover:bg-gray-100 transition-colors duration-300 active:scale-95">
+          <svg class="w-5 h-5" viewBox="0 0 24 24">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+          </svg>
+          Google
+        </button>
+      </div>
+    </div>
+
+    <script>
+      const slider = document.getElementById('slider');
+      const loginToggle = document.getElementById('loginToggle');
+      const signupToggle = document.getElementById('signupToggle');
+      const formTitle = document.getElementById('formTitle');
+      const formSubtitle = document.getElementById('formSubtitle');
+      const mainButton = document.getElementById('mainButton');
+      
+      const usernameField = document.getElementById('usernameField');
+      const confirmPasswordField = document.getElementById('confirmPasswordField');
+      const passwordInput = document.getElementById("password");
+      const confirmPasswordInput = document.getElementById("confirmPassword");
+      const passwordRequirements = document.getElementById("password-requirements");
+
+      let isLogin = true;
+
+      function toggleMode(toLogin) {
+        if (isLogin === toLogin) return;
+        isLogin = toLogin;
+        
+        // Move the slider background (using percentage for responsiveness)
+        slider.style.transform = isLogin ? 'translateX(0)' : 'translateX(100%)';
+        slider.style.left = isLogin ? '4px' : '-4px'; // Micro-adjustment for padding
+        
+        // Update Content
+        formTitle.innerText = isLogin ? 'Welcome Back' : 'Create Account';
+        formSubtitle.innerText = isLogin ? 'Please enter your details to continue' : 'Join our community today';
+        mainButton.innerText = isLogin ? 'Sign In' : 'Create Account';
+
+        // Toggle Fields
+        if(isLogin) {
+            usernameField.classList.add('hidden');
+            confirmPasswordField.classList.add('hidden');
+        } else {
+            usernameField.classList.remove('hidden');
+            confirmPasswordField.classList.remove('hidden');
+        }
+        
+        updateButtonState();
+      }
+
+      loginToggle.addEventListener('click', () => toggleMode(true));
+      signupToggle.addEventListener('click', () => toggleMode(false));
+
+      function updateButtonState() {
+        if (isLogin) {
+          mainButton.disabled = false;
+          passwordRequirements.classList.add("hidden");
+        } else {
+          const password = passwordInput.value;
+          const isValid = password.length >= 8 && /[a-zA-Z]/.test(password) && /[0-9]/.test(password);
+          const doPasswordsMatch = password === confirmPasswordInput.value && password !== "";
+          
+          if (password !== "") {
+            isValid ? passwordRequirements.classList.add("hidden") : passwordRequirements.classList.remove("hidden");
+          }
+          
+          mainButton.disabled = !(isValid && doPasswordsMatch);
+        }
+      }
+
+      passwordInput.addEventListener("input", updateButtonState);
+      confirmPasswordInput.addEventListener("input", updateButtonState);
+    </script>
+  </body>
+</html>
