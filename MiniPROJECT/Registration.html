@@ -33,7 +33,6 @@
       overflow-x: hidden;
     }
 
-    /* Animated background */
     body::before {
       content: '';
       position: fixed;
@@ -53,7 +52,6 @@
       max-width: 460px;
     }
 
-    /* Logo */
     .logo {
       text-align: center;
       margin-bottom: 32px;
@@ -84,11 +82,8 @@
       letter-spacing: -0.5px;
     }
 
-    .logo-text span {
-      color: var(--accent);
-    }
+    .logo-text span { color: var(--accent); }
 
-    /* Card */
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -98,7 +93,6 @@
       box-shadow: 0 40px 80px rgba(0,0,0,0.4);
     }
 
-    /* Tab Toggle */
     .tabs {
       display: flex;
       background: var(--surface2);
@@ -141,10 +135,7 @@
 
     .tab-btn.active { color: white; }
 
-    /* Form Header */
-    .form-header {
-      margin-bottom: 24px;
-    }
+    .form-header { margin-bottom: 24px; }
 
     .form-title {
       font-family: 'Syne', sans-serif;
@@ -160,7 +151,6 @@
       font-weight: 300;
     }
 
-    /* Alert Messages */
     .alert {
       display: none;
       padding: 12px 16px;
@@ -187,7 +177,6 @@
       color: var(--success);
     }
 
-    /* Form Fields */
     .fields { display: flex; flex-direction: column; gap: 16px; }
 
     .field {
@@ -245,7 +234,6 @@
       margin-top: -4px;
     }
 
-    /* Submit Button */
     .btn-primary {
       width: 100%;
       padding: 14px;
@@ -272,7 +260,6 @@
     .btn-primary:active { transform: translateY(0); }
     .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
-    /* Divider */
     .divider {
       display: flex;
       align-items: center;
@@ -294,7 +281,6 @@
       white-space: nowrap;
     }
 
-    /* Google Button */
     .btn-google {
       width: 100%;
       padding: 13px;
@@ -321,7 +307,6 @@
 
     .btn-google svg { width: 18px; height: 18px; flex-shrink: 0; }
 
-    /* Loading spinner */
     .spinner {
       display: inline-block;
       width: 16px;
@@ -349,7 +334,6 @@
 
 <div class="wrapper">
 
-  <!-- Logo -->
   <div class="logo">
     <div class="logo-icon">
       <div class="logo-badge">⚡</div>
@@ -357,23 +341,19 @@
     </div>
   </div>
 
-  <!-- Card -->
   <div class="card">
 
-    <!-- Tabs -->
     <div class="tabs">
       <div class="tab-slider" id="tabSlider"></div>
       <button class="tab-btn active" id="loginTab" onclick="switchTab('login')">Login</button>
       <button class="tab-btn" id="signupTab" onclick="switchTab('signup')">Sign Up</button>
     </div>
 
-    <!-- Form Header -->
     <div class="form-header">
       <div class="form-title" id="formTitle">Welcome back</div>
       <div class="form-subtitle" id="formSubtitle">Sign in to continue trading skills</div>
     </div>
 
-    <!-- Alerts -->
     <div class="alert alert-error" id="errorAlert">
       <span>⚠</span>
       <span id="errorText"></span>
@@ -383,43 +363,36 @@
       <span id="successText"></span>
     </div>
 
-    <!-- Form -->
     <form id="authForm" onsubmit="handleSubmit(event)">
       <div class="fields">
 
-        <!-- Full Name (signup only) -->
         <div class="field hidden" id="fieldName">
           <label>Full Name</label>
           <input type="text" id="fullName" placeholder="Raiyan Chougle" />
         </div>
 
-        <!-- Email -->
         <div class="field">
           <label>Email Address</label>
           <input type="email" id="email" placeholder="you@example.com" required />
         </div>
 
-        <!-- Password -->
         <div class="field">
           <label>Password</label>
           <input type="password" id="password" placeholder="••••••••" required oninput="checkPassword()" />
           <div class="password-hint" id="passwordHint">Password must be at least 6 characters</div>
         </div>
 
-        <!-- Confirm Password (signup only) -->
         <div class="field hidden" id="fieldConfirm">
           <label>Confirm Password</label>
           <input type="password" id="confirmPassword" placeholder="••••••••" oninput="checkPassword()" />
         </div>
 
-        <!-- Skills to Teach (signup only) -->
         <div class="field hidden" id="fieldTeach">
           <label>Skills I Can Teach</label>
           <textarea id="teachSkills" placeholder="e.g. Python, Guitar, Photography"></textarea>
           <div class="hint">Separate with commas</div>
         </div>
 
-        <!-- Skills to Learn (signup only) -->
         <div class="field hidden" id="fieldLearn">
           <label>Skills I Want to Learn</label>
           <textarea id="learnSkills" placeholder="e.g. React, Drawing, Spanish"></textarea>
@@ -431,14 +404,12 @@
       </div>
     </form>
 
-    <!-- Divider -->
     <div class="divider">
       <div class="divider-line"></div>
       <div class="divider-text">or continue with</div>
       <div class="divider-line"></div>
     </div>
 
-    <!-- Google Button -->
     <button class="btn-google" onclick="handleGoogle()">
       <svg viewBox="0 0 24 24">
         <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -458,7 +429,6 @@
   import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, updateProfile } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
   import { getFirestore, doc, setDoc, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 
-  // Firebase config
   const firebaseConfig = {
     apiKey: "AIzaSyA6aCr1L8MaEE9aeQ-nNGEzxdjiGVPUMCU",
     authDomain: "skillswap-d2626.firebaseapp.com",
@@ -474,7 +444,6 @@
   const db = getFirestore(app);
   const googleProvider = new GoogleAuthProvider();
 
-  // Helper: Show error
   function showError(msg) {
     const el = document.getElementById('errorAlert');
     document.getElementById('errorText').textContent = msg;
@@ -482,7 +451,6 @@
     document.getElementById('successAlert').classList.remove('show');
   }
 
-  // Helper: Show success
   function showSuccess(msg) {
     const el = document.getElementById('successAlert');
     document.getElementById('successText').textContent = msg;
@@ -490,36 +458,43 @@
     document.getElementById('errorAlert').classList.remove('show');
   }
 
-  // Helper: Hide alerts
   function hideAlerts() {
     document.getElementById('errorAlert').classList.remove('show');
     document.getElementById('successAlert').classList.remove('show');
   }
 
-  // Helper: Save user profile to Firestore
-  async function saveProfile(user, extraData = {}) {
+  // ── SMART REDIRECT: check if profile exists first ──────────────────────────
+  async function smartRedirect(user) {
+    try {
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (userDoc.exists() && userDoc.data().profileCompleted === true) {
+        // Profile already completed → go to dashboard
+        window.location.href = 'dashboard.html';
+      } else {
+        // New user or incomplete profile → go to create profile
+        window.location.href = 'createprofile.html';
+      }
+    } catch (err) {
+      console.error('Redirect check failed:', err);
+      // Fallback: if Firestore check fails, send to createprofile (safe default)
+      window.location.href = 'createprofile.html';
+    }
+  }
+
+  // Save minimal user record on signup (full profile done in createprofile.html)
+  async function saveMinimalProfile(user, extraData = {}) {
     const userRef = doc(db, 'users', user.uid);
     const existing = await getDoc(userRef);
-
-    // Only create profile if it doesn't exist yet
     if (!existing.exists()) {
       await setDoc(userRef, {
         uid: user.uid,
         fullName: extraData.fullName || user.displayName || '',
         email: user.email,
-        skillsToTeach: extraData.skillsToTeach || [],
-        skillsToLearn: extraData.skillsToLearn || [],
-        creditBalance: 0,
-        verifiedSkills: [],
         photoURL: user.photoURL || '',
+        profileCompleted: false,   // ← marks as incomplete until createprofile done
         createdAt: serverTimestamp()
       });
     }
-  }
-
-  // Helper: Redirect after login
-  function redirectAfterLogin() {
-    window.location.href = 'dashboard.html';
   }
 
   // Handle Email/Password form submit
@@ -532,19 +507,16 @@
     const password = document.getElementById('password').value;
     const btn = document.getElementById('submitBtn');
 
-    // Loading state
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>' + (isLogin ? 'Signing in...' : 'Creating account...');
 
     try {
       if (isLogin) {
-        // LOGIN
         const { user } = await signInWithEmailAndPassword(auth, email, password);
         showSuccess('Welcome back! Redirecting...');
-        setTimeout(redirectAfterLogin, 1200);
+        setTimeout(() => smartRedirect(user), 1200);
 
       } else {
-        // SIGN UP - validate first
         const fullName = document.getElementById('fullName').value.trim();
         const confirmPwd = document.getElementById('confirmPassword').value;
         const teachRaw = document.getElementById('teachSkills').value;
@@ -559,22 +531,16 @@
         if (skillsToTeach.length === 0) throw new Error('Please enter at least one skill you can teach');
         if (skillsToLearn.length === 0) throw new Error('Please enter at least one skill you want to learn');
 
-        // Create user
         const { user } = await createUserWithEmailAndPassword(auth, email, password);
-
-        // Update display name
         await updateProfile(user, { displayName: fullName });
+        await saveMinimalProfile(user, { fullName, skillsToTeach, skillsToLearn });
 
-        // Save profile to Firestore
-        await saveProfile(user, { fullName, skillsToTeach, skillsToLearn });
-
-        showSuccess('Account created! Taking you to your dashboard...');
-        setTimeout(redirectAfterLogin, 1500);
+        showSuccess('Account created! Let\'s set up your profile...');
+        setTimeout(() => smartRedirect(user), 1500);
       }
 
     } catch (err) {
       console.error(err);
-      // Make Firebase errors more readable
       const messages = {
         'auth/user-not-found': 'No account found with this email',
         'auth/wrong-password': 'Incorrect password',
@@ -595,9 +561,9 @@
     hideAlerts();
     try {
       const { user } = await signInWithPopup(auth, googleProvider);
-      await saveProfile(user);
+      await saveMinimalProfile(user);
       showSuccess('Signed in with Google! Redirecting...');
-      setTimeout(redirectAfterLogin, 1200);
+      setTimeout(() => smartRedirect(user), 1200);
     } catch (err) {
       console.error(err);
       if (err.code !== 'auth/popup-closed-by-user') {
@@ -610,34 +576,26 @@
 <!-- UI Logic -->
 <script>
   let currentTab = 'login';
-
   const signupFields = ['fieldName', 'fieldConfirm', 'fieldTeach', 'fieldLearn'];
 
   function switchTab(tab) {
     currentTab = tab;
     const isSignup = tab === 'signup';
 
-    // Update slider
     const slider = document.getElementById('tabSlider');
     slider.className = 'tab-slider' + (isSignup ? ' signup' : '');
 
-    // Update tab buttons
     document.getElementById('loginTab').classList.toggle('active', !isSignup);
     document.getElementById('signupTab').classList.toggle('active', isSignup);
 
-    // Update header
     document.getElementById('formTitle').textContent = isSignup ? 'Create your account' : 'Welcome back';
     document.getElementById('formSubtitle').textContent = isSignup ? 'Join the skill-trading community' : 'Sign in to continue trading skills';
-
-    // Update button
     document.getElementById('submitBtn').textContent = isSignup ? 'Create Account' : 'Sign In';
 
-    // Toggle signup fields
     signupFields.forEach(id => {
       document.getElementById(id).classList.toggle('hidden', !isSignup);
     });
 
-    // Hide alerts on switch
     document.getElementById('errorAlert').classList.remove('show');
     document.getElementById('successAlert').classList.remove('show');
   }
