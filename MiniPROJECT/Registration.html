@@ -7,333 +7,126 @@
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --bg: #0a0a0f;
-      --surface: #111118;
-      --surface2: #1a1a24;
-      --border: rgba(255,255,255,0.07);
-      --accent: #6c63ff;
-      --accent2: #ff6584;
-      --text: #f0f0f5;
-      --muted: #6b6b80;
-      --success: #4ade80;
-      --error: #f87171;
+      --bg: #0a0a0f; --surface: #111118; --surface2: #1a1a24;
+      --border: rgba(255,255,255,0.07); --accent: #6c63ff; --accent2: #ff6584;
+      --text: #f0f0f5; --muted: #6b6b80; --success: #4ade80; --error: #f87171;
     }
-
     body {
       font-family: 'DM Sans', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      overflow-x: hidden;
+      background: var(--bg); color: var(--text);
+      min-height: 100vh; display: flex;
+      align-items: center; justify-content: center;
+      padding: 20px; overflow-x: hidden;
     }
-
     body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background: 
+      content: ''; position: fixed; inset: 0;
+      background:
         radial-gradient(ellipse 60% 50% at 20% 20%, rgba(108,99,255,0.15) 0%, transparent 60%),
         radial-gradient(ellipse 50% 40% at 80% 80%, rgba(255,101,132,0.1) 0%, transparent 60%),
         radial-gradient(ellipse 40% 60% at 60% 10%, rgba(108,99,255,0.08) 0%, transparent 50%);
-      pointer-events: none;
-      z-index: 0;
+      pointer-events: none; z-index: 0;
     }
-
-    .wrapper {
-      position: relative;
-      z-index: 1;
-      width: 100%;
-      max-width: 460px;
-    }
-
-    .logo {
-      text-align: center;
-      margin-bottom: 32px;
-      animation: fadeDown 0.5s ease both;
-    }
-
-    .logo-icon {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-    }
-
+    .wrapper { position: relative; z-index: 1; width: 100%; max-width: 460px; }
+    .logo { text-align: center; margin-bottom: 32px; animation: fadeDown 0.5s ease both; }
+    .logo-icon { display: inline-flex; align-items: center; gap: 10px; }
     .logo-badge {
-      width: 40px;
-      height: 40px;
+      width: 40px; height: 40px;
       background: linear-gradient(135deg, var(--accent), var(--accent2));
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 20px;
+      border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px;
     }
-
-    .logo-text {
-      font-family: 'Syne', sans-serif;
-      font-size: 22px;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-    }
-
+    .logo-text { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
     .logo-text span { color: var(--accent); }
-
     .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 36px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 20px; padding: 36px;
       animation: fadeUp 0.5s ease both 0.1s;
       box-shadow: 0 40px 80px rgba(0,0,0,0.4);
     }
-
     .tabs {
-      display: flex;
-      background: var(--surface2);
-      border-radius: 10px;
-      padding: 4px;
-      margin-bottom: 28px;
-      position: relative;
+      display: flex; background: var(--surface2);
+      border-radius: 10px; padding: 4px; margin-bottom: 28px; position: relative;
     }
-
     .tab-slider {
-      position: absolute;
-      top: 4px;
-      left: 4px;
-      width: calc(50% - 4px);
-      height: calc(100% - 8px);
-      background: var(--accent);
-      border-radius: 7px;
+      position: absolute; top: 4px; left: 4px;
+      width: calc(50% - 4px); height: calc(100% - 8px);
+      background: var(--accent); border-radius: 7px;
       transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
       box-shadow: 0 2px 12px rgba(108,99,255,0.4);
     }
-
     .tab-slider.signup { transform: translateX(100%); }
-
     .tab-btn {
-      flex: 1;
-      position: relative;
-      z-index: 1;
-      background: none;
-      border: none;
-      color: var(--muted);
-      font-family: 'Syne', sans-serif;
-      font-size: 14px;
-      font-weight: 700;
-      padding: 10px;
-      cursor: pointer;
-      border-radius: 7px;
-      transition: color 0.3s;
-      letter-spacing: 0.3px;
+      flex: 1; position: relative; z-index: 1;
+      background: none; border: none; color: var(--muted);
+      font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700;
+      padding: 10px; cursor: pointer; border-radius: 7px;
+      transition: color 0.3s; letter-spacing: 0.3px;
     }
-
     .tab-btn.active { color: white; }
-
     .form-header { margin-bottom: 24px; }
-
-    .form-title {
-      font-family: 'Syne', sans-serif;
-      font-size: 26px;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-      margin-bottom: 6px;
-    }
-
-    .form-subtitle {
-      color: var(--muted);
-      font-size: 14px;
-      font-weight: 300;
-    }
-
+    .form-title { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 6px; }
+    .form-subtitle { color: var(--muted); font-size: 14px; font-weight: 300; }
     .alert {
-      display: none;
-      padding: 12px 16px;
-      border-radius: 10px;
-      font-size: 13px;
-      margin-bottom: 20px;
-      font-weight: 500;
-      align-items: center;
-      gap: 8px;
-      animation: fadeUp 0.3s ease;
+      display: none; padding: 12px 16px; border-radius: 10px;
+      font-size: 13px; margin-bottom: 20px; font-weight: 500;
+      align-items: center; gap: 8px; animation: fadeUp 0.3s ease;
     }
-
     .alert.show { display: flex; }
-
-    .alert-error {
-      background: rgba(248,113,113,0.1);
-      border: 1px solid rgba(248,113,113,0.2);
-      color: var(--error);
-    }
-
-    .alert-success {
-      background: rgba(74,222,128,0.1);
-      border: 1px solid rgba(74,222,128,0.2);
-      color: var(--success);
-    }
-
+    .alert-error { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.2); color: var(--error); }
+    .alert-success { background: rgba(74,222,128,0.1); border: 1px solid rgba(74,222,128,0.2); color: var(--success); }
+    .alert-info { background: rgba(108,99,255,0.08); border: 1px solid rgba(108,99,255,0.2); color: #a89dff; }
     .fields { display: flex; flex-direction: column; gap: 16px; }
-
-    .field {
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-    }
-
+    .field { display: flex; flex-direction: column; gap: 7px; }
     .field.hidden { display: none; }
-
-    label {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      color: var(--muted);
-    }
-
+    label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); }
     input, textarea {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 13px 16px;
-      color: var(--text);
-      font-family: 'DM Sans', sans-serif;
-      font-size: 14px;
-      outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s;
-      width: 100%;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 13px 16px; color: var(--text);
+      font-family: 'DM Sans', sans-serif; font-size: 14px; outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s; width: 100%;
     }
-
     input::placeholder, textarea::placeholder { color: var(--muted); }
-
-    input:focus, textarea:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(108,99,255,0.15);
-    }
-
-    textarea {
-      resize: none;
-      height: 72px;
-      line-height: 1.5;
-    }
-
-    .hint {
-      font-size: 11px;
-      color: var(--muted);
-      margin-top: -4px;
-    }
-
-    .password-hint {
-      font-size: 11px;
-      color: var(--error);
-      display: none;
-      margin-top: -4px;
-    }
-
+    input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(108,99,255,0.15); }
+    textarea { resize: none; height: 72px; line-height: 1.5; }
+    .hint { font-size: 11px; color: var(--muted); margin-top: -4px; }
+    .password-hint { font-size: 11px; color: var(--error); display: none; margin-top: -4px; }
     .btn-primary {
-      width: 100%;
-      padding: 14px;
-      background: var(--accent);
-      color: white;
-      border: none;
-      border-radius: 10px;
-      font-family: 'Syne', sans-serif;
-      font-size: 15px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.2s;
-      margin-top: 4px;
-      letter-spacing: 0.3px;
+      width: 100%; padding: 14px; background: var(--accent); color: white;
+      border: none; border-radius: 10px; font-family: 'Syne', sans-serif;
+      font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.2s;
+      margin-top: 4px; letter-spacing: 0.3px;
       box-shadow: 0 4px 20px rgba(108,99,255,0.3);
     }
-
-    .btn-primary:hover {
-      background: #7c74ff;
-      transform: translateY(-1px);
-      box-shadow: 0 6px 24px rgba(108,99,255,0.4);
-    }
-
+    .btn-primary:hover { background: #7c74ff; transform: translateY(-1px); box-shadow: 0 6px 24px rgba(108,99,255,0.4); }
     .btn-primary:active { transform: translateY(0); }
     .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-
-    .divider {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin: 20px 0;
-    }
-
-    .divider-line {
-      flex: 1;
-      height: 1px;
-      background: var(--border);
-    }
-
-    .divider-text {
-      font-size: 12px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      white-space: nowrap;
-    }
-
+    .divider { display: flex; align-items: center; gap: 12px; margin: 20px 0; }
+    .divider-line { flex: 1; height: 1px; background: var(--border); }
+    .divider-text { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; white-space: nowrap; }
     .btn-google {
-      width: 100%;
-      padding: 13px;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      color: var(--text);
-      font-family: 'DM Sans', sans-serif;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      transition: all 0.2s;
+      width: 100%; padding: 13px; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; color: var(--text); font-family: 'DM Sans', sans-serif;
+      font-size: 14px; font-weight: 500; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 10px; transition: all 0.2s;
     }
-
-    .btn-google:hover {
-      background: var(--surface);
-      border-color: rgba(255,255,255,0.15);
-      transform: translateY(-1px);
-    }
-
+    .btn-google:hover { background: var(--surface); border-color: rgba(255,255,255,0.15); transform: translateY(-1px); }
+    .btn-google:active { transform: translateY(0); }
+    .btn-google:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
     .btn-google svg { width: 18px; height: 18px; flex-shrink: 0; }
-
     .spinner {
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      border: 2px solid rgba(255,255,255,0.3);
-      border-top-color: white;
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-      vertical-align: middle;
-      margin-right: 6px;
+      display: inline-block; width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.3); border-top-color: white;
+      border-radius: 50%; animation: spin 0.7s linear infinite;
+      vertical-align: middle; margin-right: 6px;
     }
-
     @keyframes spin { to { transform: rotate(360deg); } }
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(16px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes fadeDown {
-      from { opacity: 0; transform: translateY(-12px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeDown { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
   </style>
 </head>
 <body>
 
 <div class="wrapper">
-
   <div class="logo">
     <div class="logo-icon">
       <div class="logo-badge">⚡</div>
@@ -342,7 +135,6 @@
   </div>
 
   <div class="card">
-
     <div class="tabs">
       <div class="tab-slider" id="tabSlider"></div>
       <button class="tab-btn active" id="loginTab" onclick="switchTab('login')">Login</button>
@@ -354,53 +146,42 @@
       <div class="form-subtitle" id="formSubtitle">Sign in to continue trading skills</div>
     </div>
 
-    <div class="alert alert-error" id="errorAlert">
-      <span>⚠</span>
-      <span id="errorText"></span>
-    </div>
-    <div class="alert alert-success" id="successAlert">
-      <span>✓</span>
-      <span id="successText"></span>
-    </div>
+    <div class="alert alert-error"   id="errorAlert">  <span>⚠</span><span id="errorText"></span></div>
+    <div class="alert alert-success" id="successAlert"><span>✓</span><span id="successText"></span></div>
+    <div class="alert alert-info"    id="infoAlert">   <span>⏳</span><span id="infoText">Completing Google sign-in…</span></div>
 
     <form id="authForm" onsubmit="handleSubmit(event)">
       <div class="fields">
-
         <div class="field hidden" id="fieldName">
           <label>Full Name</label>
-          <input type="text" id="fullName" placeholder="Raiyan Chougle" />
+          <input type="text" id="fullName" placeholder="Your Full Name" autocomplete="name" />
         </div>
-
         <div class="field">
           <label>Email Address</label>
-          <input type="email" id="email" placeholder="you@example.com" required />
+          <input type="email" id="email" placeholder="you@example.com" required autocomplete="email" />
         </div>
-
         <div class="field">
           <label>Password</label>
-          <input type="password" id="password" placeholder="••••••••" required oninput="checkPassword()" />
+          <input type="password" id="password" placeholder="••••••••" required
+            oninput="checkPassword()" autocomplete="current-password" />
           <div class="password-hint" id="passwordHint">Password must be at least 6 characters</div>
         </div>
-
         <div class="field hidden" id="fieldConfirm">
           <label>Confirm Password</label>
-          <input type="password" id="confirmPassword" placeholder="••••••••" oninput="checkPassword()" />
+          <input type="password" id="confirmPassword" placeholder="••••••••"
+            oninput="checkPassword()" autocomplete="new-password" />
         </div>
-
         <div class="field hidden" id="fieldTeach">
           <label>Skills I Can Teach</label>
           <textarea id="teachSkills" placeholder="e.g. Python, Guitar, Photography"></textarea>
           <div class="hint">Separate with commas</div>
         </div>
-
         <div class="field hidden" id="fieldLearn">
           <label>Skills I Want to Learn</label>
           <textarea id="learnSkills" placeholder="e.g. React, Drawing, Spanish"></textarea>
           <div class="hint">Separate with commas</div>
         </div>
-
         <button type="submit" class="btn-primary" id="submitBtn">Sign In</button>
-
       </div>
     </form>
 
@@ -410,7 +191,7 @@
       <div class="divider-line"></div>
     </div>
 
-    <button class="btn-google" onclick="handleGoogle()">
+    <button class="btn-google" id="googleBtn" onclick="handleGoogle()">
       <svg viewBox="0 0 24 24">
         <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
         <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -419,161 +200,281 @@
       </svg>
       Continue with Google
     </button>
-
   </div>
 </div>
 
-<!-- Firebase -->
+<!-- ═══════════════════════════════════════════════════════════════════
+     Firebase 10.7.1 — MUST match dashboard.html and createprofile.html
+     DO NOT change this version number
+     ═══════════════════════════════════════════════════════════════════ -->
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
-  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, updateProfile } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
-  import { getFirestore, doc, setDoc, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
+  import { initializeApp }
+    from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+  import {
+    getAuth,
+    setPersistence,
+    browserSessionPersistence,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    GoogleAuthProvider,
+    signInWithPopup,
+    signInWithRedirect,
+    getRedirectResult,
+    updateProfile
+  } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+  import {
+    getFirestore,
+    doc, setDoc, getDoc, serverTimestamp
+  } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
+  // ─────────────────────────────────────────────────────────────
+  // CONFIG  (same project as dashboard.html)
+  // ─────────────────────────────────────────────────────────────
   const firebaseConfig = {
-    apiKey: "AIzaSyA6aCr1L8MaEE9aeQ-nNGEzxdjiGVPUMCU",
-    authDomain: "skillswap-d2626.firebaseapp.com",
-    projectId: "skillswap-d2626",
-    storageBucket: "skillswap-d2626.firebasestorage.app",
-    messagingSenderId: "34762810999",
-    appId: "1:34762810999:web:cae33caad1337b0eebc872",
-    measurementId: "G-0BHE3F5JZ7"
+    apiKey:            'AIzaSyA6aCr1L8MaEE9aeQ-nNGEzxdjiGVPUMCU',
+    authDomain:        'skillswap-d2626.firebaseapp.com',
+    projectId:         'skillswap-d2626',
+    storageBucket:     'skillswap-d2626.firebasestorage.app',
+    messagingSenderId: '34762810999',
+    appId:             '1:34762810999:web:cae33caad1337b0eebc872'
   };
 
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db = getFirestore(app);
+  const app            = initializeApp(firebaseConfig);
+  const auth           = getAuth(app);
+  const db             = getFirestore(app);
   const googleProvider = new GoogleAuthProvider();
 
+  // ─────────────────────────────────────────────────────────────
+  // PERSISTENCE — SESSION ONLY (no auto-login)
+  //
+  // browserSessionPersistence means:
+  //   ✅ Logged in for the current tab as long as it stays open
+  //   ✅ Navigating between pages in the same tab keeps session
+  //   ❌ Opening a new tab → NOT logged in (must sign in again)
+  //   ❌ Closing and reopening the browser → NOT logged in
+  //
+  // This prevents the "auto-login every time I visit" problem.
+  // ─────────────────────────────────────────────────────────────
+  await setPersistence(auth, browserSessionPersistence);
+
+  // ─────────────────────────────────────────────────────────────
+  // ALERT HELPERS
+  // ─────────────────────────────────────────────────────────────
   function showError(msg) {
-    const el = document.getElementById('errorAlert');
     document.getElementById('errorText').textContent = msg;
-    el.classList.add('show');
+    document.getElementById('errorAlert').classList.add('show');
     document.getElementById('successAlert').classList.remove('show');
+    document.getElementById('infoAlert').classList.remove('show');
   }
-
   function showSuccess(msg) {
-    const el = document.getElementById('successAlert');
     document.getElementById('successText').textContent = msg;
-    el.classList.add('show');
+    document.getElementById('successAlert').classList.add('show');
     document.getElementById('errorAlert').classList.remove('show');
+    document.getElementById('infoAlert').classList.remove('show');
   }
-
-  function hideAlerts() {
+  function showInfo(msg) {
+    document.getElementById('infoText').textContent = msg;
+    document.getElementById('infoAlert').classList.add('show');
     document.getElementById('errorAlert').classList.remove('show');
     document.getElementById('successAlert').classList.remove('show');
   }
+  function hideAlerts() {
+    ['errorAlert','successAlert','infoAlert'].forEach(id =>
+      document.getElementById(id).classList.remove('show'));
+  }
 
-  // ── SMART REDIRECT: check if profile exists first ──────────────────────────
+  // ─────────────────────────────────────────────────────────────
+  // SMART REDIRECT
+  // Only called when the user actively clicks a sign-in button.
+  // NEVER called automatically on page load.
+  // ─────────────────────────────────────────────────────────────
   async function smartRedirect(user) {
     try {
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      if (userDoc.exists() && userDoc.data().profileCompleted === true) {
-        // Profile already completed → go to dashboard
+      const snap = await getDoc(doc(db, 'users', user.uid));
+      if (snap.exists() && snap.data().profileCompleted === true) {
         window.location.href = 'dashboard.html';
       } else {
-        // New user or incomplete profile → go to create profile
         window.location.href = 'createprofile.html';
       }
     } catch (err) {
       console.error('Redirect check failed:', err);
-      // Fallback: if Firestore check fails, send to createprofile (safe default)
       window.location.href = 'createprofile.html';
     }
   }
 
-  // Save minimal user record on signup (full profile done in createprofile.html)
+  // ─────────────────────────────────────────────────────────────
+  // SAVE MINIMAL PROFILE  (new users only, skips existing ones)
+  // ─────────────────────────────────────────────────────────────
   async function saveMinimalProfile(user, extraData = {}) {
-    const userRef = doc(db, 'users', user.uid);
-    const existing = await getDoc(userRef);
+    const ref = doc(db, 'users', user.uid);
+    const existing = await getDoc(ref);
     if (!existing.exists()) {
-      await setDoc(userRef, {
-        uid: user.uid,
-        fullName: extraData.fullName || user.displayName || '',
-        email: user.email,
-        photoURL: user.photoURL || '',
-        profileCompleted: false,   // ← marks as incomplete until createprofile done
-        createdAt: serverTimestamp()
+      await setDoc(ref, {
+        uid:              user.uid,
+        fullName:         extraData.fullName || user.displayName || '',
+        email:            user.email,
+        photoURL:         user.photoURL || '',
+        profileCompleted: false,
+        createdAt:        serverTimestamp()
       });
     }
   }
 
-  // Handle Email/Password form submit
+  // ─────────────────────────────────────────────────────────────
+  // GOOGLE REDIRECT RESULT HANDLER
+  //
+  // When the user clicks "Continue with Google" and the browser
+  // uses the redirect flow (popup blocked), Google sends them back
+  // to this page. getRedirectResult picks up that result here.
+  //
+  // If there's no pending redirect (normal page load), result = null
+  // and nothing happens — no auto-login.
+  // ─────────────────────────────────────────────────────────────
+  try {
+    const result = await getRedirectResult(auth);
+    if (result && result.user) {
+      showInfo('Completing Google sign-in…');
+      await saveMinimalProfile(result.user);
+      showSuccess('Signed in with Google! Redirecting…');
+      setTimeout(() => smartRedirect(result.user), 1000);
+    }
+    // result === null → normal page load, no redirect pending → do nothing ✅
+  } catch (err) {
+    // Only show error for real failures, not for "no pending redirect"
+    if (err.code && !['auth/no-auth-event', 'auth/null-user'].includes(err.code)) {
+      console.error('Redirect result error:', err);
+      showError('Google sign-in failed. Please try again.');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // EMAIL / PASSWORD  (login + signup)
+  // ─────────────────────────────────────────────────────────────
   window.handleSubmit = async function(e) {
     e.preventDefault();
     hideAlerts();
 
     const isLogin = document.getElementById('loginTab').classList.contains('active');
-    const email = document.getElementById('email').value.trim();
-    const password = document.getElementById('password').value;
-    const btn = document.getElementById('submitBtn');
+    const email   = document.getElementById('email').value.trim();
+    const pwd     = document.getElementById('password').value;
+    const btn     = document.getElementById('submitBtn');
 
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span>' + (isLogin ? 'Signing in...' : 'Creating account...');
+    btn.disabled  = true;
+    btn.innerHTML = `<span class="spinner"></span>${isLogin ? 'Signing in…' : 'Creating account…'}`;
 
     try {
       if (isLogin) {
-        const { user } = await signInWithEmailAndPassword(auth, email, password);
-        showSuccess('Welcome back! Redirecting...');
-        setTimeout(() => smartRedirect(user), 1200);
+        // ── LOGIN ────────────────────────────────────────────
+        const { user } = await signInWithEmailAndPassword(auth, email, pwd);
+        showSuccess('Welcome back! Redirecting…');
+        setTimeout(() => smartRedirect(user), 1000);
 
       } else {
-        const fullName = document.getElementById('fullName').value.trim();
+        // ── SIGN UP ──────────────────────────────────────────
+        const fullName   = document.getElementById('fullName').value.trim();
         const confirmPwd = document.getElementById('confirmPassword').value;
-        const teachRaw = document.getElementById('teachSkills').value;
-        const learnRaw = document.getElementById('learnSkills').value;
+        const teachRaw   = document.getElementById('teachSkills').value;
+        const learnRaw   = document.getElementById('learnSkills').value;
 
         const skillsToTeach = teachRaw.split(',').map(s => s.trim()).filter(Boolean);
         const skillsToLearn = learnRaw.split(',').map(s => s.trim()).filter(Boolean);
 
-        if (!fullName) throw new Error('Please enter your full name');
-        if (password !== confirmPwd) throw new Error('Passwords do not match');
-        if (password.length < 6) throw new Error('Password must be at least 6 characters');
-        if (skillsToTeach.length === 0) throw new Error('Please enter at least one skill you can teach');
-        if (skillsToLearn.length === 0) throw new Error('Please enter at least one skill you want to learn');
+        if (!fullName)             throw new Error('Please enter your full name');
+        if (pwd !== confirmPwd)    throw new Error('Passwords do not match');
+        if (pwd.length < 6)        throw new Error('Password must be at least 6 characters');
+        if (!skillsToTeach.length) throw new Error('Please enter at least one skill you can teach');
+        if (!skillsToLearn.length) throw new Error('Please enter at least one skill you want to learn');
 
-        const { user } = await createUserWithEmailAndPassword(auth, email, password);
+        const { user } = await createUserWithEmailAndPassword(auth, email, pwd);
         await updateProfile(user, { displayName: fullName });
         await saveMinimalProfile(user, { fullName, skillsToTeach, skillsToLearn });
 
-        showSuccess('Account created! Let\'s set up your profile...');
-        setTimeout(() => smartRedirect(user), 1500);
+        showSuccess("Account created! Let's set up your profile…");
+        setTimeout(() => smartRedirect(user), 1200);
       }
 
     } catch (err) {
       console.error(err);
-      const messages = {
-        'auth/user-not-found': 'No account found with this email',
-        'auth/wrong-password': 'Incorrect password',
-        'auth/email-already-in-use': 'An account with this email already exists',
-        'auth/invalid-email': 'Please enter a valid email address',
-        'auth/weak-password': 'Password must be at least 6 characters',
-        'auth/too-many-requests': 'Too many attempts. Please wait a moment and try again',
-        'auth/invalid-credential': 'Incorrect email or password'
+      const msgs = {
+        'auth/user-not-found':         'No account found with this email',
+        'auth/wrong-password':         'Incorrect password',
+        'auth/email-already-in-use':   'An account with this email already exists',
+        'auth/invalid-email':          'Please enter a valid email address',
+        'auth/weak-password':          'Password must be at least 6 characters',
+        'auth/too-many-requests':      'Too many attempts. Please wait a moment and try again',
+        'auth/invalid-credential':     'Incorrect email or password',
+        'auth/network-request-failed': 'Network error. Check your connection and try again'
       };
-      showError(messages[err.code] || err.message);
-      btn.disabled = false;
+      showError(msgs[err.code] || err.message);
+      btn.disabled  = false;
       btn.innerHTML = isLogin ? 'Sign In' : 'Create Account';
     }
   };
 
-  // Handle Google Sign In
+  // ─────────────────────────────────────────────────────────────
+  // GOOGLE SIGN-IN
+  //
+  // Strategy:
+  //   1. Try signInWithPopup (fast, same-tab UX)
+  //   2. If popup is blocked by browser → fall back to signInWithRedirect
+  //      (navigates away, returns to this page, getRedirectResult above handles it)
+  // ─────────────────────────────────────────────────────────────
+  const GOOGLE_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" style="flex-shrink:0">
+    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+  </svg> Continue with Google`;
+
   window.handleGoogle = async function() {
     hideAlerts();
+    const btn = document.getElementById('googleBtn');
+    btn.disabled  = true;
+    btn.innerHTML = '<span class="spinner" style="border-color:rgba(66,133,244,0.25);border-top-color:#4285F4"></span> Connecting to Google…';
+
     try {
+      // ── Attempt popup ───────────────────────────────────────
       const { user } = await signInWithPopup(auth, googleProvider);
       await saveMinimalProfile(user);
-      showSuccess('Signed in with Google! Redirecting...');
-      setTimeout(() => smartRedirect(user), 1200);
-    } catch (err) {
-      console.error(err);
-      if (err.code !== 'auth/popup-closed-by-user') {
+      showSuccess('Signed in with Google! Redirecting…');
+      setTimeout(() => smartRedirect(user), 1000);
+
+    } catch (popupErr) {
+      const blockedCodes = [
+        'auth/popup-blocked',
+        'auth/popup-closed-by-user',
+        'auth/cancelled-popup-request',
+        'auth/operation-not-supported-in-this-environment'
+      ];
+
+      if (blockedCodes.includes(popupErr.code)) {
+        // ── Popup blocked → use redirect ─────────────────────
+        try {
+          showInfo('Popup blocked — redirecting to Google…');
+          await signInWithRedirect(auth, googleProvider);
+          // Page navigates away here; getRedirectResult handles the return
+        } catch (redirectErr) {
+          console.error('Redirect failed:', redirectErr);
+          showError('Google sign-in failed. Please use email/password instead.');
+          btn.disabled  = false;
+          btn.innerHTML = GOOGLE_SVG;
+        }
+      } else if (popupErr.code === 'auth/popup-closed-by-user') {
+        // User manually closed the popup — silent, no error shown
+        btn.disabled  = false;
+        btn.innerHTML = GOOGLE_SVG;
+      } else {
+        // Any other real error
+        console.error('Google sign-in error:', popupErr);
         showError('Google sign-in failed. Please try again.');
+        btn.disabled  = false;
+        btn.innerHTML = GOOGLE_SVG;
       }
     }
   };
 </script>
 
-<!-- UI Logic -->
+<!-- UI logic — tab switching and password validation (no Firebase needed) -->
 <script>
   let currentTab = 'login';
   const signupFields = ['fieldName', 'fieldConfirm', 'fieldTeach', 'fieldLearn'];
@@ -582,38 +483,34 @@
     currentTab = tab;
     const isSignup = tab === 'signup';
 
-    const slider = document.getElementById('tabSlider');
-    slider.className = 'tab-slider' + (isSignup ? ' signup' : '');
-
+    document.getElementById('tabSlider').className = 'tab-slider' + (isSignup ? ' signup' : '');
     document.getElementById('loginTab').classList.toggle('active', !isSignup);
     document.getElementById('signupTab').classList.toggle('active', isSignup);
 
-    document.getElementById('formTitle').textContent = isSignup ? 'Create your account' : 'Welcome back';
+    document.getElementById('formTitle').textContent    = isSignup ? 'Create your account' : 'Welcome back';
     document.getElementById('formSubtitle').textContent = isSignup ? 'Join the skill-trading community' : 'Sign in to continue trading skills';
-    document.getElementById('submitBtn').textContent = isSignup ? 'Create Account' : 'Sign In';
+    document.getElementById('submitBtn').textContent    = isSignup ? 'Create Account' : 'Sign In';
 
-    signupFields.forEach(id => {
-      document.getElementById(id).classList.toggle('hidden', !isSignup);
-    });
+    document.getElementById('password').setAttribute(
+      'autocomplete', isSignup ? 'new-password' : 'current-password'
+    );
 
-    document.getElementById('errorAlert').classList.remove('show');
-    document.getElementById('successAlert').classList.remove('show');
+    signupFields.forEach(id =>
+      document.getElementById(id).classList.toggle('hidden', !isSignup));
+
+    ['errorAlert','successAlert','infoAlert'].forEach(id =>
+      document.getElementById(id).classList.remove('show'));
   }
 
   function checkPassword() {
-    const isSignup = currentTab === 'signup';
-    if (!isSignup) return;
-
-    const pwd = document.getElementById('password').value;
+    if (currentTab !== 'signup') return;
+    const pwd     = document.getElementById('password').value;
     const confirm = document.getElementById('confirmPassword').value;
-    const hint = document.getElementById('passwordHint');
-    const btn = document.getElementById('submitBtn');
-
-    const validLength = pwd.length >= 6;
-    const matches = pwd === confirm;
-
-    hint.style.display = (!validLength && pwd.length > 0) ? 'block' : 'none';
-    btn.disabled = !(validLength && matches && pwd.length > 0);
+    const hint    = document.getElementById('passwordHint');
+    const btn     = document.getElementById('submitBtn');
+    const valid   = pwd.length >= 6;
+    hint.style.display = (!valid && pwd.length > 0) ? 'block' : 'none';
+    btn.disabled = !(valid && pwd === confirm && pwd.length > 0);
   }
 </script>
 

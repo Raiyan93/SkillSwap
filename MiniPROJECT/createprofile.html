@@ -81,13 +81,18 @@ main{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:110px 24p
 .cert-status{font-size:.75rem;font-weight:600;}.cert-status.uploading{color:var(--accent);}.cert-status.done{color:var(--success);}.cert-status.error{color:#f87171;}
 .cert-remove{cursor:pointer;color:var(--muted);}.cert-remove:hover{color:#ff6b6b;}
 /* ── VERIFICATION TYPE SELECTOR ── */
-.verify-type-tabs{display:flex;gap:10px;margin-bottom:24px;}
-.vtype-btn{flex:1;padding:12px 8px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.82rem;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;text-align:center;transition:all .2s;line-height:1.4;}
-.vtype-btn .vtype-icon{display:block;font-size:1.5rem;margin-bottom:6px;}
+.verify-type-tabs{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap;}
+.vtype-btn{flex:1;min-width:110px;padding:12px 8px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.8rem;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;text-align:center;transition:all .2s;line-height:1.4;}
+.vtype-btn .vtype-icon{display:block;font-size:1.4rem;margin-bottom:5px;}
 .vtype-btn.active{background:rgba(123,92,250,.15);border-color:var(--purple);color:var(--accent);}
 /* ── VERIFY INPUT SECTIONS ── */
 .verify-input-section{display:none;animation:slideIn .25s ease;}
 .verify-input-section.show{display:block;}
+/* ── CERTLINK SPECIFIC ── */
+.certlink-platforms{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;}
+.platform-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:50px;font-size:.72rem;color:var(--muted);}
+.platform-chip.trusted{background:rgba(52,211,153,.08);border-color:rgba(52,211,153,.25);color:var(--success);}
+.cert-link-result-details{margin-top:14px;padding:14px 16px;background:rgba(0,0,0,.2);border-radius:10px;font-size:.78rem;line-height:2;}
 /* ── AI RESULT ── */
 .ai-result-box{display:none;border-radius:14px;padding:18px 22px;margin-top:16px;}
 .ai-result-box.show{display:flex;gap:14px;align-items:flex-start;}
@@ -156,11 +161,16 @@ main{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:110px 24p
 #creditPreview{display:none;background:linear-gradient(135deg,rgba(123,92,250,.1),rgba(79,172,254,.08));border:1px solid rgba(123,92,250,.25);border-radius:16px;padding:20px 24px;margin-bottom:28px;}
 .cloudinary-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.25);border-radius:8px;padding:4px 10px;font-size:.72rem;color:var(--success);margin-top:6px;}
 .server-notice{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:12px;padding:12px 16px;font-size:.82rem;color:var(--warn);margin-bottom:20px;display:flex;gap:10px;align-items:center;}
+/* ── CERTLINK SIGNAL PILLS ── */
+.signal-pills{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}
+.signal-pill{padding:3px 10px;border-radius:50px;font-size:.7rem;font-weight:600;}
+.signal-pill.good{background:rgba(52,211,153,.12);color:var(--success);border:1px solid rgba(52,211,153,.25);}
+.signal-pill.bad{background:rgba(239,68,68,.1);color:#fca5a5;border:1px solid rgba(239,68,68,.2);}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
 @keyframes slideIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:translateX(0)}}
 @keyframes popIn{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
-@media(max-width:640px){nav ul{display:none;}main{padding:100px 16px 80px;}.form-card{padding:28px 20px;}.grid-2,.summary-grid,.social-grid{grid-template-columns:1fr;}.availability-grid{grid-template-columns:repeat(4,1fr);}.stepper{gap:0;}.step-label{font-size:.6rem;}.step-line{min-width:16px;}.step{min-width:60px;}.verify-type-tabs{flex-direction:column;}}
+@media(max-width:640px){nav ul{display:none;}main{padding:100px 16px 80px;}.form-card{padding:28px 20px;}.grid-2,.summary-grid,.social-grid{grid-template-columns:1fr;}.availability-grid{grid-template-columns:repeat(4,1fr);}.stepper{gap:0;}.step-label{font-size:.6rem;}.step-line{min-width:16px;}.step{min-width:60px;}.verify-type-tabs{flex-direction:column;}.vtype-btn{min-width:unset;}}
 </style>
 </head>
 <body>
@@ -288,13 +298,11 @@ main{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:110px 24p
         <span>Verification calls your local backend server (<code>localhost:5000</code>). Make sure <code>node server.js</code> is running. Skipping is allowed — you can verify later from your dashboard.</span>
       </div>
 
-      <!-- Expertise statement (once, at top) -->
       <div class="field">
         <label>Your Expertise Statement</label>
         <textarea id="expertiseStatement" placeholder="Describe your experience with the skills you want to teach. Mention projects, real work, courses completed..." style="min-height:80px;"></textarea>
       </div>
 
-      <!-- Certificates / documents upload (always visible for profile record) -->
       <div class="divider"></div>
       <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1.05rem;margin-bottom:12px;">📂 Upload Certificates / Documents</div>
       <div style="color:var(--muted);font-size:.84rem;margin-bottom:16px;">Upload your certificates here. These are <strong style="color:var(--accent);">automatically used</strong> when you select the "Portfolio &amp; Certificates" verification method below — no separate upload needed.</div>
@@ -310,7 +318,7 @@ main{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:110px 24p
 
       <div class="divider"></div>
 
-      <!-- ── VERIFICATION TYPE TABS ── -->
+      <!-- ── VERIFICATION TYPE TABS (now 4) ── -->
       <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1.05rem;margin-bottom:16px;">🤖 Choose AI Verification Method</div>
       <div class="verify-type-tabs">
         <button class="vtype-btn active" id="tab-technical" onclick="switchVerifyType('technical')">
@@ -318,6 +326,9 @@ main{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:110px 24p
         </button>
         <button class="vtype-btn" id="tab-creative" onclick="switchVerifyType('creative')">
           <span class="vtype-icon">🖼️</span>Portfolio<br><span style="font-size:.7rem;font-weight:400;color:var(--muted);">Certificates & images</span>
+        </button>
+        <button class="vtype-btn" id="tab-certlink" onclick="switchVerifyType('certlink')">
+          <span class="vtype-icon">🔗</span>Cert Link<br><span style="font-size:.7rem;font-weight:400;color:var(--muted);">Coursera, Google…</span>
         </button>
         <button class="vtype-btn" id="tab-video" onclick="switchVerifyType('video')">
           <span class="vtype-icon">🎬</span>YouTube<br><span style="font-size:.7rem;font-weight:400;color:var(--muted);">Tutorial / demo video</span>
@@ -336,7 +347,7 @@ main{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:110px 24p
         </div>
       </div>
 
-      <!-- Creative Input -->
+      <!-- Creative / Portfolio Input -->
       <div class="verify-input-section" id="input-creative">
         <div class="notice" style="margin-bottom:16px;">
           <span class="icon">🔬</span>
@@ -348,6 +359,53 @@ main{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:110px 24p
         </div>
         <p style="font-size:.78rem;color:var(--muted);margin-bottom:8px;">⚠️ Submitting fake, edited, or someone else's certificates is a permanent ban offence.</p>
         <p style="font-size:.78rem;color:var(--muted);margin-bottom:16px;">📌 Only PNG/JPG images can be analyzed. PDFs stored above are for your profile record only — please also upload a JPG/PNG screenshot of your certificate for AI verification.</p>
+      </div>
+
+      <!-- ══ NEW: Certificate Link Input ══ -->
+      <div class="verify-input-section" id="input-certlink">
+        <div class="notice" style="margin-bottom:16px;">
+          <span class="icon">🔗</span>
+          <span>Paste the <strong>direct public URL</strong> to your certificate on Coursera, Google, Credly, LinkedIn Learning, freeCodeCamp, HackerRank, NPTEL, edX, Udemy, and more. The AI fetches the page and checks if it's a real, authentic certificate that belongs to you.</span>
+        </div>
+
+        <!-- Trusted platform chips -->
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;font-weight:500;">✅ Supported & trusted platforms:</div>
+        <div class="certlink-platforms">
+          <span class="platform-chip trusted">🎓 Coursera</span>
+          <span class="platform-chip trusted">🔵 Google</span>
+          <span class="platform-chip trusted">🏅 Credly</span>
+          <span class="platform-chip trusted">💼 LinkedIn Learning</span>
+          <span class="platform-chip trusted">🟠 edX</span>
+          <span class="platform-chip trusted">🟢 freeCodeCamp</span>
+          <span class="platform-chip trusted">⚡ HackerRank</span>
+          <span class="platform-chip trusted">🇮🇳 NPTEL</span>
+          <span class="platform-chip trusted">☁️ AWS</span>
+          <span class="platform-chip trusted">🪟 Microsoft Learn</span>
+          <span class="platform-chip trusted">📊 DataCamp</span>
+          <span class="platform-chip trusted">🎯 Udemy</span>
+          <span class="platform-chip">+ any public cert URL</span>
+        </div>
+
+        <div class="field" style="margin-top:16px;">
+          <label>Certificate URL</label>
+          <input type="url" id="certLinkURL" placeholder="https://www.coursera.org/account/accomplishments/verify/XXXXXXXX" />
+        </div>
+
+        <div style="padding:14px 18px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:12px;font-size:.82rem;line-height:1.7;margin-bottom:16px;">
+          <div style="font-weight:700;color:var(--accent);margin-bottom:6px;">📋 How to find your certificate URL</div>
+          <div style="color:var(--muted);">
+            <strong style="color:var(--text);">Coursera</strong> → Open the certificate → copy the page URL (e.g. <code style="font-size:.72rem;background:rgba(255,255,255,.08);padding:1px 5px;border-radius:4px;">coursera.org/account/accomplishments/verify/…</code>)<br>
+            <strong style="color:var(--text);">Google / Credly</strong> → Share the badge → copy the public share link<br>
+            <strong style="color:var(--text);">freeCodeCamp</strong> → Your profile → click the certification → copy the URL<br>
+            <strong style="color:var(--text);">NPTEL</strong> → Verify certificate page → paste the full URL<br>
+            <strong style="color:var(--text);">LinkedIn Learning</strong> → View certificate → share → copy link
+          </div>
+        </div>
+
+        <div class="notice" style="background:rgba(251,191,36,.06);border-color:rgba(251,191,36,.2);">
+          <span class="icon">⚠️</span>
+          <span style="color:var(--warn);">The certificate page must be <strong>publicly accessible</strong> without login. Some platforms block bots — in that case the AI will still evaluate the URL pattern for platform trust. Score is capped at <strong>80/100</strong> for this method (use GitHub for higher scores). Submitting someone else's certificate link is a permanent ban offence.</span>
+        </div>
       </div>
 
       <!-- YouTube Input -->
@@ -471,12 +529,104 @@ const auth=getAuth(app);
 const db=getFirestore(app);
 const CL_NAME='dugf4o5wl',CL_PHOTOS='skillswap_photos',CL_CERTS='skillswap_certs';
 let currentUser=null,profilePhotoFile=null,certificateFiles=[];
+let isEditMode = new URLSearchParams(window.location.search).get('mode') === 'edit';
+let isReverifyMode = new URLSearchParams(window.location.search).get('mode') === 'reverify';
 
 onAuthStateChanged(auth,async(user)=>{
   if(!user){window.location.href='Registration.html';return;}
-  try{const s=await getDoc(doc(db,'users',user.uid));if(s.exists()&&s.data().profileCompleted===true){window.location.href='dashboard.html';return;}}catch(e){}
-  currentUser=user;const ef=document.getElementById('email');if(ef)ef.value=user.email||'';
+  currentUser=user;
+  const ef=document.getElementById('email');if(ef)ef.value=user.email||'';
+
+  try{
+    const s=await getDoc(doc(db,'users',user.uid));
+    if(s.exists()&&s.data().profileCompleted===true){
+      // If in edit or reverify mode, load existing data; otherwise redirect
+      if(isEditMode || isReverifyMode){
+        loadExistingProfile(s.data());
+      } else {
+        window.location.href='dashboard.html';
+        return;
+      }
+    }
+  }catch(e){}
 });
+
+// Load existing profile data for editing
+function loadExistingProfile(data) {
+  // Basic info
+  if(document.getElementById('firstName')) document.getElementById('firstName').value = data.firstName || '';
+  if(document.getElementById('lastName')) document.getElementById('lastName').value = data.lastName || '';
+  if(document.getElementById('email')) document.getElementById('email').value = data.email || '';
+  if(document.getElementById('bio')) document.getElementById('bio').value = data.bio || '';
+  if(document.getElementById('university')) document.getElementById('university').value = data.university || '';
+  if(document.getElementById('fieldOfStudy')) document.getElementById('fieldOfStudy').value = data.fieldOfStudy || '';
+  if(document.getElementById('year')) document.getElementById('year').value = data.year || '';
+
+  // Links
+  if(data.links){
+    if(document.getElementById('githubURL')) document.getElementById('githubURL').value = data.links.github || '';
+    if(document.getElementById('linkedinURL')) document.getElementById('linkedinURL').value = data.links.linkedin || '';
+    if(document.getElementById('portfolioURL')) document.getElementById('portfolioURL').value = data.links.portfolio || '';
+    if(document.getElementById('twitterUsername')) {
+      const tw = data.links.twitter || '';
+      document.getElementById('twitterUsername').value = tw.replace('https://twitter.com/','').replace('@','');
+    }
+  }
+
+  // Skills
+  if(data.skills && data.skills.toTeach) {
+    window.offerSkills = data.skills.toTeach.map(s => ({name: s.name, level: s.level}));
+    renderTags('offer');
+    if(window._updateCreditPreview) window._updateCreditPreview();
+  }
+  if(data.skills && data.skills.toLearn) {
+    window.wantSkills = data.skills.toLearn.map(s => ({name: s.name, level: s.level}));
+    renderTags('want');
+  }
+
+  // Teaching preferences
+  if(data.skills && data.skills.teaching){
+    if(document.getElementById('teachingStyle')) document.getElementById('teachingStyle').value = data.skills.teaching.style || '';
+    if(document.getElementById('sessionLanguage')) document.getElementById('sessionLanguage').value = data.skills.teaching.language || '';
+    if(document.getElementById('expertiseStatement')) document.getElementById('expertiseStatement').value = data.skills.teaching.statement || '';
+  }
+
+  // Availability
+  if(data.availability){
+    if(data.availability.days){
+      document.querySelectorAll('.day-btn').forEach(btn => {
+        if(data.availability.days.includes(btn.dataset.day)) btn.classList.add('selected');
+      });
+    }
+    if(data.availability.slots){
+      document.querySelectorAll('.slot-btn').forEach(btn => {
+        if(data.availability.slots.includes(btn.dataset.slot)) btn.classList.add('selected');
+      });
+    }
+    if(document.getElementById('sessionDuration')) document.getElementById('sessionDuration').value = data.availability.sessionDuration || '';
+    if(document.getElementById('sessionsPerWeek')) document.getElementById('sessionsPerWeek').value = data.availability.sessionsPerWeek || '';
+    if(document.getElementById('meetingPreference')) document.getElementById('meetingPreference').value = data.availability.meetingPreference || '';
+    if(document.getElementById('timeZone')) document.getElementById('timeZone').value = data.availability.timeZone || '';
+  }
+
+  // Photo
+  if(data.photoURL){
+    const img = document.getElementById('avatarImg');
+    if(img){ img.src = data.photoURL; img.style.display = 'block'; }
+    const emoji = document.getElementById('avatarEmoji');
+    if(emoji) emoji.style.display = 'none';
+  }
+
+  // Update page title for edit mode
+  const pageTitle = document.querySelector('.page-title');
+  if(pageTitle) pageTitle.textContent = isReverifyMode ? 'Re-verify Your Skills' : 'Edit Your Profile';
+
+  // If reverify mode, jump to verification step
+  if(isReverifyMode){
+    goToStep(4);
+  }
+}
+window.loadExistingProfile = loadExistingProfile;
 
 /* ── CREDIT MAP ── */
 const CREDIT_MAP={'rust':50,'c++':50,'cpp':50,'assembly':55,'haskell':50,'scala':45,'kotlin':40,'swift':40,'java':42,'c#':40,'go':42,'golang':42,'typescript':38,'r':38,'matlab':40,'c':44,'machine learning':50,'deep learning':55,'neural networks':55,'llm':55,'nlp':50,'computer vision':52,'pytorch':48,'tensorflow':48,'data science':45,'statistics':40,'ai':48,'docker':40,'kubernetes':48,'devops':46,'aws':44,'cloud':42,'gcp':44,'azure':44,'react':36,'vue':34,'angular':36,'node':32,'nodejs':32,'next.js':38,'nextjs':38,'django':35,'flask':32,'fastapi':36,'python':28,'javascript':30,'js':30,'html':18,'css':18,'html/css':20,'sql':28,'excel':20,'bash':30,'linux':32,'figma':28,'ui/ux':30,'graphic design':28,'photoshop':26,'illustrator':28,'after effects':35,'blender':40,'3d modeling':42,'video editing':32,'premiere pro':32,'japanese':48,'arabic':46,'mandarin':50,'chinese':50,'korean':44,'russian':44,'german':38,'french':32,'spanish':28,'hindi':22,'english':20,'violin':45,'piano':38,'guitar':28,'drums':32,'singing':28,'drawing':24,'painting':26,'math':32,'calculus':38,'physics':38,'chemistry':36,'biology':30,'public speaking':30,'writing':24,'yoga':22,'cooking':18};
@@ -534,9 +684,9 @@ function addCert(file){
   const list=document.getElementById('certList');
   const item=document.createElement('div');item.className='cert-item';
   item.innerHTML=`<span class="cert-icon">${isPdf?'📄':'🖼️'}</span><span class="cert-name">${file.name}</span><span class="cert-size">${(file.size/1024).toFixed(0)} KB</span><span class="cert-status ${isPdf?'uploading':''}">${isPdf?'📄 PDF (profile only — add JPG/PNG for AI verify)':'⏳ Queued'}</span><span class="cert-remove">✕</span>`;
-  item.querySelector('.cert-remove').addEventListener('click',()=>{certificateFiles=certificateFiles.filter(f=>f.file.name!==file.name);item.remove();_updateCertVerifyPreview();});
+  item.querySelector('.cert-remove').addEventListener('click',()=>{certificateFiles=certificateFiles.filter(f=>f.file.name!==file.name);item.remove();_updateCertVerifyPreview&&_updateCertVerifyPreview();});
   list.appendChild(item);certificateFiles.push({file,itemEl:item});
-  _updateCertVerifyPreview();
+  _updateCertVerifyPreview&&_updateCertVerifyPreview();
 }
 
 function _updateCertVerifyPreview(){
@@ -609,138 +759,64 @@ window.finish=async function(){
     const finalGithubURL=githubRaw?(githubRaw.includes('github.com')?githubRaw:'https://github.com/'+githubRaw.replace(/^@/,'')):'';
     const finalPortfolio=get('portfolioURL');
 
-    // ── COMPUTE verificationStatus FROM AI SCORE ──────────────────────
-    // This is the single source of truth for whether a user is verified.
-    // Rules:
-    //   score >= 60 AND at least 1 skill confirmed → 'verified'
-    //   score 40-59 OR only partial skills          → 'partial'
-    //   score < 40 OR skipped / failed              → 'unverified'
     const ai = window._lastAIResult;
     let verificationStatus, verifiedSkillsList, verificationScore, verificationMethod;
 
     if(!ai || ai.status==='skipped' || !ai.score){
-      verificationStatus    = 'unverified';
-      verifiedSkillsList    = [];
-      verificationScore     = 0;
-      verificationMethod    = 'skipped';
+      verificationStatus='unverified';verifiedSkillsList=[];verificationScore=0;verificationMethod='skipped';
     } else if(ai.score >= 60 && ai.verifiedSkills.length > 0 && ai.ownershipVerified !== false){
-      verificationStatus    = 'verified';
-      verifiedSkillsList    = ai.verifiedSkills;
-      verificationScore     = ai.score;
-      verificationMethod    = ai.method;
+      verificationStatus='verified';verifiedSkillsList=ai.verifiedSkills;verificationScore=ai.score;verificationMethod=ai.method;
     } else if(ai.score >= 40 || ai.partialSkills.length > 0){
-      verificationStatus    = 'partial';
-      verifiedSkillsList    = [...ai.verifiedSkills, ...ai.partialSkills];
-      verificationScore     = ai.score;
-      verificationMethod    = ai.method;
+      verificationStatus='partial';verifiedSkillsList=[...ai.verifiedSkills,...ai.partialSkills];verificationScore=ai.score;verificationMethod=ai.method;
     } else {
-      verificationStatus    = 'unverified';
-      verifiedSkillsList    = [];
-      verificationScore     = ai.score;
-      verificationMethod    = ai.method;
+      verificationStatus='unverified';verifiedSkillsList=[];verificationScore=ai.score;verificationMethod=ai.method;
     }
 
     await setDoc(doc(db,'users',currentUser.uid),{
-
-      // ═══════════════════════════════════════════
-      // IDENTITY
-      // ═══════════════════════════════════════════
-      uid:          currentUser.uid,
-      fullName:     (get('firstName')+' '+get('lastName')).trim(),
-      firstName:    get('firstName'),
-      lastName:     get('lastName'),
-      email:        get('email'),
-      photoURL,
-      bio:          get('bio'),
-      university:   get('university'),
-      fieldOfStudy: get('fieldOfStudy'),
-      year:         get('year'),
-
-      // ═══════════════════════════════════════════
-      // LINKS  (dashboard renders these as <a> tags)
-      // ═══════════════════════════════════════════
+      uid:currentUser.uid,
+      fullName:(get('firstName')+' '+get('lastName')).trim(),
+      firstName:get('firstName'),lastName:get('lastName'),
+      email:get('email'),photoURL,bio:get('bio'),
+      university:get('university'),fieldOfStudy:get('fieldOfStudy'),year:get('year'),
       links:{
-        github:    finalGithubURL,
-        linkedin:  get('linkedinURL'),
-        portfolio: finalPortfolio,
-        twitter:   get('twitterUsername')
-          ? 'https://twitter.com/'+get('twitterUsername').replace(/^@/,'') : ''
+        github:finalGithubURL,
+        linkedin:get('linkedinURL'),
+        portfolio:finalPortfolio,
+        twitter:get('twitterUsername')?'https://twitter.com/'+get('twitterUsername').replace(/^@/,''):''
       },
-
-      // ═══════════════════════════════════════════
-      // SKILLS
-      // ═══════════════════════════════════════════
       skills:{
-        toTeach:  skillsToTeach,   // [{name, level, credits}]
-        toLearn:  skillsToLearn,   // [{name, level}]
-        teaching: {
-          style:    get('teachingStyle'),
-          language: get('sessionLanguage'),
-          statement: get('expertiseStatement')
-        }
+        toTeach:skillsToTeach,toLearn:skillsToLearn,
+        teaching:{style:get('teachingStyle'),language:get('sessionLanguage'),statement:get('expertiseStatement')}
       },
-
-      // ═══════════════════════════════════════════
-      // VERIFICATION  (single object, no duplication)
-      // status:  "verified" | "partial" | "unverified" | "skipped"
-      // score:   0–100
-      // method:  "technical" | "creative" | "video" | "skipped"
-      // ═══════════════════════════════════════════
       verification:{
-        status:            verificationStatus,
-        score:             verificationScore,
-        method:            verificationMethod,
-        date:              verificationStatus !== 'unverified' ? serverTimestamp() : null,
-        ownershipConfirmed: ai ? (ai.ownershipVerified !== false) : false,
-        confirmedSkills:   verifiedSkillsList,          // skills with clear evidence
-        pendingSkills:     ai ? ai.partialSkills  : [], // weak evidence, needs more proof
-        rejectedSkills:    ai ? ai.unverifiedSkills: [], // no evidence found
-        scoreBreakdown:    ai ? ai.scoreBreakdown : null,// accountAge/repos/activity breakdown
-        summary:           ai ? ai.reasoning      : '',  // AI's 3-sentence explanation
-        cloneWarning:      ai ? ai.cloneWarning   : false,
-        nameMismatchCount: ai ? ai.nameMismatchCount : 0
+        status:verificationStatus,score:verificationScore,method:verificationMethod,
+        date:verificationStatus!=='unverified'?serverTimestamp():null,
+        ownershipConfirmed:ai?(ai.ownershipVerified!==false):false,
+        confirmedSkills:verifiedSkillsList,
+        pendingSkills:ai?ai.partialSkills:[],
+        rejectedSkills:ai?ai.unverifiedSkills:[],
+        scoreBreakdown:ai?ai.scoreBreakdown:null,
+        summary:ai?ai.reasoning:'',
+        cloneWarning:ai?ai.cloneWarning:false,
+        nameMismatchCount:ai?ai.nameMismatchCount:0,
+        // NEW: store cert link if used
+        certLinkUsed:ai&&ai.method==='certlink'?(get('certLinkURL')||''):'',
       },
-
-      // ═══════════════════════════════════════════
-      // CERTIFICATES  (uploaded files)
-      // ═══════════════════════════════════════════
-      certificates: certificateURLs, // [{name, url, size}]
-
-      // ═══════════════════════════════════════════
-      // AVAILABILITY
-      // ═══════════════════════════════════════════
+      certificates:certificateURLs,
       availability:{
-        days:           Array.from(document.querySelectorAll('.day-btn.selected')).map(b=>b.dataset.day),
-        slots:          Array.from(document.querySelectorAll('.slot-btn.selected')).map(b=>b.dataset.slot),
-        sessionDuration: get('sessionDuration'),
-        sessionsPerWeek: get('sessionsPerWeek'),
-        meetingPreference: get('meetingPreference'),
-        timeZone:        get('timeZone')
+        days:Array.from(document.querySelectorAll('.day-btn.selected')).map(b=>b.dataset.day),
+        slots:Array.from(document.querySelectorAll('.slot-btn.selected')).map(b=>b.dataset.slot),
+        sessionDuration:get('sessionDuration'),sessionsPerWeek:get('sessionsPerWeek'),
+        meetingPreference:get('meetingPreference'),timeZone:get('timeZone')
       },
-
-      // ═══════════════════════════════════════════
-      // CREDITS & STATS
-      // ═══════════════════════════════════════════
-      creditBalance: 50,
-      stats:{
-        averageRating:    0,
-        totalRatings:     0,
-        sessionsTaught:   0,
-        sessionsCompleted:0,
-        completionRate:   0,
-        ratingsBreakdown:{ knowledge:0, teaching:0, communication:0 }
-      },
-
-      // ═══════════════════════════════════════════
-      // META
-      // ═══════════════════════════════════════════
-      profileCompleted: true,
-      createdAt:        serverTimestamp(),
-      updatedAt:        serverTimestamp()
+      creditBalance:50,
+      stats:{averageRating:0,totalRatings:0,sessionsTaught:0,sessionsCompleted:0,completionRate:0,ratingsBreakdown:{knowledge:0,teaching:0,communication:0}},
+      profileCompleted:true,
+      createdAt:serverTimestamp(),updatedAt:serverTimestamp()
     });
 
     console.log('[Profile] Saved. Going to verification page...');
-    window.location.href='verify-complete.html';
+    window.location.href='dashboard.html';
 
   }catch(err){
     console.error('Save error:',err);
@@ -754,18 +830,17 @@ window.finish=async function(){
 /* ── SKILLS STATE ── */
 window.offerSkills=[];window.wantSkills=[];
 window.aiVerificationStatus='skipped';window.aiConfidenceScore=0;
-window._lastAIResult=null; // populated when AI verification completes
+window._lastAIResult=null;
 let _currentVerifyType='technical';
-let _profileFirstName='', _profileLastName=''; // set when verifyWithAI runs
+let _profileFirstName='',_profileLastName='';
 
-/* ── VERIFICATION TYPE SWITCH ── */
+/* ── VERIFICATION TYPE SWITCH — now handles 4 tabs ── */
 window.switchVerifyType=function(type){
   _currentVerifyType=type;
-  ['technical','creative','video'].forEach(t=>{
+  ['technical','creative','certlink','video'].forEach(t=>{
     document.getElementById('tab-'+t).classList.toggle('active',t===type);
     document.getElementById('input-'+t).classList.toggle('show',t===type);
   });
-  // Update cert preview whenever creative tab is opened
   if(type==='creative')_updateCertVerifyPreview&&_updateCertVerifyPreview();
 };
 
@@ -825,7 +900,7 @@ window.goToStep=function(step){
    AI VERIFICATION (calls localhost:5000)
 ══════════════════════════════════════════════════════════════ */
 window.verifyWithAI=async function(){
-  if(!window.offerSkills||window.offerSkills.length===0){
+  if(!window.offerSkills||!window.offerSkills.length){
     if(window.showError)window.showError('Please add skills to teach in Step 2 first.');return;
   }
 
@@ -834,30 +909,26 @@ window.verifyWithAI=async function(){
   resultBox.className='ai-result-box';
   resultBox.style.display='none';
 
-  // Clear any dynamic children from previous run
-  ['ownershipWarningBox','cloneWarningBox','breakdownBox','imageResultsBox','channelOwnershipBox'].forEach(id=>{
+  ['ownershipWarningBox','cloneWarningBox','breakdownBox','imageResultsBox','channelOwnershipBox','certLinkDetailsBox'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.remove();
   });
 
   btn.innerHTML='<span class="spinner"></span> Analyzing...';
   btn.disabled=true;
 
-  // FIX: build skillLevels object { "HTML": "intermediate", "CSS": "beginner" }
-  // This is sent to server so AI adjusts expectations per level
-  const skillsStr   = window.offerSkills.map(s=>s.name).join(', ');
-  const skillLevels = {};
-  window.offerSkills.forEach(s=>{ skillLevels[s.name]=s.level; });
-  const expertise   = document.getElementById('expertiseStatement').value.trim();
+  const skillsStr=window.offerSkills.map(s=>s.name).join(', ');
+  const skillLevels={};
+  window.offerSkills.forEach(s=>{skillLevels[s.name]=s.level;});
+  const expertise=document.getElementById('expertiseStatement').value.trim();
 
-  // Get profile name from Step 1 fields — also stored as module vars for renderResultBox
-  _profileFirstName = (document.getElementById('firstName')?.value||'').trim();
-  _profileLastName  = (document.getElementById('lastName')?.value||'').trim();
+  _profileFirstName=(document.getElementById('firstName')?.value||'').trim();
+  _profileLastName=(document.getElementById('lastName')?.value||'').trim();
 
   try{
     let payload={
-      type:_currentVerifyType, skills:skillsStr, skillLevels, expertise,
-      profileFirstName: _profileFirstName,
-      profileLastName:  _profileLastName,
+      type:_currentVerifyType,skills:skillsStr,skillLevels,expertise,
+      profileFirstName:_profileFirstName,
+      profileLastName:_profileLastName,
     };
 
     if(_currentVerifyType==='technical'){
@@ -866,16 +937,13 @@ window.verifyWithAI=async function(){
       payload.githubUrl=ghInput;
 
     }else if(_currentVerifyType==='creative'){
-      // FIX: Use the certInput files from the "Upload Certificates" area above —
-      // NOT a separate portfolioImages input. Users upload once, verify from there.
-      const certInput = document.getElementById('certInput');
-      const certFiles = certInput ? Array.from(certInput.files).filter(f => !f.name.toLowerCase().endsWith('.pdf')) : [];
-      // Also check if already-uploaded URLs exist in certificateFiles (uploaded via drag-drop)
-      const alreadyUploaded = (window._uploadedCertUrls||[]).filter(u => !u.toLowerCase().endsWith('.pdf'));
+      const certInput=document.getElementById('certInput');
+      const certFiles=certInput?Array.from(certInput.files).filter(f=>!f.name.toLowerCase().endsWith('.pdf')):[];
+      const alreadyUploaded=(window._uploadedCertUrls||[]).filter(u=>!u.toLowerCase().endsWith('.pdf'));
 
-      if(certFiles.length===0 && alreadyUploaded.length===0){
+      if(certFiles.length===0&&alreadyUploaded.length===0){
         btn.disabled=false;btn.innerHTML='🤖 Verify My Skills with AI';
-        window.showError&&window.showError('Please upload at least one PNG or JPG certificate image using the "Upload Certificates" area above. PDFs cannot be analyzed by AI.');
+        window.showError&&window.showError('Please upload at least one PNG or JPG certificate image using the "Upload Certificates" area above.');
         return;
       }
 
@@ -885,7 +953,6 @@ window.verifyWithAI=async function(){
         try{
           const url=await window._uploadToCloudinary(certFiles[i],null,window._CL_CERTS);
           uploadedUrls.push(url);
-          // Cache so re-verify doesn't re-upload
           if(!window._uploadedCertUrls)window._uploadedCertUrls=[];
           if(!window._uploadedCertUrls.includes(url))window._uploadedCertUrls.push(url);
         }catch(e){console.error('Image upload failed:',e);}
@@ -894,6 +961,22 @@ window.verifyWithAI=async function(){
       payload.portfolioUrls=uploadedUrls;
       btn.innerHTML='<span class="spinner"></span> AI examining each certificate...';
 
+    }else if(_currentVerifyType==='certlink'){
+      /* ── NEW: Certificate Link verification ── */
+      const certURL=document.getElementById('certLinkURL').value.trim();
+      if(!certURL){
+        btn.disabled=false;btn.innerHTML='🤖 Verify My Skills with AI';
+        window.showError&&window.showError('Please enter the certificate URL.');
+        return;
+      }
+      if(!certURL.startsWith('http')){
+        btn.disabled=false;btn.innerHTML='🤖 Verify My Skills with AI';
+        window.showError&&window.showError('Please enter a valid URL starting with https://');
+        return;
+      }
+      payload.certLinkUrl=certURL;
+      btn.innerHTML='<span class="spinner"></span> Fetching certificate page...';
+
     }else if(_currentVerifyType==='video'){
       const ytURL=document.getElementById('youtubeURL').value.trim();
       if(!ytURL){btn.disabled=false;btn.innerHTML='🤖 Verify My Skills with AI';window.showError&&window.showError('Please enter a YouTube video URL.');return;}
@@ -901,119 +984,156 @@ window.verifyWithAI=async function(){
       btn.innerHTML='<span class="spinner"></span> Fetching video metadata...';
     }
 
-    const response = await fetch('http://localhost:5000/api/verify',{
-      method:'POST', headers:{'Content-Type':'application/json'},
+    const response=await fetch('http://localhost:5000/api/verify',{
+      method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(payload)
     });
-    const data = await response.json();
+    const data=await response.json();
 
     if(!response.ok||data.error){
       renderResultBox({status:'error',score:0,reasoning:data.error||'Verification failed.'});
-      window.aiVerificationStatus='unverified';window.aiConfidenceScore=0;
-      window._lastAIResult=null;
+      window.aiVerificationStatus='unverified';window.aiConfidenceScore=0;window._lastAIResult=null;
       return;
     }
 
-    // PDF-only submission
     if(data.pdfError){
       renderResultBox({status:'error',score:0,reasoning:'PDF files cannot be analyzed by vision AI. Please export your certificate as a PNG or JPG image and re-upload.'});
       return;
     }
 
-    // Show usage counter — never blocks, just informational
     if(data.usage){
       const rem=document.getElementById('rateRemainingNote');
       if(rem){
-        const {count,max}=data.usage;
+        const{count,max}=data.usage;
         const pct=Math.round((count/max)*100);
         const color=pct>=90?'var(--warn)':pct>=70?'#f59e0b':'var(--muted)';
         rem.innerHTML=`<span style="color:${color};">📊 ${count} of ${max} verifications used today</span>`;
       }
     }
 
-    window.aiConfidenceScore = data.confidenceScore || 0;
-    window.aiVerificationStatus = data.isVerified ? 'verified'
-      : (data.confidenceScore >= 50 ? 'partial' : 'unverified');
+    window.aiConfidenceScore=data.confidenceScore||0;
+    window.aiVerificationStatus=data.isVerified?'verified':(data.confidenceScore>=50?'partial':'unverified');
 
-    // Store FULL AI result so finish() can save everything to Firestore
-    window._lastAIResult = {
-      isVerified:       data.isVerified || false,
-      score:            data.confidenceScore || 0,
-      status:           window.aiVerificationStatus,
-      method:           _currentVerifyType,           // 'technical' / 'creative' / 'video'
-      verifiedSkills:   data.verifiedSkills   || [],
-      unverifiedSkills: data.unverifiedSkills || [],
-      partialSkills:    data.partialSkills    || [],
-      scoreBreakdown:   data.scoreBreakdown   || null,
-      reasoning:        data.reasoning        || '',
-      cloneWarning:     data.cloneWarning     || false,
-      nameMismatchCount: data.nameMismatchCount || 0,
-      ownershipVerified: data.ownershipVerified !== false,
+    window._lastAIResult={
+      isVerified:data.isVerified||false,
+      score:data.confidenceScore||0,
+      status:window.aiVerificationStatus,
+      method:_currentVerifyType,
+      verifiedSkills:data.verifiedSkills||[],
+      unverifiedSkills:data.unverifiedSkills||[],
+      partialSkills:data.partialSkills||[],
+      scoreBreakdown:data.scoreBreakdown||null,
+      reasoning:data.reasoning||'',
+      cloneWarning:data.cloneWarning||false,
+      nameMismatchCount:data.nameMismatchCount||0,
+      ownershipVerified:data.ownershipVerified!==false,
     };
 
-    // Determine display status
-    const status = data.isVerified ? 'verified' : (data.confidenceScore>=50?'partial':'failed');
-    renderResultBox({status, score:data.confidenceScore||0, data});
+    const status=data.isVerified?'verified':(data.confidenceScore>=50?'partial':'failed');
+    renderResultBox({status,score:data.confidenceScore||0,data});
 
   }catch(err){
     console.error('Verification error:',err);
     const isConn=err.message.includes('fetch')||err.message.includes('Failed to fetch');
     renderResultBox({
-      status:'error', score:0,
-      reasoning: isConn
-        ? 'Cannot connect to verification server. Make sure "node server.js" is running on port 5000.'
-        : err.message
+      status:'error',score:0,
+      reasoning:isConn?'Cannot connect to verification server. Make sure "node server.js" is running on port 5000.':err.message
     });
-    window.aiVerificationStatus='skipped';window.aiConfidenceScore=0;
-    window._lastAIResult=null;
+    window.aiVerificationStatus='skipped';window.aiConfidenceScore=0;window._lastAIResult=null;
   }finally{
     btn.disabled=false;btn.innerHTML='🤖 Verify My Skills with AI';
   }
 };
 
 /* ────────────────────────────────────────────────────────────
-   RENDER RESULT BOX — handles all three verification types
+   RENDER RESULT BOX
 ──────────────────────────────────────────────────────────── */
-function renderResultBox({status, score, reasoning, data}){
-  const box      = document.getElementById('aiResultBox');
-  const icon     = document.getElementById('aiResultIcon');
-  const scoreEl  = document.getElementById('aiResultScore');
-  const reasonEl = document.getElementById('aiResultReasoning');
-  const verdictRow = document.getElementById('skillVerdictRow');
-  const tamperBox  = document.getElementById('aiTamperBox');
-  const limitNote  = document.getElementById('aiLimitationNote');
+function renderResultBox({status,score,reasoning,data}){
+  const box=document.getElementById('aiResultBox');
+  const icon=document.getElementById('aiResultIcon');
+  const scoreEl=document.getElementById('aiResultScore');
+  const reasonEl=document.getElementById('aiResultReasoning');
+  const verdictRow=document.getElementById('skillVerdictRow');
+  const tamperBox=document.getElementById('aiTamperBox');
+  const limitNote=document.getElementById('aiLimitationNote');
 
   box.className='ai-result-box show';
   tamperBox.style.display='none';
   limitNote.style.display='none';
   verdictRow.innerHTML='';
 
-  const content = box.querySelector('.ai-result-content');
+  const content=box.querySelector('.ai-result-content');
 
-  // Clear dynamic sections
-  ['ownershipWarningBox','cloneWarningBox','breakdownBox','imageResultsBox','channelOwnershipBox']
-    .forEach(id=>{const el=document.getElementById(id);if(el)el.remove();});
+  ['ownershipWarningBox','cloneWarningBox','breakdownBox','imageResultsBox','channelOwnershipBox','certLinkDetailsBox'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.remove();
+  });
 
-  // ── Status styling ──
   const cfg={
-    error:    {cls:'unverified', icon:'❌', label:'Error'},
-    verified: {cls:'verified',   icon:'✅', label:`${score} / 100 — Verified!`},
-    partial:  {cls:'warning',    icon:'⚠️', label:`${score} / 100 — Partially Verified`},
-    failed:   {cls:'unverified', icon:'❌', label:`${score} / 100 — Not Verified`},
+    error:   {cls:'unverified',icon:'❌',label:'Error'},
+    verified:{cls:'verified',icon:'✅',label:`${score} / 100 — Verified!`},
+    partial: {cls:'warning',icon:'⚠️',label:`${score} / 100 — Partially Verified`},
+    failed:  {cls:'unverified',icon:'❌',label:`${score} / 100 — Not Verified`},
   }[status]||{cls:'unverified',icon:'❓',label:score+' / 100'};
 
   box.classList.add(cfg.cls);
-  icon.textContent = cfg.icon;
-  scoreEl.textContent = cfg.label;
-  scoreEl.className = 'ai-result-score '+(score>=60?'high':score>=40?'mid':'low');
-  reasonEl.textContent = (data&&data.reasoning)||reasoning||'';
+  icon.textContent=cfg.icon;
+  scoreEl.textContent=cfg.label;
+  scoreEl.className='ai-result-score '+(score>=60?'high':score>=40?'mid':'low');
+  reasonEl.textContent=(data&&data.reasoning)||reasoning||'';
 
   if(!data){box.style.display='flex';return;}
 
-  // ── SKILL VERDICT TAGS ──
+  // Skill verdict tags
   (data.verifiedSkills||[]).forEach(s=>{const t=document.createElement('span');t.className='skill-v-tag ok';t.textContent='✓ '+s;verdictRow.appendChild(t);});
   (data.partialSkills||[]).forEach(s=>{const t=document.createElement('span');t.className='skill-v-tag partial';t.textContent='~ '+s;verdictRow.appendChild(t);});
   (data.unverifiedSkills||[]).forEach(s=>{const t=document.createElement('span');t.className='skill-v-tag fail';t.textContent='✗ '+s;verdictRow.appendChild(t);});
+
+  // ── CERTLINK: rich details panel ──
+  if(_currentVerifyType==='certlink'&&data.platformName){
+    const cl=document.createElement('div');cl.id='certLinkDetailsBox';
+    cl.style.cssText='margin-top:14px;padding:16px 18px;background:rgba(0,0,0,.2);border-radius:12px;font-size:.82rem;line-height:2;';
+
+    // Platform row
+    const trusted=data.platformTrusted;
+    const accessible=data.pageAccessible;
+    cl.innerHTML=`
+      <div style="font-weight:700;font-size:.86rem;margin-bottom:10px;color:var(--accent);">🔗 Certificate Link Analysis</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        <span style="padding:3px 12px;border-radius:50px;font-size:.72rem;font-weight:700;background:${trusted?'rgba(52,211,153,.12)':'rgba(255,255,255,.06)'};color:${trusted?'var(--success)':'var(--muted)'};border:1px solid ${trusted?'rgba(52,211,153,.3)':'var(--border)'};">${trusted?'✅ Trusted Platform':'⚠️ Unknown Platform'}: ${data.platformName||'—'}</span>
+        <span style="padding:3px 12px;border-radius:50px;font-size:.72rem;font-weight:700;background:${accessible?'rgba(52,211,153,.08)':'rgba(251,191,36,.08)'};color:${accessible?'var(--success)':'var(--warn)'};border:1px solid ${accessible?'rgba(52,211,153,.2)':'rgba(251,191,36,.2)'};">${accessible?'🌐 Page Loaded':'🔒 Login Required / Blocked'}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 16px;color:var(--muted);">
+        ${data.certSubject?`<span>📜 Subject</span><span style="color:var(--text);font-weight:500;">${data.certSubject}</span>`:''}
+        ${data.issuer?`<span>🏛️ Issuer</span><span style="color:${data.issuerCredible?'var(--success)':'var(--warn)'};">${data.issuer} ${data.issuerCredible?'✓':'⚠️'}</span>`:''}
+        ${data.recipientName&&data.recipientName!=='not shown'?`<span>👤 Name on cert</span><span style="color:${data.nameMismatch?'#fca5a5':'var(--success)'};">${data.recipientName} ${data.nameMismatch?'❌ MISMATCH':'✓'}</span>`:''}
+        ${data.credentialId&&data.credentialId!=='not shown'?`<span>🔑 Credential ID</span><span style="color:var(--text);">${data.credentialId}</span>`:''}
+        ${data.completionDate&&data.completionDate!=='not shown'?`<span>📅 Completed</span><span style="color:var(--text);">${data.completionDate}</span>`:''}
+        ${data.skillMatch?`<span>🎯 Skill Match</span><span style="color:${data.skillMatch==='direct'?'var(--success)':data.skillMatch==='partial'?'var(--warn)':'#fca5a5'};">${data.skillMatch}</span>`:''}
+      </div>
+      ${data.pageAuthenticSignals&&data.pageAuthenticSignals.length?`
+        <div style="margin-top:10px;">
+          <div style="font-size:.74rem;color:var(--muted);margin-bottom:5px;">✅ Authentic signals found:</div>
+          <div class="signal-pills">${data.pageAuthenticSignals.map(s=>`<span class="signal-pill good">${s}</span>`).join('')}</div>
+        </div>`:''}
+      ${data.pageSuspiciousSignals&&data.pageSuspiciousSignals.length?`
+        <div style="margin-top:8px;">
+          <div style="font-size:.74rem;color:var(--muted);margin-bottom:5px;">⚠️ Red flags:</div>
+          <div class="signal-pills">${data.pageSuspiciousSignals.map(s=>`<span class="signal-pill bad">${s}</span>`).join('')}</div>
+        </div>`:''}
+    `;
+    content.appendChild(cl);
+
+    // Name mismatch warning
+    if(data.nameMismatch){
+      tamperBox.style.display='block';
+      tamperBox.style.background='rgba(239,68,68,.12)';tamperBox.style.borderColor='rgba(239,68,68,.3)';
+      const profName=(_profileFirstName+' '+_profileLastName).trim()||'your name';
+      tamperBox.innerHTML=`🚫 <strong>Name mismatch.</strong> Certificate is issued to "${data.recipientName||'unknown'}" but your profile name is "${profName}". This certificate does not belong to you.`;
+    }
+
+    // Limitation note
+    if(data.limitation){limitNote.style.display='block';limitNote.textContent=data.limitation;}
+  }
 
   // ── GITHUB: SCORE BREAKDOWN ──
   if(data.scoreBreakdown){
@@ -1032,7 +1152,7 @@ function renderResultBox({status, score, reasoning, data}){
     cw.style.cssText='margin-top:12px;padding:14px 16px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:10px;font-size:.82rem;line-height:1.6;color:#fca5a5;';
     cw.innerHTML=`<div style="font-weight:700;margin-bottom:6px;">🚨 Possible Cloned Repositories Detected</div>`+
       data.cloneDetails.map(c=>`<div>• <strong>${c.name}</strong>: ${c.reason}</div>`).join('')+
-      `<div style="margin-top:8px;color:var(--muted);font-size:.75rem;">Penalty applied: -${data.clonePenalty} points. Only repos with your own commits count.</div>`;
+      `<div style="margin-top:8px;color:var(--muted);font-size:.75rem;">Penalty applied: -${data.clonePenalty} points.</div>`;
     content.appendChild(cw);
   }
 
@@ -1052,24 +1172,22 @@ function renderResultBox({status, score, reasoning, data}){
           <span style="font-weight:600;">Image ${img.index}${img.certificateSubject?' — '+img.certificateSubject:''}</span>
           <span style="font-weight:700;color:${img.isVerified?'var(--success)':tampered?'var(--danger)':'var(--warn)'};">${img.confidenceScore||0}/100</span>
         </div>
-        ${img.issuer?`<div style="color:var(--muted);">Issuer: ${img.issuer} ${img.issuerCredible?'✓':'⚠️ (unrecognized)'}</div>`:''}
+        ${img.issuer?`<div style="color:var(--muted);">Issuer: ${img.issuer} ${img.issuerCredible?'✓':'⚠️'}</div>`:''}
         ${tampered?`<div style="color:#fca5a5;">🚨 FORGERY: ${img.tamperDetails}</div>`:''}
-        ${img.nameMismatch?`<div style="color:#fca5a5;font-weight:700;">🚫 NAME MISMATCH: Certificate issued to "${img.recipientName||'unknown'}" — does not match your profile name.</div>`:''}
+        ${img.nameMismatch?`<div style="color:#fca5a5;font-weight:700;">🚫 NAME MISMATCH: issued to "${img.recipientName||'unknown'}"</div>`:''}
         ${img.tamperWarning?`<div style="color:var(--warn);">⚠️ ${img.tamperWarning}</div>`:''}
-        ${img.aiGeneratedSuspicion?`<div style="color:#fca5a5;">🤖 Possible AI-generated cert: ${img.aiGeneratedReason||''}</div>`:''}
-        <div style="color:var(--muted);">${img.reasoning||''}</div>
-      `;
+        <div style="color:var(--muted);">${img.reasoning||''}</div>`;
       ir.appendChild(row);
     });
     content.appendChild(ir);
   }
 
   // ── YOUTUBE: LIMITATION + CHANNEL OWNERSHIP ──
-  if(data.limitation){limitNote.style.display='block';limitNote.textContent=data.limitation;}
+  if(data.limitation&&_currentVerifyType==='video'){limitNote.style.display='block';limitNote.textContent=data.limitation;}
   if(data.channelOwnershipVerified===false){
     const co=document.createElement('div');co.id='channelOwnershipBox';
     co.style.cssText='margin-top:10px;padding:10px 14px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:10px;font-size:.78rem;color:#fef3c7;';
-    co.innerHTML='⚠️ <strong>Channel ownership not verified</strong> — anyone can submit any public YouTube video. Use GitHub verification for stronger proof.';
+    co.innerHTML='⚠️ <strong>Channel ownership not verified</strong> — use GitHub verification for stronger proof.';
     content.appendChild(co);
   }
   if(data.videoTitle){
@@ -1078,26 +1196,19 @@ function renderResultBox({status, score, reasoning, data}){
     content.appendChild(vt);
   }
 
-  // ── TAMPER / NAME MISMATCH (top-level summary for portfolio) ──
-  if(data.nameMismatchCount>0){
-    tamperBox.style.display='block';
-    const profName=(_profileFirstName+' '+_profileLastName).trim()||'your name';
-    tamperBox.style.background='rgba(239,68,68,.12)';
-    tamperBox.style.borderColor='rgba(239,68,68,.3)';
-    tamperBox.innerHTML=`🚫 <strong>Name mismatch on ${data.nameMismatchCount} certificate(s).</strong> Certificates must be issued to <strong>${profName}</strong>. See per-image details below.`;
-  } else if(data.forgedCount>0){
-    tamperBox.style.display='block';
-    tamperBox.textContent=`🚨 ${data.forgedCount} image(s) detected as FORGED. Submission rejected.`;
-  }
-  // Show overall summary line
-  if(data.summary&&!tamperBox.style.display.includes('block')){
-    const sumEl=document.createElement('div');
-    sumEl.style.cssText='margin-top:8px;font-size:.82rem;color:var(--muted);';
-    sumEl.textContent=data.summary;
-    content.appendChild(sumEl);
+  // ── PORTFOLIO: top-level tamper/name summary ──
+  if(_currentVerifyType==='creative'){
+    if(data.nameMismatchCount>0){
+      tamperBox.style.display='block';
+      const profName=(_profileFirstName+' '+_profileLastName).trim()||'your name';
+      tamperBox.innerHTML=`🚫 <strong>Name mismatch on ${data.nameMismatchCount} certificate(s).</strong> Must be issued to <strong>${profName}</strong>.`;
+    } else if(data.forgedCount>0){
+      tamperBox.style.display='block';
+      tamperBox.textContent=`🚨 ${data.forgedCount} image(s) detected as FORGED. Submission rejected.`;
+    }
   }
 
-  // ── OWNERSHIP WARNING ──
+  // ── OWNERSHIP WARNING (GitHub) ──
   if(data.ownershipWarning){
     const ow=document.createElement('div');ow.id='ownershipWarningBox';
     ow.style.cssText='margin-top:14px;padding:16px 18px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.35);border-radius:12px;font-size:.84rem;line-height:1.7;color:#fef3c7;';
