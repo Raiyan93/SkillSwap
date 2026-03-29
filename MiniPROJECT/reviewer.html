@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SkillSwap Reviewer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#090913; --surface:#121220; --border:rgba(255,255,255,.08); --text:#f5f5fb; --muted:#9ea3b8; --purple:#7c5cfc; --purple2:#a78bfa; --green:#34d399; --red:#f87171; --orange:#f59e0b; --blue:#60a5fa; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:'Plus Jakarta Sans',sans-serif; background:radial-gradient(circle at top left, rgba(124,92,252,.18), transparent 30%),radial-gradient(circle at bottom right, rgba(59,130,246,.12), transparent 28%),var(--bg); color:var(--text); min-height:100vh; }
+    .shell { max-width:1240px; margin:0 auto; padding:28px 22px 60px; }
+    .topbar { display:flex; justify-content:space-between; align-items:flex-start; gap:18px; margin-bottom:24px; }
+    .title { font-family:'Syne',sans-serif; font-size:2rem; font-weight:800; letter-spacing:-.04em; }
+    .subtitle { color:var(--muted); margin-top:6px; font-size:.95rem; line-height:1.6; }
+    .actions { display:flex; gap:10px; flex-wrap:wrap; }
+    .btn { border:none; border-radius:12px; padding:11px 16px; font-weight:700; font-family:'Plus Jakarta Sans',sans-serif; cursor:pointer; }
+    .btn.primary { background:linear-gradient(135deg,var(--purple),#5b38df); color:#fff; }
+    .btn.ghost { background:rgba(255,255,255,.04); color:var(--text); border:1px solid var(--border); }
+    .btn.approve { background:rgba(52,211,153,.12); color:var(--green); border:1px solid rgba(52,211,153,.25); }
+    .btn.reject { background:rgba(248,113,113,.1); color:var(--red); border:1px solid rgba(248,113,113,.25); }
+    .btn.info { background:rgba(96,165,250,.1); color:var(--blue); border:1px solid rgba(96,165,250,.25); }
+    .btn:disabled { opacity:.55; cursor:not-allowed; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:22px; }
+    .stat,.panel,.card { background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:18px; }
+    .stat { padding:18px; }
+    .stat-label,.field-label,.section-title { font-size:.74rem; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+    .stat-value { font-size:1.55rem; font-weight:800; font-family:'Syne',sans-serif; margin-top:8px; }
+    .layout { display:grid; grid-template-columns:1.5fr 1fr; gap:22px; align-items:start; }
+    .column,.queue,.feedback-list { display:flex; flex-direction:column; gap:18px; }
+    .panel { padding:22px; }
+    .panel-head,.card-top,.feedback-head,.review-actions { display:flex; justify-content:space-between; gap:12px; }
+    .panel-title { font-family:'Syne',sans-serif; font-size:1.2rem; font-weight:800; }
+    .panel-sub,.teacher-meta,.feedback-date,.helper { color:var(--muted); font-size:.85rem; line-height:1.6; }
+    .teacher { display:flex; gap:14px; align-items:center; }
+    .avatar { width:56px; height:56px; border-radius:18px; background:linear-gradient(135deg,var(--purple),#3b82f6); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:1.15rem; }
+    .teacher-name { font-size:1.08rem; font-weight:800; }
+    .chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+    .chip { padding:7px 12px; border-radius:999px; font-size:.76rem; font-weight:700; border:1px solid var(--border); background:rgba(255,255,255,.03); }
+    .chip.good { color:var(--green); border-color:rgba(52,211,153,.3); background:rgba(52,211,153,.1); }
+    .chip.warn { color:var(--orange); border-color:rgba(245,158,11,.3); background:rgba(245,158,11,.1); }
+    .chip.info { color:var(--purple2); border-color:rgba(167,139,250,.28); background:rgba(124,92,252,.12); }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin:18px 0; }
+    .metric,.feedback-item { padding:14px; border-radius:16px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.05); }
+    .metric-value { font-size:1.15rem; font-weight:800; margin-top:6px; }
+    .feedback-topic { color:var(--purple2); font-weight:700; }
+    .feedback-body { font-size:.88rem; line-height:1.6; color:#d9def2; }
+    .review-box { margin-top:18px; padding-top:18px; border-top:1px solid rgba(255,255,255,.07); }
+    .textarea,.input,.select { width:100%; border-radius:16px; background:rgba(255,255,255,.03); border:1px solid var(--border); color:var(--text); padding:14px 15px; font:inherit; }
+    .textarea { min-height:88px; resize:vertical; }
+    .field { display:flex; flex-direction:column; gap:8px; }
+    .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .review-actions { flex-wrap:wrap; margin-top:12px; }
+    .empty { padding:28px; border:1px dashed rgba(255,255,255,.15); border-radius:20px; color:var(--muted); text-align:center; line-height:1.7; }
+    .toast { position:fixed; right:22px; bottom:20px; min-width:260px; max-width:360px; background:linear-gradient(135deg,#6d5af7,#4733ce); border:1px solid rgba(255,255,255,.12); color:#fff; border-radius:18px; padding:14px 16px; box-shadow:0 18px 50px rgba(0,0,0,.35); display:none; z-index:30; }
+    .toast.show { display:block; }
+    .toast-title { font-weight:800; margin-bottom:4px; }
+    .toast-msg { font-size:.88rem; opacity:.92; line-height:1.5; }
+    @media (max-width:980px){ .layout{grid-template-columns:1fr;} }
+    @media (max-width:720px){ .topbar,.card-top{flex-direction:column;} .actions,.review-actions{width:100%;} .actions .btn,.review-actions .btn{flex:1;} .form-grid{grid-template-columns:1fr;} }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="topbar">
+      <div>
+        <div class="title">Reviewer Queue</div>
+        <div class="subtitle" id="reviewerSubtitle">Loading reviewer access...</div>
+      </div>
+      <div class="actions">
+        <button class="btn ghost" id="refreshBtn" type="button">Refresh</button>
+        <button class="btn primary" id="logoutBtn" type="button">Logout</button>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="stat-label">Pending Reviews</div><div class="stat-value" id="pendingCount">0</div></div>
+      <div class="stat"><div class="stat-label">Eligible Teachers</div><div class="stat-value" id="eligibleCount">0</div></div>
+      <div class="stat"><div class="stat-label">Avg Rating</div><div class="stat-value" id="avgRating">0.0</div></div>
+      <div class="stat"><div class="stat-label">Credit Cases</div><div class="stat-value" id="creditCaseCount">0</div></div>
+    </div>
+    <div class="layout">
+      <div class="column">
+        <div class="panel">
+          <div class="panel-head"><div><div class="panel-title">Human Verification</div><div class="panel-sub">Approve or reject teachers after checking their real session history, ratings, and learner feedback.</div></div></div>
+          <div class="queue" id="queueList"><div class="empty">Loading pending review requests...</div></div>
+        </div>
+      </div>
+      <div class="column">
+        <div class="panel">
+          <div class="panel-head"><div><div class="panel-title">Credit Issues</div><div class="panel-sub">Handle disputed sessions, no-show credit cases, and any settlement that needs a reviewer decision.</div></div></div>
+          <div class="queue" id="creditCaseList"><div class="empty">Loading pending credit issues...</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><div><div class="panel-title">Manual Credit Top-Up</div><div class="panel-sub">Use this only for reviewer-approved account corrections, prizes, or recovery actions. Every top-up is logged.</div></div></div>
+          <div class="form-grid">
+            <div class="field"><label class="field-label" for="topupTargetUid">Target User UID</label><input class="input" id="topupTargetUid" type="text" placeholder="Firebase user UID"></div>
+            <div class="field"><label class="field-label" for="topupAmount">Credit Amount</label><input class="input" id="topupAmount" type="number" min="1" step="1" placeholder="20"></div>
+            <div class="field" style="grid-column:1 / -1;"><label class="field-label" for="topupReason">Reason</label><input class="input" id="topupReason" type="text" placeholder="Manual recovery after settlement issue"></div>
+            <div class="field" style="grid-column:1 / -1;"><label class="field-label" for="topupNotes">Reviewer Notes</label><textarea class="textarea" id="topupNotes" placeholder="Add the review context or ticket reference for this credit grant."></textarea></div>
+          </div>
+          <div class="review-actions"><button class="btn primary" id="topupSubmitBtn" type="button">Grant Credits</button></div>
+          <div class="helper">Manual top-ups create a transaction record, a reviewer case record, and a user notification automatically.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"><div class="toast-title" id="toastTitle"></div><div class="toast-msg" id="toastMsg"></div></div>
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+    import { getAuth, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+    import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+    const firebaseConfig = {
+      apiKey: 'AIzaSyA6aCr1L8MaEE9aeQ-nNGEzxdjiGVPUMCU',
+      authDomain: 'skillswap-d2626.firebaseapp.com',
+      projectId: 'skillswap-d2626',
+      storageBucket: 'skillswap-d2626.firebasestorage.app',
+      messagingSenderId: '34762810999',
+      appId: '1:34762810999:web:cae33caad1337b0eebc872'
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const BACKEND_BASE_URL = 'http://localhost:5000';
+    const state = { currentUser: null, profile: null, humanItems: [], creditCases: [] };
+
+    function $(id) { return document.getElementById(id); }
+
+    function escapeHtml(value) {
+      return (value == null ? '' : String(value))
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function showToast(title, message) {
+      $('toastTitle').textContent = title;
+      $('toastMsg').textContent = message;
+      $('toast').classList.add('show');
+      window.clearTimeout(window.__reviewerToastTimer);
+      window.__reviewerToastTimer = window.setTimeout(() => $('toast').classList.remove('show'), 3400);
+    }
+
+    function getBackendUrl(path) {
+      return BACKEND_BASE_URL.replace(/\/+$/, '') + path;
+    }
+
+    function toDate(value) {
+      if (!value) return null;
+      if (typeof value.toDate === 'function') return value.toDate();
+      if (typeof value.seconds === 'number') return new Date(value.seconds * 1000);
+      if (typeof value._seconds === 'number') return new Date(value._seconds * 1000);
+      const date = value instanceof Date ? value : new Date(value);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    function formatDate(value) {
+      const date = toDate(value);
+      return date ? date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Unknown time';
+    }
+
+    function getBadgeLabel(tier) {
+      if (tier === 'gold') return 'Gold';
+      if (tier === 'silver') return 'Silver';
+      if (tier === 'bronze') return 'Bronze';
+      return 'Not earned';
+    }
+
+    function getCreditCaseLabel(type) {
+      const labels = {
+        learner_issue: 'Learner issue report',
+        teacher_issue: 'Teacher issue report',
+        session_issue_conflict: 'Conflicting issue reports',
+        session_conflict: 'Conflicting session outcomes',
+        teacher_claimed_student_no_show: 'Teacher claimed learner no-show',
+        learner_claimed_teacher_no_show: 'Learner claimed teacher no-show',
+        no_show_conflict: 'Conflicting no-show reports',
+        legacy_payment_shortfall: 'Legacy payment shortfall',
+        legacy_session_inconsistency: 'Legacy session inconsistency',
+        manual_top_up: 'Manual credit top-up'
+      };
+      return labels[type] || 'Credit review case';
+    }
+
+    function formatOutcomeLabel(outcome) {
+      const labels = {
+        completed: 'Completed',
+        issue: 'Reported Issue',
+        teacher_no_show: 'Teacher No-Show',
+        student_no_show: 'Learner No-Show',
+        pending: 'Pending'
+      };
+      return labels[outcome] || 'Pending';
+    }
+
+    function formatReasonLabel(reason) {
+      if (!reason) return 'No reason provided';
+      return String(reason)
+        .split('_')
+        .map(part => part ? part.charAt(0).toUpperCase() + part.slice(1) : '')
+        .join(' ');
+    }
+
+    function renderParticipantResponse(roleLabel, response) {
+      const submittedAt = formatDate(response && response.submittedAt);
+      const outcome = response && response.outcome ? response.outcome : 'pending';
+      const note = response && response.note ? response.note : '';
+      const feedback = response && response.feedback ? response.feedback : '';
+      const rating = response && response.rating ? Number(response.rating) : 0;
+      const reason = response && response.reasonCode ? formatReasonLabel(response.reasonCode) : '';
+
+      return '' +
+        '<div class="metric">' +
+          '<div class="metric-label">' + escapeHtml(roleLabel) + '</div>' +
+          '<div class="metric-value">' + escapeHtml(formatOutcomeLabel(outcome)) + '</div>' +
+          '<div class="helper" style="margin-top:8px">' +
+            (response ? ('Submitted ' + escapeHtml(submittedAt)) : 'No response submitted yet.') +
+          '</div>' +
+          '<div class="helper" style="margin-top:8px">' +
+            (reason ? ('Reason: ' + escapeHtml(reason)) : 'Reason: None') +
+          '</div>' +
+          (rating > 0 ? '<div class="helper" style="margin-top:8px">Rating: ' + escapeHtml(String(rating)) + '/5</div>' : '') +
+          (note ? '<div class="helper" style="margin-top:8px">Note: ' + escapeHtml(note) + '</div>' : '') +
+          (feedback ? '<div class="helper" style="margin-top:8px">Feedback: ' + escapeHtml(feedback) + '</div>' : '') +
+        '</div>';
+    }
+
+    async function apiJson(path, options = {}) {
+      if (!state.currentUser) throw new Error('Please sign in first.');
+      const token = await state.currentUser.getIdToken(true);
+      const headers = Object.assign({
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + token
+      }, options.headers || {});
+      const response = await fetch(getBackendUrl(path), Object.assign({}, options, { headers }));
+      let data = null;
+      try { data = await response.json(); } catch (_err) {}
+      if (!response.ok) throw new Error(data && data.error ? data.error : ('Request failed (' + response.status + ')'));
+      return data || {};
+    }
+
+    async function resolveProfile(user) {
+      const snap = await getDoc(doc(db, 'users', user.uid));
+      return snap.exists() ? { uid: snap.id, ...snap.data() } : null;
+    }
+
+    async function loadHumanQueue() {
+      const data = await apiJson('/api/reviewer/human-verification-requests');
+      state.humanItems = Array.isArray(data.items) ? data.items : [];
+      renderHumanQueue();
+    }
+
+    async function loadReviewerCreditCasesApi(status = 'pending') {
+      const paths = [
+        '/api/reviewer/credit-review-cases?status=' + encodeURIComponent(status),
+        '/api/reviewer/credit-cases?status=' + encodeURIComponent(status)
+      ];
+      let lastError = null;
+      for (const path of paths) {
+        try {
+          return await apiJson(path);
+        } catch (err) {
+          lastError = err;
+          const isNotFound = String(err && err.message ? err.message : '').includes('(404)');
+          if (!isNotFound) throw err;
+        }
+      }
+      throw lastError || new Error('Could not load credit review cases.');
+    }
+
+    async function loadCreditCases() {
+      const data = await loadReviewerCreditCasesApi('pending');
+      state.creditCases = Array.isArray(data.items) ? data.items : [];
+      renderCreditCases();
+    }
+
+    async function loadAllReviewerData() {
+      $('queueList').innerHTML = '<div class="empty">Loading pending review requests...</div>';
+      $('creditCaseList').innerHTML = '<div class="empty">Loading pending credit issues...</div>';
+      await Promise.all([loadHumanQueue(), loadCreditCases()]);
+    }
+
+    function renderHumanQueue() {
+      const list = $('queueList');
+      const items = state.humanItems || [];
+      const eligibleItems = items.filter(item => item.teacherReputation && item.teacherReputation.eligibleForHumanReview);
+      const averageRating = items.length
+        ? items.reduce((sum, item) => sum + Number(item.teacherReputation?.averageRating || 0), 0) / items.length
+        : 0;
+
+      $('pendingCount').textContent = String(items.length);
+      $('eligibleCount').textContent = String(eligibleItems.length);
+      $('avgRating').textContent = averageRating.toFixed(1);
+
+      if (!items.length) {
+        list.innerHTML = '<div class="empty">No pending human-verification requests right now.</div>';
+        return;
+      }
+
+      list.innerHTML = items.map(item => {
+        const teacher = item.teacher || {};
+        const reputation = item.teacherReputation || {};
+        const verification = item.verification || {};
+        const eligibility = item.eligibilitySnapshot || reputation.requirementProgress || {};
+        const feedbackList = (item.recentFeedback || []).length
+          ? '<div class="feedback-list">' + item.recentFeedback.map(feedback => (
+              '<div class="feedback-item">' +
+                '<div class="feedback-head">' +
+                  '<span class="feedback-topic">' + escapeHtml(feedback.topic || 'SkillSwap session') + '</span>' +
+                  '<span class="feedback-date">' + escapeHtml(formatDate(feedback.ratedAt)) + '</span>' +
+                '</div>' +
+                '<div class="feedback-body">' +
+                  (feedback.rating ? 'Rating: ' + escapeHtml(String(feedback.rating)) + '/5' : 'No rating given') +
+                  (feedback.feedback ? ' | ' + escapeHtml(feedback.feedback) : '') +
+                '</div>' +
+              '</div>'
+            )).join('') + '</div>'
+          : '<div class="empty" style="padding:16px">No learner feedback has been recorded yet.</div>';
+
+        return '' +
+          '<div class="card" data-request-id="' + escapeHtml(item.id) + '">' +
+            '<div class="card-top">' +
+              '<div>' +
+                '<div class="teacher">' +
+                  '<div class="avatar">' + escapeHtml((teacher.fullName || 'R').slice(0, 1).toUpperCase()) + '</div>' +
+                  '<div>' +
+                    '<div class="teacher-name">' + escapeHtml(teacher.fullName || 'SkillSwap Teacher') + '</div>' +
+                    '<div class="teacher-meta">' + escapeHtml(teacher.email || 'No email on file') + '<br>Requested ' + escapeHtml(formatDate(item.requestedAt)) + '</div>' +
+                  '</div>' +
+                '</div>' +
+                '<div class="chips">' +
+                  '<span class="chip ' + (verification.status === 'verified' ? 'good' : 'warn') + '">' + escapeHtml((verification.status || 'unverified').toUpperCase()) + ' | ' + escapeHtml(String(Number(verification.score || 0))) + '/100</span>' +
+                  '<span class="chip info">' + escapeHtml(getBadgeLabel(reputation.badgeTier)) + ' Badge</span>' +
+                  '<span class="chip ' + (reputation.eligibleForHumanReview ? 'good' : 'warn') + '">' + (reputation.eligibleForHumanReview ? 'Eligible' : 'Needs Work') + '</span>' +
+                '</div>' +
+              '</div>' +
+              '<div class="teacher-meta" style="min-width:180px;text-align:right">Teach Skills<br><strong style="color:var(--text)">' + escapeHtml((teacher.teachSkills || []).join(', ') || 'No skills listed') + '</strong></div>' +
+            '</div>' +
+            '<div class="grid">' +
+              '<div class="metric"><div class="metric-label">Completed Teach Sessions</div><div class="metric-value">' + escapeHtml(String(reputation.completedTeachingSessions || 0)) + '</div></div>' +
+              '<div class="metric"><div class="metric-label">Demo Sessions</div><div class="metric-value">' + escapeHtml(String(reputation.completedDemoSessions || 0)) + '</div></div>' +
+              '<div class="metric"><div class="metric-label">Paid Sessions</div><div class="metric-value">' + escapeHtml(String(reputation.completedPaidSessions || 0)) + '</div></div>' +
+              '<div class="metric"><div class="metric-label">Average Rating</div><div class="metric-value">' + escapeHtml(Number(reputation.averageRating || 0).toFixed(1)) + '</div></div>' +
+              '<div class="metric"><div class="metric-label">Written Feedbacks</div><div class="metric-value">' + escapeHtml(String(reputation.writtenLearnerFeedbackCount || 0)) + '</div></div>' +
+              '<div class="metric"><div class="metric-label">No-Show / Disputes</div><div class="metric-value">' + escapeHtml(String(reputation.noShowCount || 0)) + ' / ' + escapeHtml(String(reputation.disputeCount || 0)) + '</div></div>' +
+            '</div>' +
+            '<div class="section-title">Eligibility Snapshot</div>' +
+            '<div class="chips" style="margin-bottom:18px">' +
+              '<span class="chip ' + (eligibility.aiVerified ? 'good' : 'warn') + '">AI Verified: ' + (eligibility.aiVerified ? 'Yes' : 'No') + '</span>' +
+              '<span class="chip info">Sessions ' + escapeHtml(String(eligibility.sessionsCompleted || 0)) + '/' + escapeHtml(String(eligibility.sessionsRequired || 5)) + '</span>' +
+              '<span class="chip info">Rating ' + escapeHtml(Number(eligibility.averageRating || 0).toFixed(1)) + '/' + escapeHtml(String(eligibility.ratingRequired || 4)) + '</span>' +
+              '<span class="chip info">Feedback ' + escapeHtml(String(eligibility.writtenFeedbackCount || 0)) + '/' + escapeHtml(String(eligibility.feedbackRequired || 2)) + '</span>' +
+            '</div>' +
+            '<div class="section-title">Recent Learner Feedback</div>' +
+            feedbackList +
+            '<div class="review-box">' +
+              '<div class="section-title">Reviewer Notes</div>' +
+              '<textarea class="textarea" data-note-input="' + escapeHtml(item.id) + '" placeholder="Add context for approval or explain why this request was rejected."></textarea>' +
+              '<div class="review-actions">' +
+                '<button class="btn reject" type="button" data-human-action="reject" data-request-id="' + escapeHtml(item.id) + '">Reject</button>' +
+                '<button class="btn approve" type="button" data-human-action="approve" data-request-id="' + escapeHtml(item.id) + '">Approve</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+      }).join('');
+    }
+
+    function renderCreditCases() {
+      const list = $('creditCaseList');
+      const items = state.creditCases || [];
+      $('creditCaseCount').textContent = String(items.length);
+
+      if (!items.length) {
+        list.innerHTML = '<div class="empty">No pending credit-review cases right now.</div>';
+        return;
+      }
+
+      list.innerHTML = items.map(item => {
+        const held = Math.max(0, Number(item.creditsHeld || 0));
+        const responseSummary = '' +
+          '<div class="section-title">Participant Responses</div>' +
+          '<div class="grid" style="margin-top:12px">' +
+            renderParticipantResponse('Teacher Response', item.teacherResponse || null) +
+            renderParticipantResponse('Learner Response', item.studentResponse || null) +
+          '</div>';
+        const caseContextChips = '' +
+          '<div class="chips">' +
+            (item.recommendedSettlement ? '<span class="chip info">Recommended: ' + escapeHtml(formatReasonLabel(item.recommendedSettlement)) + '</span>' : '') +
+            (item.openedAfterTimeout ? '<span class="chip warn">Opened After Timeout</span>' : '') +
+            (item.noShowType ? '<span class="chip warn">No-Show: ' + escapeHtml(formatReasonLabel(item.noShowType)) + '</span>' : '') +
+          '</div>';
+        return '' +
+          '<div class="card" data-credit-case-id="' + escapeHtml(item.id) + '">' +
+            '<div class="card-top">' +
+              '<div>' +
+                '<div class="teacher-name">' + escapeHtml(item.topic || 'SkillSwap session') + '</div>' +
+                '<div class="teacher-meta">Case type: ' + escapeHtml(getCreditCaseLabel(item.caseType)) + '<br>Opened ' + escapeHtml(formatDate(item.openedAt || item.updatedAt)) + '</div>' +
+                '<div class="chips">' +
+                  '<span class="chip warn">Held Credits: ' + escapeHtml(String(held)) + '</span>' +
+                  '<span class="chip info">Teacher: ' + escapeHtml(item.teacherName || item.teacherUid || 'Unknown') + '</span>' +
+                  '<span class="chip info">Learner: ' + escapeHtml(item.studentName || item.studentUid || 'Unknown') + '</span>' +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+            '<div class="grid">' +
+              '<div class="metric"><div class="metric-label">Session ID</div><div class="metric-value" style="font-size:.86rem;word-break:break-all">' + escapeHtml(item.sessionId || 'N/A') + '</div></div>' +
+              '<div class="metric"><div class="metric-label">Status</div><div class="metric-value">' + escapeHtml((item.status || 'pending').toUpperCase()) + '</div></div>' +
+            '</div>' +
+            caseContextChips +
+            '<div class="section-title">Issue Summary</div>' +
+            '<div class="helper" style="margin-bottom:14px">' + escapeHtml(item.issueReason || 'No reviewer note was added when this case was opened.') + '</div>' +
+            responseSummary +
+            '<div class="review-box">' +
+              '<div class="form-grid">' +
+                '<div class="field">' +
+                  '<label class="field-label">Decision</label>' +
+                  '<select class="select" data-credit-action="' + escapeHtml(item.id) + '">' +
+                    '<option value="payout_full">Full payout to teacher</option>' +
+                    '<option value="refund_full" selected>Full refund to learner</option>' +
+                    '<option value="split">Split credits between both sides</option>' +
+                    '<option value="waive_penalty">Waive penalty and refund learner</option>' +
+                    '<option value="close_no_change">Close with no credit change</option>' +
+                  '</select>' +
+                '</div>' +
+                '<div class="field">' +
+                  '<label class="field-label">Teacher Amount (for split)</label>' +
+                  '<input class="input" data-credit-split="' + escapeHtml(item.id) + '" type="number" min="1" max="' + escapeHtml(String(held > 0 ? held - 1 : 0)) + '" step="1" placeholder="Teacher share">' +
+                '</div>' +
+                '<div class="field" style="grid-column:1 / -1;">' +
+                  '<label class="field-label">Reviewer Notes</label>' +
+                  '<textarea class="textarea" data-credit-note="' + escapeHtml(item.id) + '" placeholder="Explain why you chose this settlement."></textarea>' +
+                '</div>' +
+              '</div>' +
+              '<div class="review-actions"><button class="btn info" type="button" data-credit-resolve="' + escapeHtml(item.id) + '">Resolve Credit Case</button></div>' +
+            '</div>' +
+          '</div>';
+      }).join('');
+    }
+
+    async function handleHumanDecision(requestId, action) {
+      const noteInput = document.querySelector('[data-note-input="' + requestId + '"]');
+      const buttons = Array.from(document.querySelectorAll('[data-human-action][data-request-id="' + requestId + '"]'));
+      buttons.forEach(button => { button.disabled = true; });
+      try {
+        await apiJson('/api/reviewer/human-verification/' + requestId + '/' + action, {
+          method: 'POST',
+          body: JSON.stringify({ reviewNotes: noteInput ? noteInput.value.trim() : '' })
+        });
+        showToast(action === 'approve' ? 'Approved' : 'Rejected', 'The review decision was saved.');
+        await loadHumanQueue();
+      } catch (err) {
+        console.error('Reviewer decision error:', err);
+        buttons.forEach(button => { button.disabled = false; });
+        showToast('Action failed', err && err.message ? err.message : 'Could not save that review decision.');
+      }
+    }
+
+    async function handleCreditDecision(caseId) {
+      const actionInput = document.querySelector('[data-credit-action="' + caseId + '"]');
+      const splitInput = document.querySelector('[data-credit-split="' + caseId + '"]');
+      const noteInput = document.querySelector('[data-credit-note="' + caseId + '"]');
+      const button = document.querySelector('[data-credit-resolve="' + caseId + '"]');
+      if (!actionInput || !button) return;
+
+      const payload = {
+        action: actionInput.value,
+        reviewNotes: noteInput ? noteInput.value.trim() : ''
+      };
+      if (payload.action === 'split') {
+        payload.teacherAmount = Number(splitInput && splitInput.value ? splitInput.value : 0);
+      }
+
+      button.disabled = true;
+      try {
+        const paths = [
+          '/api/reviewer/credit-review-cases/' + caseId + '/resolve',
+          '/api/reviewer/credit-cases/' + caseId + '/resolve'
+        ];
+        let resolved = false;
+        let lastError = null;
+        for (const path of paths) {
+          try {
+            await apiJson(path, {
+              method: 'POST',
+              body: JSON.stringify(payload)
+            });
+            resolved = true;
+            break;
+          } catch (err) {
+            lastError = err;
+            const isNotFound = String(err && err.message ? err.message : '').includes('(404)');
+            if (!isNotFound) throw err;
+          }
+        }
+        if (!resolved) throw lastError || new Error('Could not resolve that credit case.');
+        showToast('Credit case resolved', 'The settlement decision was saved successfully.');
+        await loadCreditCases();
+      } catch (err) {
+        console.error('Credit decision error:', err);
+        button.disabled = false;
+        showToast('Resolution failed', err && err.message ? err.message : 'Could not resolve that credit case.');
+      }
+    }
+
+    async function handleTopup() {
+      const targetUid = $('topupTargetUid').value.trim();
+      const amount = Number($('topupAmount').value || 0);
+      const reason = $('topupReason').value.trim();
+      const reviewNotes = $('topupNotes').value.trim();
+
+      if (!targetUid) {
+        showToast('Missing UID', 'Please enter the target user UID.');
+        return;
+      }
+      if (!amount || amount < 1) {
+        showToast('Invalid amount', 'Please enter a credit amount greater than zero.');
+        return;
+      }
+      if (!reason) {
+        showToast('Reason required', 'Please explain why this reviewer top-up is being issued.');
+        return;
+      }
+
+      const button = $('topupSubmitBtn');
+      button.disabled = true;
+      try {
+        const result = await apiJson('/api/reviewer/credits/top-up', {
+          method: 'POST',
+          body: JSON.stringify({ targetUid, amount, reason, reviewNotes })
+        });
+        $('topupTargetUid').value = '';
+        $('topupAmount').value = '';
+        $('topupReason').value = '';
+        $('topupNotes').value = '';
+        showToast('Credits added', String(result.amount || amount) + ' credits were granted successfully.');
+        await loadCreditCases();
+      } catch (err) {
+        console.error('Top-up error:', err);
+        showToast('Top-up failed', err && err.message ? err.message : 'Could not add those credits.');
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    $('refreshBtn').addEventListener('click', async function() {
+      try {
+        await loadAllReviewerData();
+        showToast('Queues refreshed', 'Human verification and credit review data are up to date.');
+      } catch (err) {
+        console.error('Queue refresh error:', err);
+        showToast('Refresh failed', err && err.message ? err.message : 'Could not refresh reviewer data.');
+      }
+    });
+
+    $('logoutBtn').addEventListener('click', async function() {
+      await signOut(auth);
+      window.location.href = 'Registration.html';
+    });
+
+    $('topupSubmitBtn').addEventListener('click', handleTopup);
+
+    document.addEventListener('click', function(event) {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+
+      const humanAction = target.getAttribute('data-human-action');
+      const requestId = target.getAttribute('data-request-id');
+      if (humanAction && requestId) {
+        handleHumanDecision(requestId, humanAction);
+        return;
+      }
+
+      const creditCaseId = target.getAttribute('data-credit-resolve');
+      if (creditCaseId) {
+        handleCreditDecision(creditCaseId);
+      }
+    });
+
+    onAuthStateChanged(auth, async function(user) {
+      if (!user) {
+        window.location.href = 'Registration.html';
+        return;
+      }
+
+      state.currentUser = user;
+      try {
+        const profile = await resolveProfile(user);
+        state.profile = profile;
+        if (!profile) {
+          window.location.href = 'createprofile.html';
+          return;
+        }
+        if (profile.appRole !== 'reviewer') {
+          window.location.href = profile.profileCompleted ? 'dashboard.html' : 'createprofile.html';
+          return;
+        }
+
+        $('reviewerSubtitle').textContent = 'Signed in as ' + (profile.fullName || profile.email || 'reviewer') + '. Review teacher verification requests, settle credit issues, and manage manual top-ups from one place.';
+        await loadAllReviewerData();
+      } catch (err) {
+        console.error('Reviewer auth error:', err);
+        showToast('Access failed', err && err.message ? err.message : 'Could not load reviewer access.');
+      }
+    });
+  </script>
+</body>
+</html>

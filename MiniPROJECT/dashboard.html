@@ -636,8 +636,12 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
     <div class="card-title"><div class="dot" style="background:var(--blue)"></div>Calendar</div>
     <div class="calendar-strip" id="calStripFull"></div>
   </div>
+  <div class="card" id="underReviewSessionsCard" style="display:none;margin-bottom:20px">
+    <div class="card-title"><div class="dot" style="background:var(--orange)"></div>Under Review</div>
+    <div id="sessionsUnderReviewList" style="display:flex;flex-direction:column;gap:10px"></div>
+  </div>
   <div class="card">
-    <div class="card-title"><div class="dot" style="background:var(--green)"></div>All Sessions</div>
+    <div class="card-title"><div class="dot" style="background:var(--green)"></div>Session History</div>
     <div id="sessionsListFull" style="display:flex;flex-direction:column;gap:10px"></div>
   </div>
 </div>
@@ -655,9 +659,10 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
       <div style="font-size:.8rem;color:var(--orange);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">TOTAL CREDITS</div>
       <div class="credits-big" id="creditsDisplay">—</div>
       <div style="font-size:.78rem;color:var(--muted);margin-top:8px">⭐ SkillSwap Credits</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:20px">
         <div style="background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.2);border-radius:12px;padding:12px"><div style="font-size:.7rem;color:var(--muted)">Earned</div><div style="font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:800;color:var(--green)" id="creditsEarned">—</div></div>
         <div style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);border-radius:12px;padding:12px"><div style="font-size:.7rem;color:var(--muted)">Spent</div><div style="font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:800;color:var(--red)" id="creditsSpent">—</div></div>
+        <div style="background:rgba(79,172,254,0.1);border:1px solid rgba(79,172,254,0.2);border-radius:12px;padding:12px"><div style="font-size:.7rem;color:var(--muted)">Held</div><div style="font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:800;color:var(--blue)" id="creditsHeld">—</div></div>
       </div>
     </div>
     <div class="card">
@@ -796,7 +801,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
   <div class="modal">
     <button class="modal-close" onclick="closeModal('scheduleModal')">✕</button>
     <div class="modal-title">📅 Schedule a Session</div>
-    <div class="modal-sub">Pick a date and time, then paste a real Google Meet link for the session.</div>
+    <div class="modal-sub">Pick a date and time. SkillSwap will create one shared Google Meet invite for both of you without opening the meeting right away.</div>
     <div class="mini-cal-header">
       <button class="mini-cal-nav" onclick="prevMonth()">‹</button>
       <span id="calMonthLabel">March 2026</span>
@@ -811,10 +816,8 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
     </div>
     <div class="field-m"><label>Session With</label><select id="sessionPartner"><option>— No partners yet —</option></select></div>
     <div class="field-m"><label>Topic to Cover</label><input type="text" id="sessionTopic" placeholder="e.g. Python Decorators, OOP in Java..."/></div>
-    <div class="field-m"><label>Google Meet Link</label><input type="url" id="sessionMeetLink" placeholder="https://meet.google.com/abc-defg-hij"/></div>
-    <button class="modal-btn secondary" id="scheduleMeetHelperBtn" onclick="openGoogleMeetSetup()" style="margin-bottom:12px">📹 Open Google Meet to Create Link</button>
     <div id="selectedDateDisplay" style="background:rgba(124,92,252,0.08);border:1px solid rgba(124,92,252,0.2);border-radius:10px;padding:10px 14px;font-size:.82rem;color:var(--accent);font-weight:600;margin-bottom:16px;display:none">📅 Selected: <span id="selectedDateText"></span></div>
-    <button class="modal-btn primary" id="scheduleSubmitBtn" onclick="scheduleSession()">🔗 Save Session</button>
+    <button class="modal-btn primary" id="scheduleSubmitBtn" onclick="scheduleSession()">Create Meet & Schedule</button>
     <button class="modal-btn secondary" onclick="closeModal('scheduleModal')">Cancel</button>
   </div>
 </div>
@@ -867,13 +870,17 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
     <button class="modal-close" onclick="closeModal('completeModal')">✕</button>
     <div style="text-align:center;margin-bottom:18px">
       <div style="width:60px;height:60px;border-radius:18px;background:linear-gradient(135deg,var(--green),#059669);display:flex;align-items:center;justify-content:center;font-size:1.8rem;margin:0 auto 14px;box-shadow:0 8px 24px rgba(52,211,153,0.4)">✅</div>
-      <div class="modal-title">Complete Session</div>
-      <div class="modal-sub">Rate your experience and transfer credits</div>
+      <div class="modal-title" id="completeModalTitle">Complete Session</div>
+      <div class="modal-sub" id="completeModalSub">Rate your experience and confirm the session outcome.</div>
     </div>
     <input type="hidden" id="completeSessionId" value="">
+    <input type="hidden" id="completeSessionRole" value="">
 
-    <div class="field-m">
-      <label>Rate Your Partner</label>
+    <div id="completePartnerResponseBanner" style="display:none;background:rgba(79,172,254,0.08);border:1px solid rgba(79,172,254,0.2);border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:.8rem;color:var(--text2);line-height:1.6"></div>
+    <div id="completeSettlementSummary" style="display:none;background:rgba(124,92,252,0.08);border:1px solid rgba(124,92,252,0.2);border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:.8rem;color:var(--text2);line-height:1.6"></div>
+
+    <div class="field-m" id="completeRatingField">
+      <label id="completeRatingLabel">Rate Your Partner</label>
       <div id="ratingStars" style="display:flex;gap:12px;justify-content:center;font-size:2.2rem;cursor:pointer;padding:12px 0">
         <span onclick="setRating(1)" data-star="1">⭐</span>
         <span onclick="setRating(2)" data-star="2">⭐</span>
@@ -884,8 +891,8 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
       <div id="ratingText" style="text-align:center;font-size:.82rem;color:var(--muted)">Click to rate (5 = Excellent)</div>
     </div>
 
-    <div class="field-m">
-      <label>Feedback (optional)</label>
+    <div class="field-m" id="completeFeedbackField">
+      <label id="completeFeedbackLabel">Feedback (optional)</label>
       <textarea id="sessionFeedback" placeholder="How was the session? What did you learn?" style="min-height:70px"></textarea>
     </div>
 
@@ -897,15 +904,11 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
       <div id="issueReasonSection" style="display:none;margin-top:12px">
         <select id="issueReason" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border2);color:var(--text);padding:10px 14px;border-radius:10px;font-size:.88rem">
           <option value="">Select reason...</option>
-          <option value="poor_quality">Poor teaching quality</option>
-          <option value="no_show">Partner didn't show up</option>
-          <option value="misrepresented">Skills were misrepresented</option>
-          <option value="other">Other issue</option>
         </select>
       </div>
     </div>
 
-    <button class="modal-btn primary" onclick="submitCompletion()">✅ Complete & Transfer Credits</button>
+    <button class="modal-btn primary" onclick="submitCompletion()">Save Session Outcome</button>
     <button class="modal-btn secondary" onclick="closeModal('completeModal')">Cancel</button>
   </div>
 </div>
@@ -916,8 +919,8 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
     <button class="modal-close" onclick="closeModal('noShowModal')">✕</button>
     <div style="text-align:center;margin-bottom:18px">
       <div style="width:60px;height:60px;border-radius:18px;background:linear-gradient(135deg,var(--orange),var(--red));display:flex;align-items:center;justify-content:center;font-size:1.8rem;margin:0 auto 14px;box-shadow:0 8px 24px rgba(248,113,113,0.4)">⚠️</div>
-      <div class="modal-title">Mark Session Not Complete</div>
-      <div class="modal-sub">Choose what happened if this session did not actually happen.</div>
+      <div class="modal-title" id="noShowModalTitle">Mark Session Not Complete</div>
+      <div class="modal-sub" id="noShowModalSub">Choose what happened if this session did not actually happen.</div>
     </div>
     <input type="hidden" id="noShowSessionId" value="">
 
@@ -1023,6 +1026,15 @@ function formatRelTime(date) {
 // ═══════════════════════════════════════════════════════════════
 // TAB NAVIGATION
 // ═══════════════════════════════════════════════════════════════
+var POST_SESSION_ACTION_DELAY_MS = 1 * 60 * 1000;
+
+function getPostSessionUnlockDate(startDate) {
+  if (!startDate) return null;
+  var base = startDate instanceof Date ? startDate : new Date(startDate);
+  if (Number.isNaN(base.getTime())) return null;
+  return new Date(base.getTime() + POST_SESSION_ACTION_DELAY_MS);
+}
+
 function switchTab(tabName, navEl) {
   document.querySelectorAll('.tab-page').forEach(function(p){ p.classList.remove('active'); });
   var page = document.getElementById('tab-' + tabName);
@@ -1120,14 +1132,24 @@ function renderProfileLinks(profile) {
 function buildVerificationPills(profile) {
   var v = profile.verification || {};
   var h = profile.humanVerification || {};
+  var teacherRep = profile.teacherReputation || {};
   var parts = [];
   if (v.status==='verified')      parts.push('<span class="pill success">✅ AI Verified</span>');
   else if (v.status==='partial')  parts.push('<span class="pill warn">⚡ Partially Verified</span>');
   else                            parts.push('<span class="pill">🔍 Unverified</span>');
   if (h.status==='verified')      parts.push('<span class="pill info">🛡️ Human Verified</span>');
   else if (h.status==='pending')  parts.push('<span class="pill warn">⏳ Human Review Pending</span>');
+  else if (h.status==='rejected') parts.push('<span class="pill">Human Review Rejected</span>');
+  if (teacherRep.badgeTier && teacherRep.badgeTier !== 'none') parts.push('<span class="pill info">' + escapeHtml(getBadgeLabel(teacherRep.badgeTier) + ' Badge') + '</span>');
   if (profile.teachingProfile && profile.teachingProfile.demoOptIn) parts.push('<span class="pill success">🎓 Free Demo</span>');
   return parts.join('');
+}
+
+function getBadgeLabel(tier) {
+  if (tier === 'gold') return 'Gold';
+  if (tier === 'silver') return 'Silver';
+  if (tier === 'bronze') return 'Bronze';
+  return '';
 }
 
 function renderSkillChips(skills, type) {
@@ -1192,6 +1214,15 @@ function refreshConnectedUi() {
     ? (window.LIVE_MATCH_USERS || []).find(function(u){ return u.uid === nextSession.partnerUid; }) || (state.acceptedPartners || []).find(function(u){ return u.partnerUid === nextSession.partnerUid; })
     : (state.acceptedPartners || [])[0] || (window.LIVE_MATCH_USERS || [])[0];
   window.updateActiveSwapCard(state.profile || null, partner || null, nextSession || null);
+}
+
+function startSessionUiTicker() {
+  if (window.__sessionUiTickerStarted) return;
+  window.__sessionUiTickerStarted = true;
+  window.__sessionUiTicker = setInterval(function() {
+    if (!window.SESSIONS || !window.SESSIONS.length) return;
+    refreshConnectedUi();
+  }, 15000);
 }
 
 function renderPartnerOptions(users) {
@@ -1268,10 +1299,13 @@ function triggerSearch() {
   } else {
     results.forEach(function(u) {
       var el = document.createElement('div');
+      var safeCreditsFrom = getSafeCreditAmount(state.userMap && u.uid ? (state.userMap[u.uid] || u) : u);
+      u.creditsFrom = safeCreditsFrom;
       el.className = 'match-card';
       var pills = '';
       if (u.verificationStatus==='verified') pills += '<span class="pill success" style="font-size:.65rem">✅ Verified</span>';
       else if (u.verificationStatus==='partial') pills += '<span class="pill warn" style="font-size:.65rem">⚡ Partial</span>';
+      if (u.badgeTier && u.badgeTier !== 'none') pills += '<span class="pill info" style="font-size:.65rem">' + escapeHtml(getBadgeLabel(u.badgeTier)) + ' Badge</span>';
       if (u.demoOptIn) pills += '<span class="pill success" style="font-size:.65rem">🎓 Demo</span>';
       el.innerHTML =
         '<div class="match-avatar" style="font-size:1.4rem">' + escapeHtml(u.emoji||'👤') + '</div>' +
@@ -1292,6 +1326,22 @@ function triggerSearch() {
 
 function openMatchModal(encoded) {
   var u = typeof encoded === 'string' ? JSON.parse(decodeURIComponent(encoded)) : encoded;
+  var creditFn = typeof window.getSafeCreditAmount === 'function'
+    ? window.getSafeCreditAmount
+    : function(entryOrValue) {
+        var raw = typeof entryOrValue === 'object' && entryOrValue !== null
+          ? Number(entryOrValue.credits || 0)
+          : Number(entryOrValue || 0);
+        if (raw > 0 && raw <= 100) return Math.round(raw);
+        var level = typeof entryOrValue === 'object' && entryOrValue !== null
+          ? String(entryOrValue.level || '').toLowerCase()
+          : '';
+        if (level === 'expert') return 44;
+        if (level === 'beginner') return 20;
+        return 30;
+      };
+  var safeCreditsFrom = creditFn(state.userMap && u.uid ? (state.userMap[u.uid] || u) : u);
+  u.creditsFrom = safeCreditsFrom;
   var skillOpts = (u.teachSkills||[u.primaryTeach||'General guidance']).map(function(s){
     return '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + '</option>';
   }).join('');
@@ -1302,7 +1352,7 @@ function openMatchModal(encoded) {
     '</div>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">' +
       '<div style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);border-radius:12px;padding:12px;text-align:center"><div style="font-size:.7rem;color:var(--muted);margin-bottom:4px">Teaches</div><div style="font-weight:700;color:var(--green)">' + escapeHtml(u.teaches||u.primaryTeach||'—') + '</div></div>' +
-      '<div style="background:rgba(124,92,252,0.08);border:1px solid rgba(124,92,252,0.2);border-radius:12px;padding:12px;text-align:center"><div style="font-size:.7rem;color:var(--muted);margin-bottom:4px">Type</div><div style="font-weight:700;color:var(--purple2)">' + (u.demoOptIn?'Free demo available':(u.creditsFrom||0)+' credits/session') + '</div></div>' +
+      '<div style="background:rgba(124,92,252,0.08);border:1px solid rgba(124,92,252,0.2);border-radius:12px;padding:12px;text-align:center"><div style="font-size:.7rem;color:var(--muted);margin-bottom:4px">Type</div><div style="font-weight:700;color:var(--purple2)">' + (u.demoOptIn?'Free demo available':safeCreditsFrom+' credits/session') + '</div></div>' +
     '</div>' +
     '<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border2);border-radius:12px;padding:14px;margin-bottom:16px">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:.75rem;color:var(--muted)">Match Score</span><span style="font-weight:800;color:var(--green);font-size:1.1rem">' + (u.score||0) + '%</span></div>' +
@@ -1324,9 +1374,24 @@ function sendRequest(encoded) {
   var skill = (document.getElementById('requestSkill')||{}).value || u.primaryTeach || 'General guidance';
   var type  = (document.getElementById('requestType')||{}).value || 'credit';
   var note  = (document.getElementById('requestNote')||{}).value || '';
+  var creditFn = typeof window.getSafeCreditAmount === 'function'
+    ? window.getSafeCreditAmount
+    : function(entryOrValue) {
+        var raw = typeof entryOrValue === 'object' && entryOrValue !== null
+          ? Number(entryOrValue.credits || 0)
+          : Number(entryOrValue || 0);
+        if (raw > 0 && raw <= 100) return Math.round(raw);
+        var level = typeof entryOrValue === 'object' && entryOrValue !== null
+          ? String(entryOrValue.level || '').toLowerCase()
+          : '';
+        if (level === 'expert') return 44;
+        if (level === 'beginner') return 20;
+        return 30;
+      };
+  var safeCreditsFrom = type === 'demo' ? 0 : creditFn(state.userMap && u.uid ? (state.userMap[u.uid] || u) : u);
   closeModal('matchModal');
   if (window.ssCreateLessonRequest && u.uid && !u.uid.startsWith('mock-') && !['aarav','priya','dev','ravi','arjun','kavya','ishaan','tanvi','neha'].includes(u.uid)) {
-    window.ssCreateLessonRequest(u, { skillRequested:skill, sessionType:type, studentMessage:note, creditsOffered:u.creditsFrom||0 })
+    window.ssCreateLessonRequest(u, { skillRequested:skill, sessionType:type, studentMessage:note, creditsOffered:safeCreditsFrom })
       .then(function(){ showToast('🤝','Request Sent!','Lesson request sent to ' + u.name + '.'); })
       .catch(function(err){ showToast('⚠️','Request Failed', err&&err.message?err.message:'Could not send right now.'); });
   } else {
@@ -1371,6 +1436,10 @@ function renderExploreCards() {
 // ═══════════════════════════════════════════════════════════════
 // ROADMAP
 // ═══════════════════════════════════════════════════════════════
+window.filterExplore = filterExplore;
+window.openMatchModal = openMatchModal;
+window.sendRequest = sendRequest;
+
 function renderRoadmap(key) {
   var roadmaps = window.ROADMAPS || {};
   var data = roadmaps[key]; if (!data) return;
@@ -1675,6 +1744,7 @@ function renderCalStrip(id) {
   }
 }
 function renderSessions(listId) {
+  if (window.renderSessions && window.renderSessions !== renderSessions) return window.renderSessions(listId);
   var list = document.getElementById(listId||'sessionsList'); if (!list) return;
   var src = window.SESSIONS && window.SESSIONS.length ? window.SESSIONS : APP.sessions;
   if (!src.length) {
@@ -1689,28 +1759,38 @@ function renderSessions(listId) {
     var isUpcoming = s.type === 'upcoming';
     var isPast = s.startDate && now > new Date(s.startDate);
     var canComplete = isUpcoming && isPast;
-    var isNoShowTime = isPast && (now - new Date(s.startDate)) > 15 * 60 * 1000; // 15 min past
-
+    var isNoShowTime = isPast && (now - new Date(s.startDate)) > 15 * 60 * 1000;
     var buttons = '';
+
     if (s.type === 'completed') {
       buttons = '<button class="s-btn done">✅ Done</button>';
     } else if (s.type === 'disputed' || s.type === 'no-show') {
       buttons = '<button class="s-btn" style="background:rgba(248,113,113,0.1);color:var(--red);border:1px solid rgba(248,113,113,0.28)">⚠️ ' + (s.type === 'disputed' ? 'Disputed' : 'No-Show') + '</button>';
+    } else if (s.type === 'cancelled') {
+      buttons = '<button class="s-btn" style="background:rgba(255,255,255,0.08);color:var(--muted);border:1px solid rgba(255,255,255,0.12)">Cancelled</button>';
     } else if (canComplete) {
       buttons = '<button class="s-btn" style="background:rgba(52,211,153,0.12);color:var(--green);border:1px solid rgba(52,211,153,0.3)" onclick="openCompleteModal(\'' + s.id + '\')">✅ Complete</button>';
       buttons += '<button class="s-btn" style="background:rgba(248,113,113,0.1);color:var(--red);border:1px solid rgba(248,113,113,0.28);margin-left:4px" onclick="openNoShowModal(\'' + s.id + '\')">' + (isNoShowTime ? '⚠️ No-Show' : '⚠️ Not Complete') + '</button>';
     } else {
-      buttons = '<button class="s-btn remind" onclick="showToast(\'⏰\',\'Reminder Set!\',\'You\\\'ll be notified 30 min before.\')">⏰</button>' +
-                '<button class="s-btn join" onclick="joinMeet(\'' + escapeHtml(s.meet||'https://meet.new') + '\')">📹 Join</button>';
+      buttons =
+        (s.calendarUrl ? '<button class="s-btn remind" onclick="window.open(\'' + escapeHtml(s.calendarUrl) + '\',\'_blank\')">📅 Invite</button>' : '') +
+        (s.meet ? '<button class="s-btn remind" onclick="copyMeetLink(\'' + escapeHtml(s.meet) + '\')">🔗 Copy</button>' : '') +
+        (s.meet
+          ? '<button class="s-btn join" onclick="joinMeet(\'' + escapeHtml(s.meet) + '\')">📹 Join</button>'
+          : '<button class="s-btn join" onclick="openScheduleModal()">📅 Schedule</button>');
     }
 
     return '<div class="session-item '+s.type+'">' +
       '<div style="text-align:center;min-width:52px"><div class="stime">'+s.time+'</div><div class="sampm">'+s.ampm+'</div></div>' +
       '<div style="flex:1"><div class="session-title">'+escapeHtml(s.title||'Session')+(s._new?'<span class="session-new-badge">NEW</span>':'')+'</div><div class="session-meta">'+escapeHtml(s.meta||'')+'</div></div>' +
-      '<div style="display:flex;gap:6px">' + buttons + '</div></div>';
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">' + buttons + '</div></div>';
   }).join('');
 }
-function renderScheduleTab() { renderCalStrip('calStripFull'); renderSessions('sessionsListFull'); }
+function renderScheduleTab() {
+  if (window.renderScheduleTab && window.renderScheduleTab !== renderScheduleTab) return window.renderScheduleTab();
+  renderCalStrip('calStripFull');
+  renderSessions('sessionsListFull');
+}
 window.renderSessions = renderSessions;
 window.renderScheduleTab = renderScheduleTab;
 
@@ -1719,6 +1799,7 @@ window.renderScheduleTab = renderScheduleTab;
 // ═══════════════════════════════════════════════════════════════
 var currentRating = 5;
 function openCompleteModal(sessionId) {
+  if (window.openCompleteModal && window.openCompleteModal !== openCompleteModal) return window.openCompleteModal(sessionId);
   document.getElementById('completeSessionId').value = sessionId;
   currentRating = 5;
   updateRatingDisplay();
@@ -1731,12 +1812,6 @@ function openCompleteModal(sessionId) {
 function setRating(n) {
   currentRating = n;
   updateRatingDisplay();
-  // Show report issue section if rating is low
-  document.getElementById('reportIssueSection').style.display = n <= 2 ? 'block' : 'none';
-  if (n > 2) {
-    document.getElementById('reportIssueCheck').checked = false;
-    document.getElementById('issueReasonSection').style.display = 'none';
-  }
 }
 function updateRatingDisplay() {
   var stars = document.querySelectorAll('#ratingStars span');
@@ -1748,10 +1823,18 @@ function updateRatingDisplay() {
   document.getElementById('ratingText').textContent = currentRating + ' Star' + (currentRating > 1 ? 's' : '') + ' — ' + labels[currentRating];
 }
 function toggleReportIssue() {
+  if (window.syncCompleteModalIssueMode) {
+    window.syncCompleteModalIssueMode();
+    return;
+  }
   var checked = document.getElementById('reportIssueCheck').checked;
-  document.getElementById('issueReasonSection').style.display = checked ? 'block' : 'none';
+  var issueReasonSection = document.getElementById('issueReasonSection');
+  var ratingField = document.getElementById('completeRatingField');
+  if (issueReasonSection) issueReasonSection.style.display = checked ? 'block' : 'none';
+  if (ratingField) ratingField.style.display = checked ? 'none' : '';
 }
 async function submitCompletion() {
+  if (window.submitCompletion && window.submitCompletion !== submitCompletion) return window.submitCompletion();
   var sessionId = document.getElementById('completeSessionId').value;
   var feedback = document.getElementById('sessionFeedback').value.trim();
   var reportIssue = document.getElementById('reportIssueCheck').checked;
@@ -1774,10 +1857,12 @@ async function submitCompletion() {
   }
 }
 function openNoShowModal(sessionId) {
+  if (window.openNoShowModal && window.openNoShowModal !== openNoShowModal) return window.openNoShowModal(sessionId);
   document.getElementById('noShowSessionId').value = sessionId;
   document.getElementById('noShowModal').classList.add('show');
 }
 async function reportNoShowAction(whoNoShowed) {
+  if (window.reportNoShowAction && window.reportNoShowAction !== reportNoShowAction) return window.reportNoShowAction(whoNoShowed);
   var sessionId = document.getElementById('noShowSessionId').value;
   if (!sessionId) { showToast('⚠️','Error','No session selected'); return; }
 
@@ -1792,13 +1877,12 @@ async function reportNoShowAction(whoNoShowed) {
 }
 
 function openScheduleModal() {
+  if (window.openScheduleModal && window.openScheduleModal !== openScheduleModal) return window.openScheduleModal();
   renderMiniCal();
   updateSelDateDisplay();
   renderPartnerOptions(state.acceptedPartners || []);
-  var meetInput = document.getElementById('sessionMeetLink'); if (meetInput) meetInput.value = '';
   document.getElementById('scheduleModal').classList.add('show');
 }
-function openGoogleMeetSetup() { window.open('https://meet.google.com/new','_blank'); }
 function updateSelDateDisplay() {
   var MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
   var d=document.getElementById('selectedDateDisplay'), t=document.getElementById('selectedDateText');
@@ -1823,80 +1907,9 @@ function renderMiniCal() {
 function prevMonth(){calMonth--;if(calMonth<0){calMonth=11;calYear--;}renderMiniCal();updateSelDateDisplay();}
 function nextMonth(){calMonth++;if(calMonth>11){calMonth=0;calYear++;}renderMiniCal();updateSelDateDisplay();}
 function scheduleSession() {
-  var time=document.getElementById('sessionTime').value;
-  var topic=document.getElementById('sessionTopic').value.trim();
-  var meetLink=((document.getElementById('sessionMeetLink')||{}).value||'').trim();
-  var partnerEl=document.getElementById('sessionPartner');
-  var requestId=partnerEl?partnerEl.value:'';
-  var acceptedPartner=window.getAcceptedPartnerByRequestId ? window.getAcceptedPartnerByRequestId(requestId) : null;
-  var durationMin=parseInt((document.getElementById('sessionDuration')||{}).value||60);
-  if (!time) {showToast('⚠️','Time Required','Pick a start time.');return;}
-  if (!topic) {showToast('⚠️','Topic Required','Enter a topic.');return;}
-  if (!meetLink) {showToast('⚠️','Meet Link Required','Paste a Google Meet link before scheduling.');return;}
-  if (!isValidGoogleMeetUrl(meetLink)) {showToast('⚠️','Invalid Meet Link','Paste a valid Google Meet URL like https://meet.google.com/abc-defg-hij.');return;}
-  if (!acceptedPartner) {showToast('⚠️','Partner Required','Choose an accepted partner before scheduling.');return;}
-  var parts=time.split(':'),h=parseInt(parts[0]),m=parseInt(parts[1]);
-  var ampm=h>=12?'PM':'AM';
-  var MONS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  var dateStr=MONS[calMonth]+' '+selectedDay+', '+calYear;
-  var partnerName=acceptedPartner.partnerName || (partnerEl&&partnerEl.selectedOptions[0]?partnerEl.selectedOptions[0].text:'Partner').split('—')[0].trim();
-  var meetUrl=meetLink;
-
-  // Try Firebase first, fall back to local
-  if (window.ssScheduleSession && acceptedPartner.partnerUid && !['aarav','priya','dev'].includes(acceptedPartner.partnerUid)) {
-    var startDate = new Date(calYear, calMonth, selectedDay, h, m);
-    window.ssScheduleSession({ requestId:requestId, topic:topic, title:'Session with '+partnerName, partnerUid:acceptedPartner.partnerUid, partnerName:partnerName, startDate:startDate, durationMinutes:durationMin, meet:meetUrl })
-      .then(function(){ closeModal('scheduleModal'); document.getElementById('sessionTopic').value=''; document.getElementById('sessionMeetLink').value=''; showToast('🔗','Session Scheduled!','Saved with your Google Meet link.'); })
-      .catch(function(err){ showToast('⚠️','Save Failed',err&&err.message?err.message:'Could not save session.'); });
-  } else {
-    APP.sessions.unshift({id:'s'+Date.now(),time:time,ampm:ampm,title:'Session with '+partnerName,meta:dateStr+' · '+topic,type:'upcoming',meet:meetUrl,_new:true});
-    saveState(); renderSessions('sessionsList'); renderSessions('sessionsListFull');
-    closeModal('scheduleModal'); document.getElementById('sessionTopic').value=''; document.getElementById('sessionMeetLink').value='';
-    showToast('🔗','Session Scheduled!','Saved with your Google Meet link for '+partnerName+'.');
-  }
+  if (window.scheduleSession && window.scheduleSession !== scheduleSession) return window.scheduleSession();
 }
 function joinMeet(url) { if (!url) { openCurrentConversationMeeting(); return; } window.open(url,'_blank'); }
-
-window.renderSessions = function(listId) {
-  var list = document.getElementById(listId||'sessionsList'); if (!list) return;
-  var src = window.SESSIONS && window.SESSIONS.length ? window.SESSIONS : APP.sessions;
-  if (!src.length) {
-    var nextStep = state.acceptedPartners && state.acceptedPartners.length
-      ? 'No sessions booked with your accepted partners yet. '
-      : 'No sessions yet. ';
-    list.innerHTML='<div style="text-align:center;padding:32px;color:var(--muted);font-size:.88rem">' + nextStep + '<button onclick="openScheduleModal()" style="background:none;border:none;color:var(--purple2);cursor:pointer;font-weight:600;text-decoration:underline">Schedule one â†’</button></div>';
-    return;
-  }
-  var now = new Date();
-  list.innerHTML=src.map(function(s){
-    var isUpcoming = s.type === 'upcoming';
-    var isPast = s.startDate && now > new Date(s.startDate);
-    var canComplete = isUpcoming && isPast;
-    var isNoShowTime = isPast && (now - new Date(s.startDate)) > 15 * 60 * 1000;
-    var buttons = '';
-    if (s.type === 'completed') {
-      buttons = '<button class="s-btn done">âœ… Done</button>';
-    } else if (s.type === 'disputed' || s.type === 'no-show') {
-      buttons = '<button class="s-btn" style="background:rgba(248,113,113,0.1);color:var(--red);border:1px solid rgba(248,113,113,0.28)">âš ï¸ ' + (s.type === 'disputed' ? 'Disputed' : 'No-Show') + '</button>';
-    } else if (s.type === 'cancelled') {
-      buttons = '<button class="s-btn" style="background:rgba(255,255,255,0.08);color:var(--muted);border:1px solid rgba(255,255,255,0.12)">Cancelled</button>';
-    } else if (canComplete) {
-      buttons = '<button class="s-btn" style="background:rgba(52,211,153,0.12);color:var(--green);border:1px solid rgba(52,211,153,0.3)" onclick="openCompleteModal(\'' + s.id + '\')">âœ… Complete</button>';
-      buttons += '<button class="s-btn" style="background:rgba(248,113,113,0.1);color:var(--red);border:1px solid rgba(248,113,113,0.28);margin-left:4px" onclick="openNoShowModal(\'' + s.id + '\')">' + (isNoShowTime ? 'âš ï¸ No-Show' : 'âš ï¸ Not Complete') + '</button>';
-    } else {
-      buttons =
-        (s.calendarUrl ? '<button class="s-btn remind" onclick="window.open(\'' + escapeHtml(s.calendarUrl) + '\',\'_blank\')">ðŸ“… Invite</button>' : '') +
-        (s.meet ? '<button class="s-btn remind" onclick="copyMeetLink(\'' + escapeHtml(s.meet) + '\')">ðŸ”— Copy</button>' : '') +
-        (s.meet
-          ? '<button class="s-btn join" onclick="joinMeet(\'' + escapeHtml(s.meet) + '\')">ðŸ“¹ Join</button>'
-          : '<button class="s-btn join" onclick="openScheduleModal()">ðŸ“… Schedule</button>');
-    }
-    return '<div class="session-item '+s.type+'">' +
-      '<div style="text-align:center;min-width:52px"><div class="stime">'+s.time+'</div><div class="sampm">'+s.ampm+'</div></div>' +
-      '<div style="flex:1"><div class="session-title">'+escapeHtml(s.title||'Session')+(s._new?'<span class="session-new-badge">NEW</span>':'')+'</div><div class="session-meta">'+escapeHtml(s.meta||'')+'</div></div>' +
-      '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">' + buttons + '</div></div>';
-  }).join('');
-};
 
 window.openScheduleModal = function() {
   renderMiniCal();
@@ -1919,16 +1932,16 @@ window.scheduleSession = async function() {
   var requestId=partnerEl?partnerEl.value:'';
   var acceptedPartner=window.getAcceptedPartnerByRequestId ? window.getAcceptedPartnerByRequestId(requestId) : null;
   var durationMin=parseInt((document.getElementById('sessionDuration')||{}).value||60, 10);
-  if (!time) {showToast('âš ï¸','Time Required','Pick a start time.');return;}
-  if (!topic) {showToast('âš ï¸','Topic Required','Enter a topic.');return;}
-  if (!acceptedPartner) {showToast('âš ï¸','Partner Required','Choose an accepted partner before scheduling.');return;}
+  if (!time) {showToast('⚠️','Time Required','Pick a start time.');return;}
+  if (!topic) {showToast('⚠️','Topic Required','Enter a topic.');return;}
+  if (!acceptedPartner) {showToast('⚠️','Partner Required','Choose an accepted partner before scheduling.');return;}
   if (!state.googleCalendarStatus || !state.googleCalendarStatus.connected) {
-    showToast('ðŸ“…','Connect Google Calendar','Connect Google Calendar first so SkillSwap can create one shared Meet invite for both users.');
+    showToast('📅','Connect Google Calendar','Connect Google Calendar first so SkillSwap can create one shared Meet invite for both users.');
     return;
   }
   var parts=time.split(':'),h=parseInt(parts[0],10),m=parseInt(parts[1],10);
   var startDate = new Date(calYear, calMonth, selectedDay, h, m);
-  if (Number.isNaN(startDate.getTime())) {showToast('âš ï¸','Invalid Time','Choose a valid session date and time.');return;}
+  if (Number.isNaN(startDate.getTime())) {showToast('⚠️','Invalid Time','Choose a valid session date and time.');return;}
   try {
     if (window.setScheduleModalStatus) window.setScheduleModalStatus('Sending the scheduling request to SkillSwap...', 'default');
     await window.ssScheduleSession({
@@ -1942,11 +1955,11 @@ window.scheduleSession = async function() {
     });
     closeModal('scheduleModal');
     document.getElementById('sessionTopic').value='';
-    showToast('ðŸ“…','Meeting Created','Your Google Calendar invite and shared Meet link are ready for both users.');
+    showToast('📅','Meeting Created','Your Google Calendar invite and shared Meet link are ready for both users.');
   } catch (err) {
     console.error('[schedule-session]', { draft: modalState, error: err });
     if (window.setScheduleModalStatus) window.setScheduleModalStatus(err&&err.message?err.message:'Could not create the session.', 'error');
-    showToast('âš ï¸','Scheduling Failed',err&&err.message?err.message:'Could not create the session.');
+    showToast('⚠️','Scheduling Failed',err&&err.message?err.message:'Could not create the session.');
   }
 };
 
@@ -2524,7 +2537,7 @@ const fbApp = initializeApp(firebaseConfig);
 const auth  = getAuth(fbApp);
 const db    = getFirestore(fbApp);
 
-const state = { currentUser:null, profile:null, users:[], userMap:{}, sessions:[], notifications:[], incomingRequests:[], transactions:[], conversations:[], savedMaterials:[], acceptedPartners:[], activeConversation:null, googleCalendarStatus:null };
+const state = { currentUser:null, profile:null, users:[], userMap:{}, sessions:[], notifications:[], incomingRequests:[], transactions:[], conversations:[], savedMaterials:[], acceptedPartners:[], activeConversation:null, googleCalendarStatus:null, seenLiveSessionIds:new Set(), liveSessionsBootstrapped:false };
 window.state = state;
 let unsubscribers = []; // For real-time listeners cleanup
 let activeMessagesUnsub = null;
@@ -2584,7 +2597,69 @@ function pickRequestedSkill(me, other) {
 function getSkillCredits(user, skill) {
   const entries = getTeachEntries(user);
   const found = entries.find(s => lower(s.name)===lower(skill)) || entries[0];
-  return found && found.credits ? found.credits : 20;
+  return getSafeCreditAmount(found);
+}
+
+function getSafeCreditAmount(entryOrValue) {
+  var raw = typeof entryOrValue === 'object' && entryOrValue !== null
+    ? Number(entryOrValue.credits || 0)
+    : Number(entryOrValue || 0);
+  if (raw > 0 && raw <= 100) return Math.round(raw);
+  var level = typeof entryOrValue === 'object' && entryOrValue !== null
+    ? String(entryOrValue.level || '').toLowerCase()
+    : '';
+  if (level === 'expert') return 44;
+  if (level === 'beginner') return 20;
+  return 30;
+}
+window.getSafeCreditAmount = getSafeCreditAmount;
+
+function getNormalizedAcceptedPartnerCredits(request, myUid, userMap) {
+  if (!request || request.sessionType === 'demo') return 0;
+  var teacherProfile = null;
+  if (request.teacherUid === myUid) teacherProfile = state.profile || null;
+  else if (userMap && request.teacherUid) teacherProfile = userMap[request.teacherUid] || null;
+  var derived = teacherProfile ? Number(getSkillCredits(teacherProfile, request.skillRequested)) || 30 : 30;
+  var raw = Number(request.creditsOffered || 0);
+  return raw > 0 && raw <= 100 ? Math.round(raw) : derived;
+}
+
+function getAcceptedPartnerScheduleCredits(acceptedPartner) {
+  if (!acceptedPartner || acceptedPartner.sessionType === 'demo') return 0;
+  var teacherProfile = null;
+  if (acceptedPartner.teacherUid === (state.currentUser && state.currentUser.uid)) teacherProfile = state.profile || null;
+  else if (acceptedPartner.teacherUid) teacherProfile = state.userMap[acceptedPartner.teacherUid] || null;
+  var derived = teacherProfile ? Number(getSkillCredits(teacherProfile, acceptedPartner.skillRequested)) || 30 : 30;
+  var explicit = Number(acceptedPartner.creditsOffered || 0);
+  return explicit > 0 && explicit <= 100 ? Math.round(explicit) : derived;
+}
+
+function getAcceptedPartnerPriority(request) {
+  var canonicalRequestId = String((request && (request.requestId || request.id)) || '');
+  var isConnection = request && request._source === 'lessonConnections';
+  if (isConnection && String(request.id || '') === canonicalRequestId) return 3;
+  if (isConnection) return 2;
+  return 1;
+}
+
+function collectAcceptedPartnersFromSnapshots(snapshotEntries, uid, userMap) {
+  var acceptedMap = new Map();
+  (snapshotEntries || []).forEach(function(entry) {
+    var snap = entry && entry.snap ? entry.snap : entry;
+    var source = entry && entry.source ? entry.source : '';
+    if (!snap) return;
+    snap.forEach(function(item) {
+      var d = { ...item.data(), id:item.id, _source:source };
+      if (d.status !== 'accepted') return;
+      var accepted = buildAcceptedPartner(d, uid, userMap);
+      if (!accepted.partnerUid) return;
+      var prev = acceptedMap.get(accepted.requestId);
+      if (!prev || (accepted._priority || 0) >= (prev._priority || 0)) acceptedMap.set(accepted.requestId, accepted);
+    });
+  });
+  return Array.from(acceptedMap.values()).sort(function(a, b) {
+    return String(a.partnerName).localeCompare(String(b.partnerName));
+  });
 }
 
 function normalizeSkillKey(skill) {
@@ -2605,19 +2680,6 @@ function dedupePendingRequests(items) {
   return Array.from(latest.values()).sort(function(a, b) {
     return (b.createdAtMs || 0) - (a.createdAtMs || 0);
   });
-}
-
-function isValidGoogleMeetUrl(url) {
-  if (!url) return false;
-  try {
-    var parsed = new URL(String(url).trim());
-    if (parsed.protocol !== 'https:' || parsed.hostname !== 'meet.google.com') return false;
-    if (parsed.pathname === '/new' || parsed.pathname === '/') return false;
-    if (parsed.pathname.indexOf('/lookup/') === 0) return true;
-    return /^[a-z]{3}-[a-z]{4}-[a-z]{3}$/i.test(parsed.pathname.replace(/^\/+/, ''));
-  } catch (e) {
-    return false;
-  }
 }
 
 function findSessionForPartnerUid(partnerUid) {
@@ -2685,11 +2747,36 @@ function getScheduleModalState() {
   var time = timeEl ? timeEl.value : '';
   var durationMinutes = parseInt((durationEl || {}).value || 60, 10);
   var googleConnected = !!(state.googleCalendarStatus && state.googleCalendarStatus.connected);
+  var availableCredits = Number((state.profile && state.profile.creditBalance) || 0);
+  var currentUid = state.currentUser ? state.currentUser.uid : '';
+  var creditsNeeded = acceptedPartner ? getAcceptedPartnerScheduleCredits(acceptedPartner) : 0;
+  var isLearner = !!(acceptedPartner && acceptedPartner.studentUid === currentUid);
+  var learnerProfile = acceptedPartner
+    ? (acceptedPartner.studentUid === currentUid
+      ? state.profile
+      : (state.userMap && acceptedPartner.studentUid ? state.userMap[acceptedPartner.studentUid] : null))
+    : null;
+  var learnerAvailableCredits = learnerProfile == null
+    ? null
+    : Number(learnerProfile.creditBalance || 0);
+  var lowCreditForPaid = !!(
+    acceptedPartner &&
+    acceptedPartner.sessionType !== 'demo' &&
+    learnerAvailableCredits != null &&
+    creditsNeeded > learnerAvailableCredits
+  );
+  var shortage = lowCreditForPaid ? (creditsNeeded - learnerAvailableCredits) : 0;
+  var learnerLabel = acceptedPartner
+    ? (acceptedPartner.studentName || (acceptedPartner.studentUid === currentUid ? 'You' : 'The student'))
+    : 'The student';
   var blocker = '';
 
   if (!acceptedPartner) blocker = 'Choose an accepted partner before scheduling.';
   else if (!topic) blocker = 'Add a session topic to continue.';
   else if (!time) blocker = 'Pick a session start time to continue.';
+  else if (lowCreditForPaid) blocker = isLearner
+    ? 'You need ' + shortage + ' more credits for this paid session. Earn more credits or ask for a demo session.'
+    : learnerLabel + ' needs ' + shortage + ' more credits to book this paid session. They can earn more credits or switch to a demo session.';
   else if (!googleConnected) blocker = 'Connect Google Calendar first so SkillSwap can create one shared Meet invite.';
 
   return {
@@ -2699,6 +2786,12 @@ function getScheduleModalState() {
     time: time,
     durationMinutes: durationMinutes,
     googleConnected: googleConnected,
+    availableCredits: availableCredits,
+    learnerAvailableCredits: learnerAvailableCredits,
+    creditsNeeded: creditsNeeded,
+    isLearner: isLearner,
+    lowCreditForPaid: lowCreditForPaid,
+    shortage: shortage,
     blocker: blocker,
     canSubmit: !blocker
   };
@@ -2714,6 +2807,14 @@ function updateScheduleSubmitState() {
   submitBtn.title = modalState.canSubmit ? 'Create a shared Google Meet invite for this session.' : modalState.blocker;
   if (!modalState.canSubmit) {
     setScheduleModalStatus(modalState.blocker, modalState.googleConnected ? 'default' : 'error');
+    return;
+  }
+  if (modalState.acceptedPartner && modalState.acceptedPartner.sessionType !== 'demo' && modalState.isLearner) {
+    setScheduleModalStatus('Ready to reserve ' + modalState.creditsNeeded + ' credits in escrow and create one shared Google Meet invite.', 'success');
+    return;
+  }
+  if (modalState.acceptedPartner && modalState.acceptedPartner.sessionType !== 'demo') {
+    setScheduleModalStatus('Ready to create one shared Google Meet invite and reserve credits from the learner at booking time.', 'success');
     return;
   }
   setScheduleModalStatus('Ready to create one shared Google Meet invite for both users.', 'success');
@@ -2840,12 +2941,6 @@ function setupScheduleModalUi() {
   var modalSub = document.querySelector('#scheduleModal .modal-sub');
   if (modalSub) modalSub.textContent = 'Pick a date and time. SkillSwap will create one shared Google Meet invite for both of you without opening the meeting right away.';
 
-  var meetField = document.getElementById('sessionMeetLink');
-  if (meetField && meetField.parentElement) meetField.parentElement.style.display = 'none';
-
-  var helperBtn = document.querySelector('#scheduleModal .modal-btn.secondary[onclick="openGoogleMeetSetup()"]');
-  if (helperBtn) helperBtn.style.display = 'none';
-
   var primaryBtn = document.getElementById('scheduleSubmitBtn') || document.querySelector('#scheduleModal .modal-btn.primary');
   if (primaryBtn) {
     primaryBtn.id = 'scheduleSubmitBtn';
@@ -2907,27 +3002,31 @@ window.updateScheduleSubmitState = updateScheduleSubmitState;
 
 function buildAcceptedPartner(request, myUid, userMap) {
   const isTeacher = request.teacherUid === myUid;
+  const canonicalRequestId = request.requestId || request.id;
   const partnerUid = isTeacher ? request.studentUid : request.teacherUid;
   const partnerProfile = partnerUid ? userMap[partnerUid] : null;
+  const normalizedCreditsOffered = getNormalizedAcceptedPartnerCredits(request, myUid, userMap);
   const partnerName = isTeacher
     ? (request.studentName || (partnerProfile&&(partnerProfile.fullName||partnerProfile.firstName)) || 'Student')
     : (request.teacherName || (partnerProfile&&(partnerProfile.fullName||partnerProfile.firstName)) || 'Teacher');
   const partnerTeachSkills = partnerProfile ? getTeachSkills(partnerProfile) : [];
   return {
-    requestId: request.id,
+    requestId: canonicalRequestId,
+    connectionId: request._source === 'lessonConnections' ? request.id : null,
     partnerUid,
     partnerName,
     role: isTeacher ? 'student' : 'teacher',
     skillRequested: request.skillRequested || 'General guidance',
     sessionType: request.sessionType || 'credit',
-    creditsOffered: request.creditsOffered || 0,
+    creditsOffered: normalizedCreditsOffered,
     teacherUid: request.teacherUid || null,
     studentUid: request.studentUid || null,
     teacherName: request.teacherName || (request.teacherUid===myUid ? (state.profile && (state.profile.fullName || state.profile.firstName)) : partnerName) || 'Teacher',
     studentName: request.studentName || (request.studentUid===myUid ? (state.profile && (state.profile.fullName || state.profile.firstName)) : partnerName) || 'Student',
     partnerEmoji: partnerProfile && partnerProfile.verification && partnerProfile.verification.status==='verified' ? '🌟' : '👤',
     teaches: partnerTeachSkills.join(' + ') || request.skillRequested || 'a skill',
-    primaryTeach: partnerTeachSkills[0] || request.skillRequested || 'a skill'
+    primaryTeach: partnerTeachSkills[0] || request.skillRequested || 'a skill',
+    _priority: getAcceptedPartnerPriority(request)
   };
 }
 
@@ -2939,6 +3038,8 @@ window.getAcceptedPartnerByRequestId = getAcceptedPartnerByRequestId;
 function buildUserTags(user) {
   const tags = [];
   const v = user.verification||{}, h = user.humanVerification||{};
+  const badgeTier = user.teacherReputation && user.teacherReputation.badgeTier ? user.teacherReputation.badgeTier : 'none';
+  if (badgeTier !== 'none') tags.push(getBadgeLabel(badgeTier) + ' Badge');
   if (h.status==='verified') tags.push('Human Verified');
   if (v.status==='verified') tags.push('Verified');
   if (v.status==='partial')  tags.push('Partially Verified');
@@ -2965,6 +3066,7 @@ function buildMatchUser(user, me) {
     averageRating: user.stats&&user.stats.averageRating ? user.stats.averageRating : 0,
     totalRatings:  user.stats&&user.stats.totalRatings  ? user.stats.totalRatings  : 0,
     demoOptIn: !!(user.teachingProfile&&user.teachingProfile.demoOptIn),
+    badgeTier: user.teacherReputation&&user.teacherReputation.badgeTier ? user.teacherReputation.badgeTier : 'none',
     verificationStatus: v.status||'unverified',
     humanVerificationStatus: user.humanVerification&&user.humanVerification.status ? user.humanVerification.status : 'not-requested',
     score: computeMatchScore(me, user),
@@ -3000,9 +3102,18 @@ async function loadAllProfiles(myUid) {
 }
 function formatSessionDoc(session, userMap, myUid) {
   const startDate = toJsDate(session.startAt);
+  const durationMinutes = session.durationMinutes || 60;
+  const endDate = startDate ? new Date(startDate.getTime() + durationMinutes * 60000) : null;
+  const postSessionUnlockAt = getPostSessionUnlockDate(startDate);
   const otherUid  = session.teacherUid === myUid ? session.studentUid : session.studentUid === myUid ? session.teacherUid : (session.participants||[]).filter(u=>u!==myUid)[0];
   const otherUser = otherUid ? userMap[otherUid] : null;
   const partnerName = session.partnerName || (otherUser&&(otherUser.fullName||otherUser.firstName)) || 'Partner';
+  const myRole = session.teacherUid === myUid ? 'teacher' : 'student';
+  const rawStatus = session.status || 'upcoming';
+  const settlementStatus = session.settlementStatus || (rawStatus === 'completed' ? 'settled' : 'scheduled');
+  const creditStatus = session.creditStatus || ((session.sessionType === 'demo' || !(session.creditsAgreed || 0)) ? 'not_applicable' : 'held');
+  const myRatingSubmitted = !!(session.ratings && session.ratings[myUid]);
+  const isPaid = !(session.sessionType === 'demo') && Number(session.creditsAgreed || 0) > 0;
   return {
     id: session.id,
     time: startDate ? startDate.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}).replace(/\s?(AM|PM)$/i,'') : '--:--',
@@ -3010,27 +3121,48 @@ function formatSessionDoc(session, userMap, myUid) {
     title: session.title || ('Session with '+partnerName),
     topic: session.topic||'General practice',
     meta: startDate ? startDate.toLocaleDateString([],{month:'short',day:'numeric'})+' · '+(session.durationMinutes||60)+' min · '+(session.topic||'General') : (session.topic||'Session'),
-    type: session.status==='completed'?'completed':session.status==='cancelled'?'cancelled':session.status==='disputed'?'disputed':session.status==='no-show'?'no-show':'upcoming',
+    type: rawStatus==='completed'?'completed':rawStatus==='cancelled'?'cancelled':rawStatus==='disputed'?'disputed':rawStatus==='no-show'?'no-show':'upcoming',
     meet: session.meetUrl||null, _new:false,
-    durationMinutes: session.durationMinutes||60,
+    durationMinutes: durationMinutes,
     teacherUid: session.teacherUid||null, studentUid: session.studentUid||null,
-    partnerUid: otherUid||null, partnerName, startDate,
+    partnerUid: otherUid||null, partnerName, startDate, endDate, postSessionUnlockAt,
     requestId: session.requestId || null,
     creditsAgreed: session.creditsAgreed || 0,
     calendarUrl: session.calendarUrl || null,
     calendarEventId: session.calendarEventId || null,
-    scheduledByUid: session.scheduledByUid || session.createdBy || null
+    scheduledByUid: session.scheduledByUid || session.createdBy || null,
+    rawStatus: rawStatus,
+    settlementStatus: settlementStatus,
+    creditStatus: creditStatus,
+    teacherAction: session.teacherAction || 'pending',
+    studentAction: session.studentAction || 'pending',
+    teacherResponse: session.teacherResponse || null,
+    studentResponse: session.studentResponse || null,
+    responseDueAt: session.responseDueAt || session.learnerResponseDueAt || null,
+    heldCredits: Number(session.heldCredits || 0),
+    releasedCredits: Number(session.releasedCredits || 0),
+    refundedCredits: Number(session.refundedCredits || 0),
+    myRole: myRole,
+    myRatingSubmitted: myRatingSubmitted,
+    sessionType: session.sessionType || 'credit',
+    isPaid: isPaid,
+    creditReviewCaseId: session.creditReviewCaseId || null
   };
+}
+function sortSessionsList(items) {
+  return (items || []).slice().sort(function(a, b) {
+    const ta = a.startDate ? a.startDate.getTime() : 0;
+    const tb = b.startDate ? b.startDate.getTime() : 0;
+    if (!ta) return 1;
+    if (!tb) return -1;
+    return ta - tb;
+  });
 }
 async function loadSessions(uid, userMap) {
   const snap = await getDocs(query(collection(db,'sessions'),where('participants','array-contains',uid)));
   const sessions = [];
   snap.forEach(item => { const d={...item.data(),id:item.id}; sessions.push(formatSessionDoc(d,userMap,uid)); });
-  sessions.sort((a,b)=>{
-    const ta=a.startDate?a.startDate.getTime():0, tb=b.startDate?b.startDate.getTime():0;
-    if(!ta)return 1;if(!tb)return -1;return ta-tb;
-  });
-  return sessions;
+  return sortSessionsList(sessions);
 }
 async function loadNotifications(uid) {
   const snap = await getDocs(query(collection(db,'notifications'),where('uid','==',uid)));
@@ -3076,7 +3208,7 @@ async function loadIncomingRequests(uid, userMap) {
       studentEmoji: student&&student.verification&&student.verification.status==='verified'?'🌟':'🧑',
       studentMessage: d.studentMessage||'',
       skillRequested: d.skillRequested||'General guidance',
-      sessionType: d.sessionType||'credit', creditsOffered: d.creditsOffered||0,
+      sessionType: d.sessionType||'credit', creditsOffered: getNormalizedAcceptedPartnerCredits(d, uid, userMap),
       timeLabel: created ? created.toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : 'Just now',
       createdAtMs: created ? created.getTime() : 0
     });
@@ -3095,22 +3227,12 @@ async function loadAcceptedPartners(uid, userMap) {
   const studentSnap = results[1].status === 'fulfilled' ? results[1].value : null;
   const teacherConnectionSnap = results[2].status === 'fulfilled' ? results[2].value : null;
   const studentConnectionSnap = results[3].status === 'fulfilled' ? results[3].value : null;
-  const acceptedMap = new Map();
-
-  [teacherSnap, studentSnap, teacherConnectionSnap, studentConnectionSnap].forEach(function(snap) {
-    if (!snap) return;
-    snap.forEach(function(item) {
-      const d = { ...item.data(), id:item.id };
-      if (d.status !== 'accepted') return;
-      const accepted = buildAcceptedPartner(d, uid, userMap);
-      if (!accepted.partnerUid) return;
-      acceptedMap.set(accepted.requestId, accepted);
-    });
-  });
-
-  return Array.from(acceptedMap.values()).sort(function(a, b) {
-    return String(a.partnerName).localeCompare(String(b.partnerName));
-  });
+  return collectAcceptedPartnersFromSnapshots([
+    { snap: teacherSnap, source: 'lessonRequests' },
+    { snap: studentSnap, source: 'lessonRequests' },
+    { snap: teacherConnectionSnap, source: 'lessonConnections' },
+    { snap: studentConnectionSnap, source: 'lessonConnections' }
+  ], uid, userMap);
 }
 
 // ── CREDIT TRANSACTIONS ────────────────────────────────────────
@@ -3140,28 +3262,6 @@ async function loadTransactions(uid, limitCount = 20) {
     return [];
   }
 }
-
-async function createTransaction(type, amount, description, relatedSessionId = null, relatedUserId = null) {
-  if (!state.currentUser || !state.profile) throw new Error('Not authenticated');
-  const currentBalance = state.profile.creditBalance || 0;
-  const newBalance = type === 'earn' ? currentBalance + amount : currentBalance - amount;
-
-  // Create transaction record
-  await addDoc(collection(db,'transactions'), {
-    uid: state.currentUser.uid,
-    type, amount, description,
-    category: relatedSessionId ? 'session' : 'bonus',
-    relatedSessionId, relatedUserId,
-    createdAt: serverTimestamp(),
-    balanceAfter: newBalance
-  });
-
-  // Update user's credit balance
-  await updateDoc(doc(db,'users',state.currentUser.uid), {
-    creditBalance: increment(type === 'earn' ? amount : -amount)
-  });
-}
-window.createTransaction = createTransaction;
 
 // ── CONVERSATIONS & MESSAGES ───────────────────────────────────
 async function loadConversations(uid) {
@@ -3274,6 +3374,7 @@ window.subscribeToConversationMessages = subscribeToConversationMessages;
 async function createAcceptedConnection(req) {
   if (!state.currentUser || !state.profile) throw new Error('Not authenticated');
   const teacherName = req.teacherName || state.profile.fullName || state.profile.firstName || 'Teacher';
+  const safeCreditsOffered = getNormalizedAcceptedPartnerCredits(req, state.currentUser.uid, state.userMap);
   await setDoc(doc(db,'lessonConnections',req.id), {
     requestId: req.id,
     teacherUid: req.teacherUid,
@@ -3282,7 +3383,7 @@ async function createAcceptedConnection(req) {
     studentName: req.studentName || 'Student',
     skillRequested: req.skillRequested || 'General guidance',
     sessionType: req.sessionType || 'credit',
-    creditsOffered: req.creditsOffered || 0,
+    creditsOffered: safeCreditsOffered,
     status: 'accepted',
     participants: [req.teacherUid, req.studentUid],
     acceptedBy: state.currentUser.uid,
@@ -3386,128 +3487,537 @@ window.refreshSavedMaterialsLibrary = async function() {
   return state.savedMaterials;
 };
 
-// ── SESSION COMPLETION & RATING ────────────────────────────────
-async function completeSession(sessionId, rating, feedback, reportIssue = false, issueReason = '') {
-  if (!state.currentUser || !state.profile) throw new Error('Not authenticated');
-  const session = state.sessions.find(s => s.id === sessionId);
-  if (!session) throw new Error('Session not found');
+function getSessionById(sessionId) {
+  return (state.sessions || []).find(function(item) { return item.id === sessionId; }) || null;
+}
 
-  const isTeacher = session.teacherUid === state.currentUser.uid;
-  const baseCredits = session.creditsAgreed || Math.round((session.durationMinutes || 60) / 60 * 20);
+function normalizeSessionActionOutcome(action) {
+  if (!action || action === 'pending') return 'pending';
+  if (action === 'delivered' || action === 'completed' || action === 'auto_completed' || action === 'auto_released') return 'completed';
+  if (action === 'issue_reported') return 'issue';
+  if (action === 'teacher_no_show') return 'teacher_no_show';
+  if (action === 'student_no_show') return 'student_no_show';
+  if (action === 'reviewer_resolved') return 'resolved';
+  return action;
+}
 
-  // Update session status
-  const sessionUpdate = {
-    status: reportIssue ? 'disputed' : 'completed',
-    completedAt: serverTimestamp(),
-    completedBy: state.currentUser.uid,
-    [`ratings.${state.currentUser.uid}`]: { rating, feedback: feedback || '', ratedAt: serverTimestamp() },
-    creditsTransferred: !reportIssue
+function getSessionResponse(session, role) {
+  if (!session) return null;
+  var direct = role === 'teacher' ? session.teacherResponse : session.studentResponse;
+  if (direct && direct.outcome) return direct;
+  var action = role === 'teacher' ? session.teacherAction : session.studentAction;
+  var outcome = normalizeSessionActionOutcome(action);
+  if (!outcome || outcome === 'pending') return null;
+  return { outcome: outcome };
+}
+
+function hasSessionResponse(session, role) {
+  var response = getSessionResponse(session, role);
+  return !!(response && response.outcome && response.outcome !== 'pending');
+}
+
+function getSessionPartnerResponseNotice(session) {
+  if (!session) return null;
+  var partnerRole = session.myRole === 'teacher' ? 'student' : 'teacher';
+  var response = getSessionResponse(session, partnerRole);
+  if (!response || !response.outcome || response.outcome === 'pending') return null;
+  if (response.outcome === 'completed') {
+    return {
+      tone: 'info',
+      text: 'Your partner already marked this session completed. Submit your own outcome to finalize it.'
+    };
+  }
+  if (response.outcome === 'issue') {
+    return {
+      tone: 'warn',
+      text: 'Your partner already reported an issue. Submit your own outcome before the reviewer sees the case.'
+    };
+  }
+  if (response.outcome === 'teacher_no_show' || response.outcome === 'student_no_show') {
+    return {
+      tone: 'warn',
+      text: 'Your partner already reported a no-show outcome. Submit your own outcome now.'
+    };
+  }
+  return null;
+}
+
+function getIssueReasonOptions(session) {
+  if (!session || session.myRole === 'teacher') {
+    return [
+      { value: 'learner_unprepared', label: 'Learner was unprepared' },
+      { value: 'learner_pace_mismatch', label: 'Learner pace mismatch' },
+      { value: 'learner_behavior', label: 'Learner behavior issue' },
+      { value: 'topic_mismatch', label: 'Requested topic did not match the session' },
+      { value: 'technical_problem', label: 'Technical problem' },
+      { value: 'other', label: 'Other issue' }
+    ];
+  }
+  return [
+    { value: 'poor_teaching_quality', label: 'Poor teaching quality' },
+    { value: 'pace_mismatch', label: 'Pace mismatch' },
+    { value: 'misrepresented_skill', label: 'Skills were misrepresented' },
+    { value: 'technical_problem', label: 'Technical problem' },
+    { value: 'unprofessional_behavior', label: 'Unprofessional behavior' },
+    { value: 'other', label: 'Other issue' }
+  ];
+}
+
+function getSessionUiConfig(session) {
+  var isPaid = !!session.isPaid;
+  var isTeacher = session.myRole === 'teacher';
+  var partnerNotice = getSessionPartnerResponseNotice(session);
+  if (session.settlementStatus === 'settled' && session.rawStatus === 'completed' && !session.myRatingSubmitted) {
+    return {
+      title: 'Add Your Review',
+      sub: 'The session is already settled. This action only adds your review.',
+      summary: '',
+      banner: null,
+      primary: 'Submit Review',
+      ratingLabel: isTeacher ? 'Rate the learner' : 'Rate the teacher',
+      feedbackLabel: isTeacher ? 'Feedback for the learner (optional)' : 'Feedback for the teacher (optional)',
+      issueLabel: '',
+      showIssueSection: false
+    };
+  }
+  if (isTeacher) {
+    return {
+      title: 'Teacher Session Response',
+      sub: 'Submit your teacher-side outcome for this session.',
+      summary: isPaid
+        ? 'Credits stay frozen until both sides respond completed or a reviewer decides the outcome.'
+        : 'Demo sessions stay credit-free, but both sides still get one response chance.',
+      banner: partnerNotice,
+      primary: 'Submit Completed Response',
+      ratingLabel: 'Rate the learner',
+      feedbackLabel: 'Feedback for the learner (optional)',
+      issueLabel: 'Report an issue instead of completing this session',
+      showIssueSection: true
+    };
+  }
+  return {
+    title: isPaid ? 'Learner Session Response' : 'Learner Demo Response',
+    sub: isPaid
+      ? 'Submit your learner-side outcome for this session.'
+      : 'Submit your learner-side outcome for this demo session.',
+    summary: isPaid
+      ? ('Held credits: ' + (session.heldCredits || session.creditsAgreed || 0) + '. Credits release only after both sides confirm completion or a reviewer resolves the case.')
+      : 'Demo sessions do not move credits, but both sides still confirm the outcome.',
+    banner: partnerNotice,
+    primary: 'Submit Completed Response',
+    ratingLabel: 'Rate the teacher',
+    feedbackLabel: 'Feedback for the teacher (optional)',
+    issueLabel: 'Report an issue instead of completing this session',
+    showIssueSection: true
   };
-  if (reportIssue) sessionUpdate.disputeReason = issueReason;
-  if (rating <= 2) sessionUpdate.lowRatingFlag = true;
+}
 
-  await updateDoc(doc(db,'sessions',sessionId), sessionUpdate);
+function updateCompleteModalText(session) {
+  var config = getSessionUiConfig(session);
+  var titleEl = document.getElementById('completeModalTitle');
+  var subEl = document.getElementById('completeModalSub');
+  var bannerEl = document.getElementById('completePartnerResponseBanner');
+  var summaryEl = document.getElementById('completeSettlementSummary');
+  var ratingLabelEl = document.getElementById('completeRatingLabel');
+  var feedbackLabelEl = document.getElementById('completeFeedbackLabel');
+  var primaryBtn = document.querySelector('#completeModal .modal-btn.primary');
+  var issueLabelEl = document.getElementById('reportIssueLabel');
+  var issueSectionEl = document.getElementById('reportIssueSection');
+  var issueCheckEl = document.getElementById('reportIssueCheck');
+  var issueReasonEl = document.getElementById('issueReason');
+  var issueReasonSectionEl = document.getElementById('issueReasonSection');
+  var modalEl = document.getElementById('completeModal');
+  if (titleEl) titleEl.textContent = config.title;
+  if (subEl) subEl.textContent = config.sub;
+  if (bannerEl) {
+    bannerEl.textContent = config.banner ? config.banner.text : '';
+    bannerEl.style.display = config.banner ? 'block' : 'none';
+    bannerEl.style.borderColor = config.banner && config.banner.tone === 'warn' ? 'rgba(245,158,11,0.28)' : 'rgba(79,172,254,0.2)';
+    bannerEl.style.background = config.banner && config.banner.tone === 'warn' ? 'rgba(245,158,11,0.08)' : 'rgba(79,172,254,0.08)';
+  }
+  if (summaryEl) {
+    summaryEl.textContent = config.summary;
+    summaryEl.style.display = config.summary ? 'block' : 'none';
+  }
+  if (ratingLabelEl) ratingLabelEl.textContent = config.ratingLabel;
+  if (feedbackLabelEl) {
+    feedbackLabelEl.textContent = config.feedbackLabel;
+    feedbackLabelEl.dataset.defaultText = config.feedbackLabel;
+  }
+  if (issueLabelEl) issueLabelEl.textContent = config.issueLabel;
+  if (issueSectionEl) issueSectionEl.style.display = config.showIssueSection ? 'block' : 'none';
+  if (issueReasonEl) {
+    var options = getIssueReasonOptions(session);
+    issueReasonEl.innerHTML = '<option value="">Select reason...</option>' + options.map(function(option) {
+      return '<option value="' + escapeHtml(option.value) + '">' + escapeHtml(option.label) + '</option>';
+    }).join('');
+  }
+  if (!config.showIssueSection) {
+    if (issueCheckEl) issueCheckEl.checked = false;
+    if (issueReasonEl) issueReasonEl.value = '';
+    if (issueReasonSectionEl) issueReasonSectionEl.style.display = 'none';
+  }
+  if (primaryBtn) {
+    primaryBtn.textContent = config.primary;
+    primaryBtn.dataset.defaultText = config.primary;
+  }
+  if (modalEl) modalEl.dataset.reviewOnly = canAddLateReview(session) ? '1' : '0';
+  syncCompleteModalIssueMode();
+}
 
-  // Transfer credits if not disputed
-  if (!reportIssue) {
-    if (isTeacher) {
-      await createTransaction('earn', baseCredits, 'Taught ' + (session.topic || 'session') + ' to ' + (session.partnerName || 'student'), sessionId, session.studentUid);
+function syncCompleteModalIssueMode() {
+  var modalEl = document.getElementById('completeModal');
+  var reviewOnly = modalEl && modalEl.dataset.reviewOnly === '1';
+  var issueCheckEl = document.getElementById('reportIssueCheck');
+  var issueReasonSectionEl = document.getElementById('issueReasonSection');
+  var ratingFieldEl = document.getElementById('completeRatingField');
+  var feedbackLabelEl = document.getElementById('completeFeedbackLabel');
+  var feedbackInputEl = document.getElementById('sessionFeedback');
+  var primaryBtn = document.querySelector('#completeModal .modal-btn.primary');
+  var reportIssue = !!(issueCheckEl && issueCheckEl.checked && !reviewOnly);
+  if (issueReasonSectionEl) issueReasonSectionEl.style.display = reportIssue ? 'block' : 'none';
+  if (ratingFieldEl) ratingFieldEl.style.display = reportIssue ? 'none' : '';
+  if (feedbackLabelEl) {
+    feedbackLabelEl.textContent = reportIssue
+      ? 'Issue details (optional)'
+      : (feedbackLabelEl.dataset.defaultText || feedbackLabelEl.textContent);
+  }
+  if (feedbackInputEl) {
+    feedbackInputEl.placeholder = reportIssue
+      ? 'Add any detail that will help the reviewer understand what happened.'
+      : 'How was the session? What did you learn?';
+  }
+  if (primaryBtn) {
+    primaryBtn.textContent = reportIssue
+      ? 'Report Issue'
+      : (primaryBtn.dataset.defaultText || primaryBtn.textContent);
+  }
+}
+window.syncCompleteModalIssueMode = syncCompleteModalIssueMode;
+
+function getSessionFinalStatus(session) {
+  if (!session) return null;
+  if (session.settlementStatus === 'review_pending') {
+    return {
+      label: 'Under Review',
+      style: 'background:rgba(245,158,11,0.12);color:var(--orange);border:1px solid rgba(245,158,11,0.28)'
+    };
+  }
+  if (session.settlementStatus !== 'settled') return null;
+  if (session.rawStatus === 'completed') {
+    return {
+      label: 'Completed',
+      style: 'background:rgba(52,211,153,0.12);color:var(--green);border:1px solid rgba(52,211,153,0.28)'
+    };
+  }
+  if (session.rawStatus === 'no-show') {
+    return {
+      label: 'No-Show',
+      style: 'background:rgba(248,113,113,0.1);color:var(--red);border:1px solid rgba(248,113,113,0.28)'
+    };
+  }
+  if (session.rawStatus === 'cancelled') {
+    return {
+      label: 'Cancelled',
+      style: 'background:rgba(255,255,255,0.08);color:var(--muted);border:1px solid rgba(255,255,255,0.12)'
+    };
+  }
+  if (session.rawStatus === 'disputed' && session.creditStatus === 'refunded') {
+    return {
+      label: 'Refunded',
+      style: 'background:rgba(79,172,254,0.12);color:var(--blue);border:1px solid rgba(79,172,254,0.28)'
+    };
+  }
+  if (session.rawStatus === 'disputed' && session.creditStatus === 'split') {
+    return {
+      label: 'Resolved Split',
+      style: 'background:rgba(245,158,11,0.12);color:var(--orange);border:1px solid rgba(245,158,11,0.28)'
+    };
+  }
+  if (session.rawStatus === 'disputed') {
+    return {
+      label: 'Resolved',
+      style: 'background:rgba(79,172,254,0.12);color:var(--blue);border:1px solid rgba(79,172,254,0.28)'
+    };
+  }
+  return null;
+}
+
+function canAddLateReview(session) {
+  return !!(session
+    && session.settlementStatus === 'settled'
+    && session.rawStatus === 'completed'
+    && !session.myRatingSubmitted);
+}
+
+function renderFinalSessionActions(session) {
+  var status = getSessionFinalStatus(session);
+  if (!status) return '';
+  var html = '<button class="s-btn" style="' + status.style + '">' + escapeHtml(status.label) + '</button>';
+  if (canAddLateReview(session)) {
+    html += '<button class="s-btn" style="background:none;border:none;color:var(--purple2);padding:0 4px;font-size:.76rem;font-weight:700;text-decoration:underline" onclick="openCompleteModal(\'' + session.id + '\')">Add Review</button>';
+  }
+  return html;
+}
+
+function getSessionsEmptyStateHtml() {
+  var nextStep = state.acceptedPartners && state.acceptedPartners.length
+    ? 'No sessions booked with your accepted partners yet. '
+    : 'No sessions yet. ';
+  return '<div style="text-align:center;padding:32px;color:var(--muted);font-size:.88rem">' + nextStep + '<button onclick="openScheduleModal()" style="background:none;border:none;color:var(--purple2);cursor:pointer;font-weight:600;text-decoration:underline">Schedule one -></button></div>';
+}
+
+function renderSessionItemsHtml(src) {
+  if (!src.length) return '';
+  var now = new Date();
+  return src.map(function(s) {
+    var postSessionReadyAt = s.postSessionUnlockAt ? new Date(s.postSessionUnlockAt) : getPostSessionUnlockDate(s.startDate);
+    var isPast = postSessionReadyAt ? now >= postSessionReadyAt : (s.startDate && now > new Date(s.startDate));
+    var canCancel = s.startDate && now < new Date(s.startDate) && s.type === 'upcoming';
+    var myResponseSubmitted = hasSessionResponse(s, s.myRole);
+    var partnerRole = s.myRole === 'teacher' ? 'student' : 'teacher';
+    var partnerResponseSubmitted = hasSessionResponse(s, partnerRole);
+    var awaitingCounterparty = s.settlementStatus === 'awaiting_counterparty' || s.settlementStatus === 'awaiting_learner' || s.rawStatus === 'awaiting_counterparty' || s.rawStatus === 'awaiting_learner';
+    var finalButtons = renderFinalSessionActions(s);
+    var canActPostSession = !finalButtons && isPast && !myResponseSubmitted;
+    var nextActionLabel = 'Completed';
+    var noShowLabel = s.myRole === 'teacher' ? 'Student No-Show' : 'Teacher No-Show';
+    var buttons = '';
+
+    if (finalButtons) {
+      buttons = finalButtons;
+    } else if (awaitingCounterparty && myResponseSubmitted && !partnerResponseSubmitted) {
+      buttons = '<button class="s-btn" style="background:rgba(79,172,254,0.12);color:var(--blue);border:1px solid rgba(79,172,254,0.28)">Waiting for partner</button>';
+    } else if (canActPostSession) {
+      buttons = '<button class="s-btn" style="background:rgba(52,211,153,0.12);color:var(--green);border:1px solid rgba(52,211,153,0.3)" onclick="openCompleteModal(\'' + s.id + '\')">' + nextActionLabel + '</button>';
+      buttons += '<button class="s-btn" style="background:rgba(248,113,113,0.1);color:var(--red);border:1px solid rgba(248,113,113,0.28);margin-left:4px" onclick="openNoShowModal(\'' + s.id + '\')">' + noShowLabel + '</button>';
     } else {
-      await createTransaction('spend', baseCredits, 'Learned ' + (session.topic || 'session') + ' from ' + (session.partnerName || 'teacher'), sessionId, session.teacherUid);
-      // Teacher earns
-      if (session.teacherUid) {
-        await addDoc(collection(db,'transactions'), {
-          uid: session.teacherUid, type: 'earn', amount: baseCredits,
-          description: 'Taught ' + (session.topic || 'session') + ' to ' + (state.profile.firstName || 'student'),
-          category: 'session', relatedSessionId: sessionId, relatedUserId: state.currentUser.uid,
-          createdAt: serverTimestamp(), balanceAfter: 0
-        });
-        await updateDoc(doc(db,'users',session.teacherUid), { creditBalance: increment(baseCredits) });
+      buttons =
+        (s.calendarUrl ? '<button class="s-btn remind" onclick="window.open(\'' + escapeHtml(s.calendarUrl) + '\',\'_blank\')">Invite</button>' : '') +
+        (s.meet ? '<button class="s-btn remind" onclick="copyMeetLink(\'' + escapeHtml(s.meet) + '\')">Copy</button>' : '') +
+        (s.meet
+          ? '<button class="s-btn join" onclick="joinMeet(\'' + escapeHtml(s.meet) + '\')">Join</button>'
+          : '<button class="s-btn join" onclick="openScheduleModal()">Schedule</button>');
+      if (canCancel) {
+        buttons += '<button class="s-btn" style="background:rgba(248,113,113,0.1);color:var(--red);border:1px solid rgba(248,113,113,0.28)" onclick="cancelScheduledSession(\'' + s.id + '\')">Cancel</button>';
       }
     }
-  }
 
-  // Update partner's rating stats
-  if (session.partnerUid && !reportIssue) {
-    const partnerSnap = await getDoc(doc(db,'users',session.partnerUid));
-    if (partnerSnap.exists()) {
-      const partnerData = partnerSnap.data();
-      const currentRating = partnerData?.stats?.averageRating || 0;
-      const totalRatings = partnerData?.stats?.totalRatings || 0;
-      const newAverage = ((currentRating * totalRatings) + rating) / (totalRatings + 1);
-      await updateDoc(doc(db,'users',session.partnerUid), {
-        'stats.averageRating': newAverage,
-        'stats.totalRatings': increment(1)
-      });
-    }
-  }
-
-  // Update own stats
-  await updateDoc(doc(db,'users',state.currentUser.uid), {
-    'stats.sessionsCompleted': increment(1)
-  });
-
-  // Notify partner
-  const notifMsg = reportIssue
-    ? (state.profile.firstName || 'User') + ' reported an issue with your ' + (session.topic || 'session') + ' session.'
-    : (state.profile.firstName || 'User') + ' completed the ' + (session.topic || 'session') + ' session and gave ' + rating + ' stars.';
-  await addDoc(collection(db,'notifications'), {
-    uid: session.partnerUid, type: reportIssue ? 'session-disputed' : 'session-completed',
-    title: reportIssue ? 'Session Issue Reported' : 'Session Completed',
-    message: notifMsg, read: false, createdAt: serverTimestamp()
-  });
-
-  await refreshDashboard();
-  if (reportIssue) {
-    if(window.showToast) window.showToast('⚠️','Issue Reported','Your feedback has been recorded. Contact support if needed.');
-  } else {
-    if(window.showToast) window.showToast('✅','Session Completed!','Credits transferred and rating submitted.');
-  }
+    return '<div class="session-item ' + s.type + '">' +
+      '<div style="text-align:center;min-width:52px"><div class="stime">' + s.time + '</div><div class="sampm">' + s.ampm + '</div></div>' +
+      '<div style="flex:1"><div class="session-title">' + escapeHtml(s.title || 'Session') + (s._new ? '<span class="session-new-badge">NEW</span>' : '') + '</div><div class="session-meta">' + escapeHtml(s.meta || '') + '</div></div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center">' + buttons + '</div></div>';
+  }).join('');
 }
 
-async function reportNoShow(sessionId, whoNoShowed) {
-  if (!state.currentUser || !state.profile) throw new Error('Not authenticated');
-  const session = state.sessions.find(s => s.id === sessionId);
-  if (!session) throw new Error('Session not found');
+function renderScheduleSessionSections(src) {
+  var reviewCard = document.getElementById('underReviewSessionsCard');
+  var reviewList = document.getElementById('sessionsUnderReviewList');
+  var historyList = document.getElementById('sessionsListFull');
+  if (!reviewList || !historyList) return;
+  var reviewSessions = src.filter(function(item) { return item.settlementStatus === 'review_pending'; });
+  var historySessions = src.filter(function(item) { return item.settlementStatus !== 'review_pending'; });
 
-  const baseCredits = session.creditsAgreed || Math.round((session.durationMinutes || 60) / 60 * 20);
-
-  await updateDoc(doc(db,'sessions',sessionId), {
-    status: 'no-show', completedAt: serverTimestamp(), noShowType: whoNoShowed
-  });
-
-  if (whoNoShowed === 'teacher') {
-    // Full refund to student (no deduction since booking wasn't charged yet)
-    await addDoc(collection(db,'notifications'), {
-      uid: session.teacherUid, type: 'no-show-warning',
-      title: 'No-Show Warning', message: 'You were marked as no-show for a session. This affects your rating.',
-      read: false, createdAt: serverTimestamp()
-    });
-    await updateDoc(doc(db,'users',session.teacherUid), { 'stats.noShowCount': increment(1) });
-    if(window.showToast) window.showToast('⚠️','No-Show Reported','Teacher has been notified. No credits deducted.');
-  } else {
-    // Student no-show: partial credits to teacher
-    const penalty = Math.round(baseCredits * 0.5);
-    await createTransaction('spend', penalty, 'No-show penalty for ' + (session.topic || 'session'), sessionId, session.teacherUid);
-    if (session.teacherUid) {
-      await addDoc(collection(db,'transactions'), {
-        uid: session.teacherUid, type: 'earn', amount: penalty,
-        description: 'No-show compensation from ' + (state.profile.firstName || 'student'),
-        category: 'session', relatedSessionId: sessionId, relatedUserId: state.currentUser.uid,
-        createdAt: serverTimestamp(), balanceAfter: 0
-      });
-      await updateDoc(doc(db,'users',session.teacherUid), { creditBalance: increment(penalty) });
-    }
-    await updateDoc(doc(db,'users',state.currentUser.uid), { 'stats.noShowCount': increment(1) });
-    if(window.showToast) window.showToast('⚠️','No-Show Recorded','50% credits transferred to teacher as compensation.');
-  }
-
-  await refreshDashboard();
+  if (reviewCard) reviewCard.style.display = reviewSessions.length ? 'block' : 'none';
+  reviewList.innerHTML = reviewSessions.length
+    ? renderSessionItemsHtml(reviewSessions)
+    : '';
+  historyList.innerHTML = historySessions.length
+    ? renderSessionItemsHtml(historySessions)
+    : (reviewSessions.length
+      ? '<div style="text-align:center;padding:32px;color:var(--muted);font-size:.88rem">No settled or scheduled session history yet. Active review cases are shown above.</div>'
+      : getSessionsEmptyStateHtml());
 }
-window.completeSession = completeSession;
-window.reportNoShow = reportNoShow;
 
-window.completeSession = async function(sessionId, rating, feedback, reportIssue, issueReason) {
+function renderSessionsV2(listId) {
+  var src = window.SESSIONS && window.SESSIONS.length ? window.SESSIONS : APP.sessions;
+  if ((listId || 'sessionsList') === 'sessionsListFull') {
+    renderScheduleSessionSections(src);
+    return;
+  }
+  var list = document.getElementById(listId || 'sessionsList');
+  if (!list) return;
+  if (!src.length) {
+    list.innerHTML = getSessionsEmptyStateHtml();
+    return;
+  }
+  list.innerHTML = renderSessionItemsHtml(src);
+}
+
+window.renderSessions = renderSessionsV2;
+window.renderScheduleTab = function() { renderCalStrip('calStripFull'); renderScheduleSessionSections(window.SESSIONS && window.SESSIONS.length ? window.SESSIONS : APP.sessions); };
+
+window.openCompleteModal = function(sessionId) {
+  var session = getSessionById(sessionId);
+  if (!session) {
+    if (window.showToast) window.showToast('!', 'Session missing', 'Could not find that session.');
+    return;
+  }
+  document.getElementById('completeSessionId').value = sessionId;
+  document.getElementById('completeSessionRole').value = session.myRole || '';
+  currentRating = 5;
+  if (typeof updateRatingDisplay === 'function') updateRatingDisplay();
+  document.getElementById('sessionFeedback').value = '';
+  document.getElementById('reportIssueCheck').checked = false;
+  document.getElementById('issueReason').value = '';
+  document.getElementById('issueReasonSection').style.display = 'none';
+  document.getElementById('completeModal').dataset.reviewOnly = canAddLateReview(session) ? '1' : '0';
+  updateCompleteModalText(session);
+  document.getElementById('completeModal').classList.add('show');
+};
+
+window.openNoShowModal = function(sessionId) {
+  var session = getSessionById(sessionId);
+  if (!session) {
+    if (window.showToast) window.showToast('!', 'Session missing', 'Could not find that session.');
+    return;
+  }
+  document.getElementById('noShowSessionId').value = sessionId;
+  var titleEl = document.getElementById('noShowModalTitle');
+  var subEl = document.getElementById('noShowModalSub');
+  if (titleEl) titleEl.textContent = session.myRole === 'teacher' ? 'Teacher Follow-Up' : 'Learner Follow-Up';
+  if (subEl) {
+    subEl.textContent = session.myRole === 'teacher'
+      ? 'Choose what happened from the teacher side.'
+      : 'Choose what happened from the learner side.';
+  }
+  var buttons = document.querySelectorAll('#noShowModal .modal-btn');
+  if (buttons[0]) {
+    buttons[0].setAttribute('onclick', "reportNoShowAction('" + (session.myRole === 'teacher' ? 'student' : 'teacher') + "')");
+    buttons[0].innerHTML = session.myRole === 'teacher'
+      ? '<div style="font-size:1.5rem;margin-bottom:6px">S</div>Student Did Not Attend<br><small style="color:var(--muted);font-size:.72rem">The learner can still respond before review starts</small>'
+      : '<div style="font-size:1.5rem;margin-bottom:6px">T</div>Teacher Did Not Show<br><small style="color:var(--muted);font-size:.72rem">The teacher can still respond before review starts</small>';
+  }
+  if (buttons[1]) {
+    buttons[1].setAttribute('onclick', "reportNoShowAction('" + (session.myRole === 'teacher' ? 'teacher' : 'student') + "')");
+    buttons[1].innerHTML = session.myRole === 'teacher'
+      ? '<div style="font-size:1.5rem;margin-bottom:6px">T</div>I Could Not Complete It<br><small style="color:var(--muted);font-size:.72rem">Immediate refund to the learner and teacher no-show record</small>'
+      : '<div style="font-size:1.5rem;margin-bottom:6px">S</div>I Did Not Attend<br><small style="color:var(--muted);font-size:.72rem">Immediate 50% penalty and teacher compensation for paid sessions</small>';
+  }
+  document.getElementById('noShowModal').classList.add('show');
+};
+
+window.submitCompletion = async function() {
+  var sessionId = document.getElementById('completeSessionId').value;
+  var feedback = document.getElementById('sessionFeedback').value.trim();
+  var reviewOnly = document.getElementById('completeModal').dataset.reviewOnly === '1';
+  var reportIssue = reviewOnly ? false : document.getElementById('reportIssueCheck').checked;
+  var issueReason = reviewOnly ? '' : document.getElementById('issueReason').value;
+  var session = getSessionById(sessionId);
+  if (!session) {
+    showToast('!', 'Error', 'No session selected');
+    return;
+  }
+  if (reportIssue && !issueReason) {
+    showToast('!', 'Select Reason', 'Please select an issue reason');
+    return;
+  }
+  var btn = document.querySelector('#completeModal .modal-btn.primary');
+  if (!btn) return;
+  var originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
+  try {
+    await window.completeSession(sessionId, currentRating, feedback, reportIssue, issueReason);
+    closeModal('completeModal');
+  } catch(err) {
+    showToast('!', 'Error', err.message || 'Failed to submit the session outcome');
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+};
+
+window.reportNoShowAction = async function(whoNoShowed) {
+  var sessionId = document.getElementById('noShowSessionId').value;
+  if (!sessionId) {
+    showToast('!', 'Error', 'No session selected');
+    return;
+  }
+  try {
+    await window.reportNoShow(sessionId, whoNoShowed);
+    closeModal('noShowModal');
+  } catch(err) {
+    showToast('!', 'Error', err.message || 'Failed to report the session issue');
+  }
+};
+
+window.cancelScheduledSession = async function(sessionId) {
+  if (!state.currentUser || !state.profile) return;
+  var session = getSessionById(sessionId);
+  if (!session) {
+    if (window.showToast) window.showToast('!', 'Session missing', 'Could not find that session.');
+    return;
+  }
+  if (!window.confirm('Cancel this session now? Paid sessions may refund or split credits based on the cancellation window.')) {
+    return;
+  }
+  try {
+    await apiJson('/api/sessions/' + encodeURIComponent(sessionId) + '/cancel', { method:'POST' });
+    await refreshDashboard();
+    if (window.showToast) window.showToast('OK', 'Session Cancelled', 'The session cancellation was saved.');
+  } catch (err) {
+    console.error('cancel session error:', err);
+    if (window.showToast) window.showToast('!', 'Cancel Failed', err && err.message ? err.message : 'Could not cancel this session.');
+  }
+};
+
+function getTransactionMeta(type) {
+  if (type === 'earn') return { icon:'IN', sign:'+', tone:'var(--green)' };
+  if (type === 'refund') return { icon:'RF', sign:'+', tone:'var(--blue)' };
+  if (type === 'manual_grant') return { icon:'AD', sign:'+', tone:'var(--purple2)' };
+  if (type === 'hold') return { icon:'HD', sign:'-', tone:'var(--orange)' };
+  if (type === 'penalty') return { icon:'PN', sign:'-', tone:'var(--red)' };
+  if (type === 'manual_adjustment') return { icon:'RV', sign:'-', tone:'var(--orange)' };
+  return { icon:'SP', sign:'-', tone:'var(--red)' };
+}
+
+function formatTransactionItem(item) {
+  var meta = getTransactionMeta(item.type);
+  return {
+    id: item.id,
+    type: item.type,
+    icon: meta.icon,
+    tone: meta.tone,
+    label: item.description || item.label || 'Credit update',
+    date: item.date || 'Just now',
+    amountText: meta.sign + (item.rawAmount || item.amount || 0)
+  };
+}
+
+window.renderCredits = function() {
+  var balance = (window.CURRENT_USER_PROFILE && window.CURRENT_USER_PROFILE.creditBalance) || APP.credits || 0;
+  var heldBalance = (window.CURRENT_USER_PROFILE && window.CURRENT_USER_PROFILE.heldCreditBalance) || 0;
+  setText('creditsDisplay', String(balance));
+  setText('creditsHeld', String(heldBalance));
+
+  var transactions = window.TRANSACTIONS || [];
+  var earned = 0, spent = 0;
+  transactions.forEach(function(t) {
+    if (t.type === 'earn' || t.type === 'manual_grant') earned += Number(t.rawAmount || 0);
+    if (t.type === 'spend' || t.type === 'penalty' || t.type === 'manual_adjustment') spent += Number(t.rawAmount || 0);
+  });
+  setText('creditsEarned', '+' + earned);
+  setText('creditsSpent', '-' + spent);
+
+  var hist = document.getElementById('creditHistory');
+  if (!hist) return;
+  if (!transactions.length) {
+    hist.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted);font-size:.88rem">No transactions yet. Schedule and complete a session to see credits move.</div>';
+    return;
+  }
+  hist.innerHTML = transactions.map(function(item) {
+    var row = formatTransactionItem(item);
+    return '<div class="credit-item">' +
+      '<div class="credit-icon">' + escapeHtml(row.icon) + '</div>' +
+      '<div style="flex:1"><div style="font-weight:700">' + escapeHtml(row.label) + '</div><div style="font-size:.76rem;color:var(--muted)">' + escapeHtml(row.date) + '</div></div>' +
+      '<div style="font-weight:800;color:' + row.tone + '">' + escapeHtml(row.amountText) + '</div>' +
+    '</div>';
+  }).join('');
+};
+
+// ── SESSION COMPLETION & RATING ────────────────────────────────
+// Backend-backed session completion handlers
+window.__legacyCompleteSession = async function(sessionId, rating, feedback, reportIssue, issueReason) {
   if (!state.currentUser || !state.profile) throw new Error('Not authenticated');
   const session = state.sessions.find(function(item) { return item.id === sessionId; });
   if (!session) throw new Error('Session not found');
@@ -3523,14 +4033,14 @@ window.completeSession = async function(sessionId, rating, feedback, reportIssue
   await refreshDashboard();
   if(window.showToast) {
     window.showToast(
-      reportIssue ? 'âš ï¸' : 'âœ…',
+      reportIssue ? '⚠️' : '✅',
       reportIssue ? 'Issue Reported' : 'Session Completed!',
       reportIssue ? 'Your feedback has been recorded.' : 'Credits transferred without using client-side privileged writes.'
     );
   }
 };
 
-window.reportNoShow = async function(sessionId, whoNoShowed) {
+window.__legacyReportNoShow = async function(sessionId, whoNoShowed) {
   if (!state.currentUser || !state.profile) throw new Error('Not authenticated');
   const session = state.sessions.find(function(item) { return item.id === sessionId; });
   if (!session) throw new Error('Session not found');
@@ -3541,7 +4051,7 @@ window.reportNoShow = async function(sessionId, whoNoShowed) {
   await refreshDashboard();
   if(window.showToast) {
     window.showToast(
-      'âš ï¸',
+      '⚠️',
       whoNoShowed === 'teacher' ? 'No-Show Reported' : 'No-Show Recorded',
       whoNoShowed === 'teacher'
         ? 'Teacher has been notified. No credits were deducted.'
@@ -3550,26 +4060,127 @@ window.reportNoShow = async function(sessionId, whoNoShowed) {
   }
 };
 
+window.completeSession = async function(sessionId, rating, feedback, reportIssue, issueReason) {
+  if (!state.currentUser || !state.profile) throw new Error('Not authenticated');
+  var session = getSessionById(sessionId);
+  if (!session) throw new Error('Session not found');
+  var reviewOnly = canAddLateReview(session);
+  var route = session.myRole === 'teacher'
+    ? '/api/sessions/' + encodeURIComponent(sessionId) + '/teacher-complete'
+    : '/api/sessions/' + encodeURIComponent(sessionId) + '/learner-complete';
+  var payload = {
+    rating: reportIssue ? 0 : rating,
+    feedback: feedback || '',
+    reportIssue: !!reportIssue,
+    issueReason: issueReason || ''
+  };
+  var result;
+  try {
+    result = await apiJson(route, {
+      method:'POST',
+      body: JSON.stringify(payload)
+    });
+  } catch (err) {
+    var isNotFound = String(err && err.message ? err.message : '').indexOf('(404)') !== -1;
+    if (!isNotFound) throw err;
+    console.warn('role-specific completion route returned 404, retrying generic route for session', sessionId);
+    result = await apiJson('/api/sessions/' + encodeURIComponent(sessionId) + '/complete', {
+      method:'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+  await refreshDashboard();
+  if (window.showToast) {
+    var title = 'Response Saved';
+    var message = 'Your session response was saved.';
+    if (reviewOnly) {
+      title = 'Review Saved';
+      message = 'Your feedback was added to this completed session.';
+    } else if (reportIssue) {
+      if (result && result.outcome === 'awaiting_counterparty') {
+        title = 'Issue Recorded';
+        message = 'Your partner can still submit their own outcome before reviewer escalation.';
+      } else {
+        title = 'Under Review';
+        message = 'This session now sits in the reviewer credit queue.';
+      }
+    } else if (result && result.outcome === 'awaiting_counterparty') {
+      title = 'Waiting For Partner';
+      message = 'Your response was saved. The session stays pending until your partner responds or the timeout settles it.';
+    } else if (result && result.outcome === 'completed') {
+      title = session.isPaid ? 'Session Completed' : 'Session Confirmed';
+      message = session.isPaid
+        ? 'Both sides completed the session flow and the credit settlement was applied.'
+        : 'Both sides completed the session flow for this demo session.';
+    }
+    window.showToast(reportIssue ? '!' : 'OK', title, message);
+  }
+};
+
+window.reportNoShow = async function(sessionId, whoNoShowed) {
+  if (!state.currentUser || !state.profile) throw new Error('Not authenticated');
+  var session = getSessionById(sessionId);
+  if (!session) throw new Error('Session not found');
+  var result = await apiJson('/api/sessions/' + encodeURIComponent(sessionId) + '/no-show', {
+    method:'POST',
+    body: JSON.stringify({ whoNoShowed: whoNoShowed })
+  });
+  await refreshDashboard();
+  if (window.showToast) {
+    var title = whoNoShowed === 'teacher' ? 'Teacher No-Show Recorded' : 'Learner No-Show Recorded';
+    var message = whoNoShowed === 'teacher'
+      ? 'Your no-show response was saved.'
+      : 'Your no-show response was saved.';
+    if (result && result.outcome === 'awaiting_counterparty') {
+      title = 'Waiting For Partner';
+      message = 'Your no-show claim was saved. Your partner can still respond before reviewer escalation.';
+    } else if (result && result.outcome === 'review_pending') {
+      title = 'Under Review';
+      message = 'This no-show dispute now sits in the reviewer queue and the credits remain frozen.';
+    } else if (result && result.outcome === 'teacher_no_show_refunded') {
+      message = session.myRole === 'teacher'
+        ? 'The learner was refunded because the teacher-side no-show was recorded.'
+        : 'The held credits were refunded because the teacher no-show was recorded.';
+    } else if (result && result.outcome === 'learner_no_show_split') {
+      message = session.myRole === 'teacher'
+        ? 'The learner no-show was recorded and the compensation split was applied.'
+        : 'Your learner no-show response was recorded and the penalty/split was applied.';
+    }
+    window.showToast('!', title, message);
+  }
+};
+
 // ── REAL-TIME LISTENERS ────────────────────────────────────────
+function applyLiveSessions(sessions) {
+  var nextSessions = sortSessionsList(sessions);
+  state.sessions = nextSessions;
+  window.SESSIONS = nextSessions;
+
+  if (!state.liveSessionsBootstrapped) {
+    state.seenLiveSessionIds = new Set(nextSessions.map(function(item) { return item.id; }));
+    state.liveSessionsBootstrapped = true;
+  } else {
+    nextSessions.forEach(function(session) {
+      if (session.rawStatus !== 'upcoming') return;
+      if (!session.meet && !session.calendarUrl) return;
+      if (state.seenLiveSessionIds.has(session.id)) return;
+      state.seenLiveSessionIds.add(session.id);
+      if (window.showToast) window.showToast('📅', 'Session Scheduled', 'Your shared Meet invite with ' + (session.partnerName || 'your partner') + ' is now ready.');
+    });
+  }
+
+  if (window.renderSessions) window.renderSessions('sessionsList');
+  if (window.renderScheduleTab) window.renderScheduleTab();
+  refreshConnectedUi();
+  if (window.updateMessageHeaderAction) window.updateMessageHeaderAction();
+}
+
 function setupRealtimeListeners(uid) {
   unsubscribers.forEach(unsub => unsub());
   unsubscribers = [];
 
   function refreshAcceptedPartnersFromSnapshots(snaps) {
-    const acceptedMap = new Map();
-    snaps.forEach(function(snap) {
-      if (!snap) return;
-      snap.forEach(function(item) {
-        const d = { ...item.data(), id:item.id };
-        if (d.status !== 'accepted') return;
-        const accepted = buildAcceptedPartner(d, uid, state.userMap);
-        if (!accepted.partnerUid) return;
-        acceptedMap.set(accepted.requestId, accepted);
-      });
-    });
-    state.acceptedPartners = Array.from(acceptedMap.values()).sort(function(a, b) {
-      return String(a.partnerName).localeCompare(String(b.partnerName));
-    });
+    state.acceptedPartners = collectAcceptedPartnersFromSnapshots(snaps, uid, state.userMap);
     window.ACCEPTED_PARTNERS = state.acceptedPartners;
     var acceptedIds = new Set(state.acceptedPartners.map(function(item) { return item.requestId; }));
     var visibleRequests = (state.incomingRequests || []).filter(function(req) { return !acceptedIds.has(req.id); });
@@ -3648,6 +4259,22 @@ function setupRealtimeListeners(uid) {
   );
   unsubscribers.push(unsubSavedMaterials);
 
+  const unsubSessions = onSnapshot(
+    query(collection(db,'sessions'),where('participants','array-contains',uid)),
+    function(snap) {
+      const sessions = [];
+      snap.forEach(function(item) {
+        const d = { ...item.data(), id:item.id };
+        sessions.push(formatSessionDoc(d, state.userMap, uid));
+      });
+      applyLiveSessions(sessions);
+    },
+    function(error) {
+      console.error('Sessions listener error:', error);
+    }
+  );
+  unsubscribers.push(unsubSessions);
+
   // Real-time incoming requests (fetch all for teacher, filter in JS to avoid index requirement)
   const unsubRequests = onSnapshot(
     query(collection(db,'lessonRequests'),where('teacherUid','==',uid)),
@@ -3665,7 +4292,7 @@ function setupRealtimeListeners(uid) {
           studentEmoji: student?.verification?.status==='verified'?'🌟':'🧑',
           studentMessage: d.studentMessage||'',
           skillRequested: d.skillRequested||'General guidance',
-          sessionType: d.sessionType||'credit', creditsOffered: d.creditsOffered||0,
+          sessionType: d.sessionType||'credit', creditsOffered: getNormalizedAcceptedPartnerCredits(d, uid, state.userMap),
           timeLabel: created ? created.toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : 'Just now',
           createdAtMs: created ? created.getTime() : 0
         });
@@ -3689,7 +4316,12 @@ function setupRealtimeListeners(uid) {
     query(collection(db,'lessonRequests'),where('teacherUid','==',uid)),
     function(snap) {
       acceptedTeacherSnap = snap;
-      refreshAcceptedPartnersFromSnapshots([acceptedTeacherSnap, acceptedStudentSnap]);
+      refreshAcceptedPartnersFromSnapshots([
+        { snap: acceptedTeacherSnap, source: 'lessonRequests' },
+        { snap: acceptedStudentSnap, source: 'lessonRequests' },
+        { snap: acceptedTeacherConnectionSnap, source: 'lessonConnections' },
+        { snap: acceptedStudentConnectionSnap, source: 'lessonConnections' }
+      ]);
     }
   );
   unsubscribers.push(unsubAcceptedAsTeacher);
@@ -3698,7 +4330,12 @@ function setupRealtimeListeners(uid) {
     query(collection(db,'lessonRequests'),where('studentUid','==',uid)),
     function(snap) {
       acceptedStudentSnap = snap;
-      refreshAcceptedPartnersFromSnapshots([acceptedTeacherSnap, acceptedStudentSnap]);
+      refreshAcceptedPartnersFromSnapshots([
+        { snap: acceptedTeacherSnap, source: 'lessonRequests' },
+        { snap: acceptedStudentSnap, source: 'lessonRequests' },
+        { snap: acceptedTeacherConnectionSnap, source: 'lessonConnections' },
+        { snap: acceptedStudentConnectionSnap, source: 'lessonConnections' }
+      ]);
     }
   );
   unsubscribers.push(unsubAcceptedAsStudent);
@@ -3709,7 +4346,12 @@ function setupRealtimeListeners(uid) {
     query(collection(db,'lessonConnections'),where('teacherUid','==',uid)),
     function(snap) {
       acceptedTeacherConnectionSnap = snap;
-      refreshAcceptedPartnersFromSnapshots([acceptedTeacherSnap, acceptedStudentSnap, acceptedTeacherConnectionSnap, acceptedStudentConnectionSnap]);
+      refreshAcceptedPartnersFromSnapshots([
+        { snap: acceptedTeacherSnap, source: 'lessonRequests' },
+        { snap: acceptedStudentSnap, source: 'lessonRequests' },
+        { snap: acceptedTeacherConnectionSnap, source: 'lessonConnections' },
+        { snap: acceptedStudentConnectionSnap, source: 'lessonConnections' }
+      ]);
     }
   );
   unsubscribers.push(unsubConnectionsAsTeacher);
@@ -3718,7 +4360,12 @@ function setupRealtimeListeners(uid) {
     query(collection(db,'lessonConnections'),where('studentUid','==',uid)),
     function(snap) {
       acceptedStudentConnectionSnap = snap;
-      refreshAcceptedPartnersFromSnapshots([acceptedTeacherSnap, acceptedStudentSnap, acceptedTeacherConnectionSnap, acceptedStudentConnectionSnap]);
+      refreshAcceptedPartnersFromSnapshots([
+        { snap: acceptedTeacherSnap, source: 'lessonRequests' },
+        { snap: acceptedStudentSnap, source: 'lessonRequests' },
+        { snap: acceptedTeacherConnectionSnap, source: 'lessonConnections' },
+        { snap: acceptedStudentConnectionSnap, source: 'lessonConnections' }
+      ]);
     }
   );
   unsubscribers.push(unsubConnectionsAsStudent);
@@ -3757,12 +4404,21 @@ async function refreshDashboard() {
   if (!state.currentUser) return;
 
   state.profile = await loadProfile(state.currentUser.uid);
+  if (state.profile && state.profile.appRole === 'reviewer') {
+    window.location.href = 'reviewer.html';
+    return;
+  }
   if (!state.profile || !state.profile.profileCompleted) {
     window.location.href = 'createprofile.html';
     return;
   }
 
   window.CURRENT_USER_PROFILE = state.profile;
+  try {
+    await apiJson('/api/sessions/reconcile', { method:'POST' });
+  } catch (reconcileErr) {
+    console.error('session reconcile error:', reconcileErr);
+  }
 
   // All other users
   state.users = await loadAllProfiles(state.currentUser.uid);
@@ -3778,6 +4434,9 @@ async function refreshDashboard() {
   // Sessions
   state.sessions = await loadSessions(state.currentUser.uid, state.userMap);
   window.SESSIONS = state.sessions;
+  state.seenLiveSessionIds = new Set((state.sessions || []).map(function(item) { return item.id; }));
+  state.liveSessionsBootstrapped = true;
+  startSessionUiTicker();
   window.renderSessions('sessionsList');
   window.renderSessions('sessionsListFull');
 
@@ -3874,7 +4533,14 @@ window.ssCreateLessonRequest = async function(matchUser, draft) {
     skillRequested: skillRequested,
     sessionType: draft&&draft.sessionType ? draft.sessionType : 'credit',
     studentMessage: draft&&draft.studentMessage ? draft.studentMessage : '',
-    creditsOffered: draft&&typeof draft.creditsOffered==='number' ? draft.creditsOffered : (matchUser.creditsFrom||0),
+    creditsOffered: (draft&&draft.sessionType === 'demo')
+      ? 0
+      : getSafeCreditAmount(
+          (state.userMap && matchUser.uid && state.userMap[matchUser.uid]) || {
+            credits: draft&&typeof draft.creditsOffered==='number' ? draft.creditsOffered : matchUser.creditsFrom,
+            level: matchUser.level || ''
+          }
+        ),
     createdAt: serverTimestamp()
   });
   await addDoc(collection(db,'notifications'),{
@@ -3961,6 +4627,7 @@ window.ssScheduleSession = async function(draft) {
     method:'POST',
     body: JSON.stringify({
       requestId: acceptedPartner.requestId,
+      connectionId: acceptedPartner.connectionId || null,
       topic: draft.topic,
       durationMinutes: draft.durationMinutes,
       startAt: draft.startDate instanceof Date ? draft.startDate.toISOString() : new Date(draft.startDate).toISOString(),
@@ -3968,6 +4635,10 @@ window.ssScheduleSession = async function(draft) {
       appUrl: window.location.href
     })
   });
+  if (response && response.sessionId) state.seenLiveSessionIds.add(response.sessionId);
+  if (response && typeof response.creditsAgreed === 'number') {
+    acceptedPartner.creditsOffered = response.creditsAgreed;
+  }
   await refreshDashboard();
   return response;
 };
@@ -3991,9 +4662,14 @@ window.toggleTeacherVisibility = async function() {
 
 window.requestHumanVerification = async function() {
   if (!state.currentUser) return;
-  await setDoc(doc(db,'users',state.currentUser.uid),{humanVerification:{status:'pending',requestedAt:serverTimestamp()}},{merge:true});
-  await refreshDashboard();
-  if(window.showToast) window.showToast('🛡️','Human Verification Requested','Your request is queued for review.');
+  try {
+    await apiJson('/api/human-verification/request', { method:'POST' });
+    await refreshDashboard();
+    if(window.showToast) window.showToast('🛡️','Human Verification Requested','Your request is queued for review.');
+  } catch (err) {
+    console.error('Human verification request error:', err);
+    if(window.showToast) window.showToast('⚠️','Request Failed', err && err.message ? err.message : 'Could not request review right now.');
+  }
 };
 
 window.logoutUser = async function() {

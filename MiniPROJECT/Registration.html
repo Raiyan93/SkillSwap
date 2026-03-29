@@ -291,7 +291,9 @@
   async function smartRedirect(user) {
     try {
       const snap = await getDoc(doc(db, 'users', user.uid));
-      if (snap.exists() && snap.data().profileCompleted === true) {
+      if (snap.exists() && snap.data().appRole === 'reviewer') {
+        window.location.href = 'reviewer.html';
+      } else if (snap.exists() && snap.data().profileCompleted === true) {
         window.location.href = 'dashboard.html';
       } else {
         window.location.href = 'createprofile.html';
@@ -314,6 +316,7 @@
         fullName:         extraData.fullName || user.displayName || '',
         email:            user.email,
         photoURL:         user.photoURL || '',
+        appRole:          extraData.appRole || 'user',
         profileCompleted: false,
         createdAt:        serverTimestamp()
       });
