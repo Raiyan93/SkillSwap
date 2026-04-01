@@ -413,6 +413,129 @@ function getBadgeTier(completedPaidSessions) {
     return 'none';
 }
 
+function isSettledCompletedSession(session) {
+    if (!session || session.status !== 'completed') return false;
+    const settlement = String(session.settlementStatus || '').toLowerCase();
+    return !settlement || settlement === 'settled' || settlement === 'completed';
+}
+
+function normalizeRatingFeedback(value) {
+    return typeof value === 'string' ? value.trim() : '';
+}
+
+function getCanonicalOrDerivedRatingEntry(session, raterUid) {
+    if (!session || !raterUid) return null;
+    const direct = session?.ratings?.[raterUid];
+    if (direct) {
+        const directRating = Number(direct.rating || 0);
+        const directFeedback = normalizeRatingFeedback(direct.feedback);
+        if (directRating > 0 || directFeedback) {
+            return {
+                rating: directRating > 0 ? directRating : 0,
+                feedback: directFeedback,
+                ratedAt: direct.ratedAt || null
+            };
+        }
+    }
+    if (!isSettledCompletedSession(session)) return null;
+    const response = raterUid === session.teacherUid
+        ? session.teacherResponse
+        : (raterUid === session.studentUid ? session.studentResponse : null);
+    if (!response) return null;
+    const responseRating = Number(response.rating || 0);
+    const responseFeedback = normalizeRatingFeedback(response.feedback || response.note || '');
+    if (!(responseRating > 0 || responseFeedback)) return null;
+    return {
+        rating: responseRating > 0 ? responseRating : 0,
+        feedback: responseFeedback,
+        ratedAt: response.submittedAt || session.completedAt || null
+    };
+}
+
+function buildRecoveredRatingsPayload(session) {
+    const recoveredRatings = {};
+    const patch = {};
+    [session?.teacherUid, session?.studentUid].forEach((raterUid) => {
+        if (!raterUid || session?.ratings?.[raterUid]) return;
+        const derived = getCanonicalOrDerivedRatingEntry(session, raterUid);
+        if (!derived) return;
+        const entry = {
+            rating: Number(derived.rating || 0),
+            feedback: derived.feedback || '',
+            ratedAt: derived.ratedAt || session.completedAt || null
+        };
+        recoveredRatings[raterUid] = entry;
+        patch.ratings = patch.ratings || {};
+        patch.ratings[raterUid] = {
+            ...entry,
+            ratedAt: entry.ratedAt || admin.firestore.FieldValue.serverTimestamp()
+        };
+    });
+    return {
+        patch,
+        session: Object.keys(recoveredRatings).length
+            ? { ...session, ratings: { ...(session.ratings || {}), ...recoveredRatings } }
+            : session
+    };
+}
+
+async function buildUserStatsSnapshot(uid, profile = null) {
+    const db = getAdminDb();
+    const [teacherSnap, learnerSnap] = await Promise.all([
+        db.collection('sessions').where('teacherUid', '==', uid).get(),
+        db.collection('sessions').where('studentUid', '==', uid).get()
+    ]);
+    const sessionMap = new Map();
+    teacherSnap.forEach((docSnap) => {
+        sessionMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+    });
+    learnerSnap.forEach((docSnap) => {
+        if (!sessionMap.has(docSnap.id)) sessionMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+    });
+
+    let sessionsCompleted = 0;
+    let sessionsTaught = 0;
+    let totalRatings = 0;
+    let ratingTotal = 0;
+
+    sessionMap.forEach((session) => {
+        if (!isSettledCompletedSession(session)) return;
+        if (session.teacherUid === uid || session.studentUid === uid) {
+            sessionsCompleted += 1;
+        }
+        if (session.teacherUid === uid) {
+            sessionsTaught += 1;
+        }
+        const counterpartUid = session.teacherUid === uid
+            ? session.studentUid
+            : (session.studentUid === uid ? session.teacherUid : null);
+        const receivedRating = getCanonicalOrDerivedRatingEntry(session, counterpartUid);
+        const ratingValue = Number(receivedRating?.rating || 0);
+        if (ratingValue > 0) {
+            totalRatings += 1;
+            ratingTotal += ratingValue;
+        }
+    });
+
+    return {
+        averageRating: totalRatings ? ratingTotal / totalRatings : Number(profile?.stats?.averageRating || 0),
+        totalRatings,
+        sessionsCompleted,
+        sessionsTaught
+    };
+}
+
+async function syncUserDerivedStats(uid) {
+    const db = getAdminDb();
+    const profile = await getUserProfileOrThrow(uid);
+    const stats = await buildUserStatsSnapshot(uid, profile);
+    await db.collection('users').doc(uid).set({
+        stats,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    return stats;
+}
+
 const FULL_REFUND_CANCEL_WINDOW_MS = 12 * 60 * 60 * 1000;
 const POST_SESSION_RESPONSE_DELAY_MS = 1 * 60 * 1000;
 const LEARNER_CONFIRMATION_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -723,6 +846,7 @@ async function settleHeldCredits(sessionId, options) {
     const db = getAdminDb();
     const sessionRef = db.collection('sessions').doc(sessionId);
     let teacherUidToSync = null;
+    let learnerUidToSync = null;
     let settlementSummary = null;
 
     await db.runTransaction(async (tx) => {
@@ -734,6 +858,7 @@ async function settleHeldCredits(sessionId, options) {
         }
         const session = { id: sessionSnap.id, ...sessionSnap.data() };
         teacherUidToSync = session.teacherUid;
+        learnerUidToSync = session.studentUid;
         const isPaid = isPaidSession(session);
         const heldCredits = Math.max(0, Number(session.heldCredits || getSessionCreditAmount(session)));
 
@@ -818,11 +943,13 @@ async function settleHeldCredits(sessionId, options) {
         if (options.completedAt !== false) sessionPatch.completedAt = admin.firestore.FieldValue.serverTimestamp();
         tx.set(sessionRef, sessionPatch, { merge: true });
 
+        let sessionForSettlement = { ...session, ...sessionPatch };
+
         if (options.applyRatingsOnCompletion) {
-            await applyCompletedSessionRatings(tx, db, sessionRef, {
-                ...session,
-                ...sessionPatch
-            });
+            const recoveredRatings = buildRecoveredRatingsPayload(sessionForSettlement);
+            if (Object.keys(recoveredRatings.patch).length) {
+                tx.set(sessionRef, recoveredRatings.patch, { merge: true });
+            }
         }
 
         if (isPaid && payoutToTeacher > 0) {
@@ -887,9 +1014,11 @@ async function settleHeldCredits(sessionId, options) {
         };
     });
 
-    if (teacherUidToSync) {
-        await syncTeacherReputation(teacherUidToSync);
-    }
+    await Promise.all([
+        teacherUidToSync ? syncUserDerivedStats(teacherUidToSync) : Promise.resolve(),
+        learnerUidToSync ? syncUserDerivedStats(learnerUidToSync) : Promise.resolve()
+    ]);
+    if (teacherUidToSync) await syncTeacherReputation(teacherUidToSync);
 
     return settlementSummary || { ok: true, sessionId };
 }
@@ -901,27 +1030,34 @@ async function buildTeacherReviewSnapshot(uid) {
     const sessions = [];
     sessionsSnap.forEach(docSnap => sessions.push({ id: docSnap.id, ...docSnap.data() }));
 
-    const completedSessions = sessions.filter(session => session.status === 'completed');
+    const completedSessions = sessions.filter(isSettledCompletedSession);
     const recentFeedback = [];
     let completedDemoSessions = 0;
     let completedPaidSessions = 0;
     let writtenLearnerFeedbackCount = 0;
+    let totalRatings = 0;
+    let ratingTotal = 0;
 
     completedSessions.forEach(session => {
         if (isPaidSession(session)) completedPaidSessions += 1;
         else completedDemoSessions += 1;
 
         const learnerUid = session.studentUid || null;
-        const learnerFeedback = learnerUid && session.ratings ? session.ratings[learnerUid] : null;
+        const learnerFeedback = learnerUid ? getCanonicalOrDerivedRatingEntry(session, learnerUid) : null;
         if (!learnerFeedback) return;
 
         const feedbackText = typeof learnerFeedback.feedback === 'string' ? learnerFeedback.feedback.trim() : '';
+        const ratingValue = Number(learnerFeedback.rating || 0);
+        if (ratingValue > 0) {
+            totalRatings += 1;
+            ratingTotal += ratingValue;
+        }
         if (feedbackText) writtenLearnerFeedbackCount += 1;
 
         recentFeedback.push({
             sessionId: session.id,
             topic: session.topic || 'SkillSwap session',
-            rating: Number(learnerFeedback.rating || 0),
+            rating: ratingValue,
             feedback: feedbackText,
             ratedAt: learnerFeedback.ratedAt || null,
             learnerUid,
@@ -932,18 +1068,16 @@ async function buildTeacherReviewSnapshot(uid) {
     recentFeedback.sort((a, b) => toMillis(b.ratedAt) - toMillis(a.ratedAt));
 
     const teachSkills = Array.isArray(profile.skills?.toTeach) ? profile.skills.toTeach : [];
-    const averageRating = Number(profile.stats?.averageRating || 0);
-    const totalRatings = Number(profile.stats?.totalRatings || 0);
+    const averageRating = totalRatings ? ratingTotal / totalRatings : Number(profile.stats?.averageRating || 0);
     const completedTeachingSessions = completedSessions.length;
-    const disputeCount = sessions.filter(session => session.status === 'disputed').length;
+    const disputeCount = sessions.filter(session => session.status === 'disputed' || session.settlementStatus === 'review_pending' || !!session.creditReviewCaseId).length;
     const noShowCount = sessions.filter(session => session.status === 'no-show' && session.noShowType === 'teacher').length;
-    const aiVerified = profile.verification?.status === 'verified';
+    const vStatus = (profile.verification?.status || '').toLowerCase().trim();
+    const aiVerified = vStatus === 'verified';
     const badgeTier = getBadgeTier(completedPaidSessions);
     const eligibleForHumanReview = aiVerified
         && teachSkills.length > 0
-        && completedTeachingSessions >= 5
-        && averageRating >= 4
-        && writtenLearnerFeedbackCount >= 2;
+        && completedTeachingSessions >= 5;
 
     return {
         teacher: {
@@ -970,11 +1104,7 @@ async function buildTeacherReviewSnapshot(uid) {
                 aiVerified,
                 teachSkillsCount: teachSkills.length,
                 sessionsCompleted: completedTeachingSessions,
-                sessionsRequired: 5,
-                averageRating,
-                ratingRequired: 4,
-                writtenFeedbackCount: writtenLearnerFeedbackCount,
-                feedbackRequired: 2
+                sessionsRequired: 5
             }
         },
         recentFeedback: recentFeedback.slice(0, 5)
@@ -983,10 +1113,8 @@ async function buildTeacherReviewSnapshot(uid) {
 
 function getEligibilityErrorMessage(summary) {
     const missing = [];
-    if (!summary.teacherReputation.requirementProgress.aiVerified) missing.push('AI verification');
+    if (!summary.teacherReputation.requirementProgress.aiVerified) missing.push('Basic verification');
     if (summary.teacherReputation.completedTeachingSessions < 5) missing.push('5 completed teaching sessions');
-    if (summary.teacherReputation.averageRating < 4) missing.push('4.0 average rating');
-    if (summary.teacherReputation.writtenLearnerFeedbackCount < 2) missing.push('2 written learner feedbacks');
     return missing.length
         ? `You are not eligible yet. You still need ${missing.join(', ')}.`
         : 'You are not eligible for human verification yet.';
@@ -1319,24 +1447,35 @@ async function syncCompletedSessionEffects(sessionId) {
     const db = getAdminDb();
     const sessionRef = db.collection('sessions').doc(sessionId);
     let teacherUid = null;
+    let learnerUid = null;
     await db.runTransaction(async (tx) => {
         const sessionSnap = await tx.get(sessionRef);
         if (!sessionSnap.exists) return;
-        const session = { id: sessionSnap.id, ...sessionSnap.data() };
+        let session = { id: sessionSnap.id, ...sessionSnap.data() };
         teacherUid = session.teacherUid;
-        if (session.status !== 'completed') return;
-        await applyCompletedSessionRatings(tx, db, sessionRef, session);
+        learnerUid = session.studentUid;
+        if (!isSettledCompletedSession(session)) return;
+        const recoveredRatings = buildRecoveredRatingsPayload(session);
+        if (Object.keys(recoveredRatings.patch).length) {
+            tx.set(sessionRef, recoveredRatings.patch, { merge: true });
+        }
         tx.set(sessionRef, { updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
     });
+    await Promise.all([
+        teacherUid ? syncUserDerivedStats(teacherUid) : Promise.resolve(),
+        learnerUid ? syncUserDerivedStats(learnerUid) : Promise.resolve()
+    ]);
     if (teacherUid) await syncTeacherReputation(teacherUid);
 }
 
 function buildRatingPatch(callerUid, rating, feedback) {
     return {
-        [`ratings.${callerUid}`]: {
-            rating,
-            feedback: feedback || '',
-            ratedAt: admin.firestore.FieldValue.serverTimestamp()
+        ratings: {
+            [callerUid]: {
+                rating,
+                feedback: feedback || '',
+                ratedAt: admin.firestore.FieldValue.serverTimestamp()
+            }
         },
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
     };
@@ -1356,6 +1495,50 @@ function buildOptionalRatingPatch(callerUid, rating, feedback) {
         return {};
     }
     return buildRatingPatch(callerUid, safeRating, feedback);
+}
+
+async function saveLateReviewPatch(db, sessionRef, session, callerUid, rating, feedback) {
+    const existing = session?.ratings?.[callerUid] || null;
+    if (existing) {
+        const existingRating = Number(existing.rating || 0);
+        const existingFeedback = typeof existing.feedback === 'string' ? existing.feedback.trim() : '';
+        if (existingRating > 0 && existingFeedback) {
+            const err = new Error('You already submitted feedback for this session.');
+            err.statusCode = 409;
+            throw err;
+        }
+        const safeFeedback = typeof feedback === 'string' ? feedback.trim() : '';
+        if (!safeFeedback) {
+            const err = new Error('Please add written feedback before submitting.');
+            err.statusCode = 400;
+            throw err;
+        }
+        const ratingToKeep = existingRating > 0 ? existingRating : Number(rating || 0);
+        if (ratingToKeep < 1 || ratingToKeep > 5) {
+            const err = new Error('Rating must be between 1 and 5.');
+            err.statusCode = 400;
+            throw err;
+        }
+        await sessionRef.set({
+            ratings: {
+                [callerUid]: {
+                    rating: ratingToKeep,
+                    feedback: safeFeedback,
+                    ratedAt: existing.ratedAt || admin.firestore.FieldValue.serverTimestamp()
+                }
+            },
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        return;
+    }
+
+    const safeRating = Number(rating || 0);
+    if (safeRating < 1 || safeRating > 5) {
+        const err = new Error('Rating must be between 1 and 5.');
+        err.statusCode = 400;
+        throw err;
+    }
+    await sessionRef.set(buildRatingPatch(callerUid, safeRating, feedback), { merge: true });
 }
 
 function normalizeParticipantActionToOutcome(role, action) {
@@ -1426,7 +1609,7 @@ function getRecommendedSettlement(teacherOutcome, studentOutcome) {
     return 'manual_review';
 }
 
-async function submitTeacherSessionOutcome(sessionId, callerUid, rating, feedback, reportIssue, issueReason) {
+async function submitTeacherSessionOutcome(sessionId, callerUid, rating, feedback, reportIssue, issueReason, allowMissingRating = false) {
     const { db, sessionRef, session } = await getSessionForParticipantOrThrow(sessionId, callerUid);
     if (session.teacherUid !== callerUid) {
         const err = new Error('Only the teacher can use the teacher completion flow.');
@@ -1436,9 +1619,7 @@ async function submitTeacherSessionOutcome(sessionId, callerUid, rating, feedbac
     const callerProfile = await getUserProfileOrThrow(callerUid);
     const settledCompleted = session.status === 'completed' && session.settlementStatus === 'settled';
     if (settledCompleted) {
-        assertCanRateSession(session, callerUid);
-        const ratingPatch = buildRatingPatch(callerUid, rating, feedback);
-        await sessionRef.set(ratingPatch, { merge: true });
+        await saveLateReviewPatch(db, sessionRef, session, callerUid, allowMissingRating ? 0 : rating, feedback);
         await syncCompletedSessionEffects(sessionId);
         await db.collection('notifications').add({
             uid: session.studentUid,
@@ -1462,12 +1643,13 @@ async function submitTeacherSessionOutcome(sessionId, callerUid, rating, feedbac
     }
 
     const teacherOutcome = reportIssue ? 'issue' : 'completed';
+    const teacherIssueRating = reportIssue ? Number(rating || 0) : Number(rating || 0);
     const teacherResponse = buildParticipantResponse(teacherOutcome, {
         submittedByUid: callerUid,
         reasonCode: reportIssue ? issueReason : '',
         note: reportIssue ? (feedback || '') : '',
-        rating: reportIssue ? 0 : rating,
-        feedback: reportIssue ? '' : (feedback || '')
+        rating: teacherIssueRating,
+        feedback: feedback || ''
     });
     const ratingPatch = reportIssue ? {} : buildOptionalRatingPatch(callerUid, rating, feedback);
     const studentResponse = getParticipantResponse(session, 'student');
@@ -1590,7 +1772,7 @@ async function submitTeacherSessionOutcome(sessionId, callerUid, rating, feedbac
     return { ok: true, outcome: 'review_pending', caseId };
 }
 
-async function submitLearnerSessionOutcome(sessionId, callerUid, rating, feedback, reportIssue, issueReason) {
+async function submitLearnerSessionOutcome(sessionId, callerUid, rating, feedback, reportIssue, issueReason, allowMissingRating = false) {
     const { db, sessionRef, session } = await getSessionForParticipantOrThrow(sessionId, callerUid);
     if (session.studentUid !== callerUid) {
         const err = new Error('Only the learner can confirm completion and release payment.');
@@ -1600,9 +1782,7 @@ async function submitLearnerSessionOutcome(sessionId, callerUid, rating, feedbac
     const callerProfile = await getUserProfileOrThrow(callerUid);
     const settledCompleted = session.status === 'completed' && session.settlementStatus === 'settled';
     if (settledCompleted) {
-        assertCanRateSession(session, callerUid);
-        const ratingPatch = buildRatingPatch(callerUid, rating, feedback);
-        await sessionRef.set(ratingPatch, { merge: true });
+        await saveLateReviewPatch(db, sessionRef, session, callerUid, allowMissingRating ? 0 : rating, feedback);
         await syncCompletedSessionEffects(sessionId);
         await db.collection('notifications').add({
             uid: session.teacherUid,
@@ -1626,12 +1806,13 @@ async function submitLearnerSessionOutcome(sessionId, callerUid, rating, feedbac
     }
 
     const learnerOutcome = reportIssue ? 'issue' : 'completed';
+    const learnerIssueRating = reportIssue ? Number(rating || 0) : Number(rating || 0);
     const studentResponse = buildParticipantResponse(learnerOutcome, {
         submittedByUid: callerUid,
         reasonCode: reportIssue ? issueReason : '',
         note: reportIssue ? (feedback || '') : '',
-        rating: reportIssue ? 0 : rating,
-        feedback: reportIssue ? '' : (feedback || '')
+        rating: learnerIssueRating,
+        feedback: feedback || ''
     });
     const ratingPatch = reportIssue ? {} : buildOptionalRatingPatch(callerUid, rating, feedback);
     const teacherResponse = getParticipantResponse(session, 'teacher');
@@ -1757,12 +1938,12 @@ async function submitLearnerSessionOutcome(sessionId, callerUid, rating, feedbac
     return { ok: true, outcome: 'review_pending', caseId };
 }
 
-async function completeSkillSwapSession(sessionId, callerUid, rating, feedback, reportIssue, issueReason) {
+async function completeSkillSwapSession(sessionId, callerUid, rating, feedback, reportIssue, issueReason, allowMissingRating = false) {
     const { session } = await getSessionForParticipantOrThrow(sessionId, callerUid);
     if (session.teacherUid === callerUid) {
-        return submitTeacherSessionOutcome(sessionId, callerUid, rating, feedback, reportIssue, issueReason);
+        return submitTeacherSessionOutcome(sessionId, callerUid, rating, feedback, reportIssue, issueReason, allowMissingRating);
     }
-    return submitLearnerSessionOutcome(sessionId, callerUid, rating, feedback, reportIssue, issueReason);
+    return submitLearnerSessionOutcome(sessionId, callerUid, rating, feedback, reportIssue, issueReason, allowMissingRating);
 }
 
 async function reportSkillSwapNoShow(sessionId, callerUid, whoNoShowed) {
@@ -2029,8 +2210,8 @@ async function cancelSkillSwapSession(sessionId, callerUid) {
             status: 'cancelled',
             settlementStatus: 'settled',
             creditStatus: payoutAmount && refundAmount ? 'split' : 'refunded',
-            teacherAction: callerIsTeacher ? 'teacher_cancelled' : session.teacherAction,
-            studentAction: callerIsTeacher ? session.studentAction : (fullRefund ? 'student_cancelled' : 'late_cancel'),
+            teacherAction: callerIsTeacher ? 'teacher_cancelled' : (session.teacherAction || 'pending'),
+            studentAction: callerIsTeacher ? (session.studentAction || 'pending') : (fullRefund ? 'student_cancelled' : 'late_cancel'),
             applyRatingsOnCompletion: false,
             learnerTransactionType: payoutAmount > 0 ? 'penalty' : 'refund',
             learnerTransactionDescription: payoutAmount > 0
@@ -2065,8 +2246,8 @@ async function cancelSkillSwapSession(sessionId, callerUid) {
         await db.collection('sessions').doc(sessionId).set({
             status: 'cancelled',
             settlementStatus: 'settled',
-            teacherAction: callerIsTeacher ? 'teacher_cancelled' : session.teacherAction,
-            studentAction: callerIsTeacher ? session.studentAction : 'student_cancelled',
+            teacherAction: callerIsTeacher ? 'teacher_cancelled' : (session.teacherAction || 'pending'),
+            studentAction: callerIsTeacher ? (session.studentAction || 'pending') : 'student_cancelled',
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
     }
@@ -2178,8 +2359,8 @@ async function reconcilePendingSettlements(callerUid) {
             status: 'disputed',
             responseDueAt: session.responseDueAt || (session.learnerResponseDueAt || null),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            teacherAction: session.teacherAction,
-            studentAction: session.studentAction,
+            teacherAction: session.teacherAction || 'pending',
+            studentAction: session.studentAction || 'pending',
             teacherResponse: session.teacherResponse || (normalizedTeacherOutcome === 'completed'
                 ? buildParticipantResponse('completed', { submittedByUid: session.teacherUid, bySystem: true })
                 : null),
@@ -3372,10 +3553,11 @@ app.post('/api/sessions/:id/teacher-complete', requireAuth, async (req, res) => 
     try {
         const reportIssue = !!req.body?.reportIssue;
         const rating = Number(req.body?.rating || 0);
-        if (!reportIssue && (rating < 1 || rating > 5)) return res.status(400).json({ error: 'Rating must be between 1 and 5.' });
+        const allowMissingRating = !!req.body?.allowMissingRating;
+        if (!reportIssue && !allowMissingRating && (rating < 1 || rating > 5)) return res.status(400).json({ error: 'Rating must be between 1 and 5.' });
         const feedback = typeof req.body?.feedback === 'string' ? req.body.feedback : '';
         const issueReason = typeof req.body?.issueReason === 'string' ? req.body.issueReason : '';
-        const result = await submitTeacherSessionOutcome(req.params.id, req.user.uid, rating, feedback, reportIssue, issueReason);
+        const result = await submitTeacherSessionOutcome(req.params.id, req.user.uid, rating, feedback, reportIssue, issueReason, allowMissingRating);
         res.json(result);
     } catch (err) {
         console.error('[teacher-complete-session]', err.message);
@@ -3387,10 +3569,11 @@ app.post('/api/sessions/:id/learner-complete', requireAuth, async (req, res) => 
     try {
         const reportIssue = !!req.body?.reportIssue;
         const rating = Number(req.body?.rating || 0);
-        if (!reportIssue && (rating < 1 || rating > 5)) return res.status(400).json({ error: 'Rating must be between 1 and 5.' });
+        const allowMissingRating = !!req.body?.allowMissingRating;
+        if (!reportIssue && !allowMissingRating && (rating < 1 || rating > 5)) return res.status(400).json({ error: 'Rating must be between 1 and 5.' });
         const feedback = typeof req.body?.feedback === 'string' ? req.body.feedback : '';
         const issueReason = typeof req.body?.issueReason === 'string' ? req.body.issueReason : '';
-        const result = await submitLearnerSessionOutcome(req.params.id, req.user.uid, rating, feedback, reportIssue, issueReason);
+        const result = await submitLearnerSessionOutcome(req.params.id, req.user.uid, rating, feedback, reportIssue, issueReason, allowMissingRating);
         res.json(result);
     } catch (err) {
         console.error('[learner-complete-session]', err.message);
@@ -3402,10 +3585,11 @@ app.post('/api/sessions/:id/complete', requireAuth, async (req, res) => {
     try {
         const reportIssue = !!req.body?.reportIssue;
         const rating = Number(req.body?.rating || 0);
-        if (!reportIssue && (rating < 1 || rating > 5)) return res.status(400).json({ error: 'Rating must be between 1 and 5.' });
+        const allowMissingRating = !!req.body?.allowMissingRating;
+        if (!reportIssue && !allowMissingRating && (rating < 1 || rating > 5)) return res.status(400).json({ error: 'Rating must be between 1 and 5.' });
         const feedback = typeof req.body?.feedback === 'string' ? req.body.feedback : '';
         const issueReason = typeof req.body?.issueReason === 'string' ? req.body.issueReason : '';
-        const result = await completeSkillSwapSession(req.params.id, req.user.uid, rating, feedback, reportIssue, issueReason);
+        const result = await completeSkillSwapSession(req.params.id, req.user.uid, rating, feedback, reportIssue, issueReason, allowMissingRating);
         res.json(result);
     } catch (err) {
         console.error('[complete-session]', err.message);
@@ -3645,7 +3829,7 @@ async function resolveCreditReviewCase(caseId, reviewerProfile, payload) {
             creditStatus: 'released',
             teacherAction: 'reviewer_resolved',
             studentAction: 'reviewer_resolved',
-            caseId: null,
+            caseId: caseId,
             applyRatingsOnCompletion: true
         });
     } else if (action === 'refund_full' || action === 'waive_penalty') {
@@ -3657,7 +3841,7 @@ async function resolveCreditReviewCase(caseId, reviewerProfile, payload) {
             creditStatus: 'refunded',
             teacherAction: 'reviewer_resolved',
             studentAction: 'reviewer_resolved',
-            caseId: null,
+            caseId: caseId,
             applyRatingsOnCompletion: false,
             refundDescription: `Reviewer refund for ${caseData.topic || 'session'}`
         });
@@ -3675,7 +3859,7 @@ async function resolveCreditReviewCase(caseId, reviewerProfile, payload) {
             creditStatus: 'split',
             teacherAction: 'reviewer_resolved',
             studentAction: 'reviewer_resolved',
-            caseId: null,
+            caseId: caseId,
             applyRatingsOnCompletion: false,
             learnerTransactionType: 'manual_adjustment',
             learnerTransactionDescription: `Reviewer split settlement for ${caseData.topic || 'session'}`,
@@ -3692,7 +3876,7 @@ async function resolveCreditReviewCase(caseId, reviewerProfile, payload) {
         await sessionRef.set({
             settlementStatus: 'settled',
             status: 'disputed',
-            creditReviewCaseId: null,
+            creditReviewCaseId: caseId,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             teacherAction: 'reviewer_resolved',
             studentAction: 'reviewer_resolved'
@@ -3904,4 +4088,105 @@ app.listen(5000, () => {
     console.log('🚀 SkillSwap Verification Server — port 5000');
     console.log(`🔐 Ownership code: "${OWNERSHIP_CODE}" | Cap without it: ${UNVERIFIED_CAP}`);
     console.log(`🤖 Groq AI: ${process.env.GROQ_API_KEY ? 'Configured ✅' : 'NOT configured ❌'}`);
+});
+
+// --- AI NOTES ROUTES (GROQ) ---
+app.post('/api/generate-notes', async (req, res) => {
+    try {
+        const fetch = (await import('node-fetch')).default;
+        const { prompt } = req.body;
+        if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
+        
+        const groqKey = process.env.GROQ_API_KEY;
+        if (!groqKey) return res.status(500).json({ error: 'Groq API Key not configured on server' });
+
+        const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + groqKey },
+            body: JSON.stringify({
+                model: 'llama-3.3-70b-versatile',
+                messages: [{ role: 'system', content: 'You are an expert AI tutor.' }, { role: 'user', content: prompt }],
+                temperature: 0.3,
+                max_tokens: 2500
+            })
+        });
+        const data = await resp.json();
+        if(data.error) return res.status(500).json({error: data.error.message});
+        
+        res.json({ result: data.choices[0].message.content });
+    } catch (err) {
+        console.error('[generate-notes]', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/verify-notes', async (req, res) => {
+    try {
+        const fetch = (await import('node-fetch')).default;
+        const { topic, notesContent } = req.body;
+        if (!topic || !notesContent) return res.status(400).json({ error: 'Topic and notes content required' });
+
+        const groqKey = process.env.GROQ_API_KEY;
+        if (!groqKey) return res.status(500).json({ error: 'Groq API Key not configured on server' });
+
+        const promptText = `You are an expert educator and fact-checker. Analyze these study notes about "${topic}" and provide a detailed verification report.
+
+STUDY NOTES:
+${notesContent}
+
+Please analyze for:
+1. ACCURACY: Are the facts correct? Point out any errors or misconceptions.
+2. COMPLETENESS: What important concepts are missing?
+3. CLARITY: Is the explanation clear and well-structured?
+4. DEPTH: Is the content appropriate for the level (beginner/intermediate)?
+
+CRITICAL INSTRUCTION ON SCORING: 
+Do NOT automatically give 85% or any fixed number. Calculate the score fairly and dynamically between 0 and 100 based strictly on your evaluation of accuracy, completeness, clarity, and depth combined. An excellent, thorough note might get 95-100, while a mediocre note gets 60-75. Be strict and varied.
+
+Return ONLY a JSON object with this exact structure:
+{
+  "score": number (0-100),
+  "accuracy": { "score": number, "issues": ["..."], "strengths": ["..."] },
+  "completeness": { "score": number, "missing": ["..."], "covered": ["..."] },
+  "clarity": { "score": number, "feedback": "..." },
+  "depth": { "score": number, "assessment": "..." },
+  "summary": "Overall summary",
+  "suggestions": ["..."],
+  "verified_facts": ["..."],
+  "needs_correction": ["..."]
+}`;
+
+        const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + groqKey },
+            body: JSON.stringify({
+                model: 'llama-3.3-70b-versatile',
+                messages: [
+                    { role: 'system', content: 'You are an expert educator and fact-checker. Analyze study materials and return detailed verification reports in valid JSON only. You must provide realistically spread scores (not hardcoded to 85, evaluate thoroughly).' },
+                    { role: 'user', content: promptText }
+                ],
+                temperature: 0.6,
+                max_tokens: 2000
+            })
+        });
+        
+        const data = await resp.json();
+        if(data.error) return res.status(500).json({error: data.error.message});
+        
+        let text = data.choices[0].message.content.replace(/```json/gi, '').replace(/```/g, '').trim();
+        let verification = JSON.parse(text);
+        
+        res.json(verification);
+    } catch(err) {
+        console.error('[verify-notes]', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+const PORT = 5000;
+app.listen(PORT, () => {
+    console.log(`[SkillSwap backend] Server is running on port ${PORT}`);
+    if(!process.env.GROQ_API_KEY) {
+        console.warn(`[WARNING] GROQ_API_KEY is not defined in the environment. AI features will not work.`);
+    }
 });

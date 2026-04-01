@@ -50,6 +50,17 @@
     .textarea { min-height:88px; resize:vertical; }
     .field { display:flex; flex-direction:column; gap:8px; }
     .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .custom-select { position:relative; }
+    .custom-select-trigger { width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px; border-radius:16px; background:rgba(255,255,255,.03); border:1px solid var(--border); color:var(--text); padding:14px 15px; font:inherit; cursor:pointer; text-align:left; }
+    .custom-select-trigger.is-placeholder .custom-select-label { color:var(--muted); }
+    .custom-select-trigger:hover,.custom-select.open .custom-select-trigger { border-color:rgba(124,92,252,.35); box-shadow:0 0 0 3px rgba(124,92,252,.12); }
+    .custom-select-caret { color:var(--muted); font-size:.78rem; transition:transform .2s; }
+    .custom-select.open .custom-select-caret { transform:rotate(180deg); }
+    .custom-select-menu { position:absolute; top:calc(100% + 8px); left:0; right:0; display:none; background:#17152a; border:1px solid rgba(124,92,252,.28); border-radius:16px; box-shadow:0 16px 40px rgba(0,0,0,.35); padding:8px; max-height:220px; overflow-y:auto; z-index:20; }
+    .custom-select.open .custom-select-menu { display:block; }
+    .custom-select-option { width:100%; border:none; background:transparent; color:var(--text); font:inherit; text-align:left; padding:11px 12px; border-radius:10px; cursor:pointer; }
+    .custom-select-option:hover,.custom-select-option:focus { background:rgba(124,92,252,.16); color:#fff; outline:none; }
+    .custom-select-option.active { background:rgba(124,92,252,.24); color:#fff; }
     .review-actions { flex-wrap:wrap; margin-top:12px; }
     .empty { padding:28px; border:1px dashed rgba(255,255,255,.15); border-radius:20px; color:var(--muted); text-align:center; line-height:1.7; }
     .toast { position:fixed; right:22px; bottom:20px; min-width:260px; max-width:360px; background:linear-gradient(135deg,#6d5af7,#4733ce); border:1px solid rgba(255,255,255,.12); color:#fff; border-radius:18px; padding:14px 16px; box-shadow:0 18px 50px rgba(0,0,0,.35); display:none; z-index:30; }
@@ -204,6 +215,35 @@
         .join(' ');
     }
 
+    function getCreditDecisionOptions() {
+      return [
+        { value: 'payout_full', label: 'Full payout to teacher' },
+        { value: 'refund_full', label: 'Full refund to learner' },
+        { value: 'split', label: 'Split credits between both sides' },
+        { value: 'waive_penalty', label: 'Waive penalty and refund learner' },
+        { value: 'close_no_change', label: 'Close with no credit change' }
+      ];
+    }
+
+    function renderCustomSelectHtml(inputAttr, id, options, selectedValue, placeholder) {
+      const selected = (options || []).find(option => option.value === selectedValue);
+      const label = selected ? selected.label : (placeholder || 'Select option...');
+      const triggerClass = selected ? 'custom-select-trigger' : 'custom-select-trigger is-placeholder';
+      return '' +
+        '<input type="hidden" ' + inputAttr + ' value="' + escapeHtml(selectedValue || '') + '">' +
+        '<div class="custom-select" data-custom-select="' + escapeHtml(id) + '">' +
+          '<button class="' + triggerClass + '" type="button" data-select-trigger>' +
+            '<span class="custom-select-label" data-select-label>' + escapeHtml(label) + '</span>' +
+            '<span class="custom-select-caret">▾</span>' +
+          '</button>' +
+          '<div class="custom-select-menu" data-select-menu>' +
+            (options || []).map(option => (
+              '<button type="button" class="custom-select-option' + (option.value === selectedValue ? ' active' : '') + '" data-select-value="' + escapeHtml(option.value) + '">' + escapeHtml(option.label) + '</button>'
+            )).join('') +
+          '</div>' +
+        '</div>';
+    }
+
     function renderParticipantResponse(roleLabel, response) {
       const submittedAt = formatDate(response && response.submittedAt);
       const outcome = response && response.outcome ? response.outcome : 'pending';
@@ -349,10 +389,8 @@
             '</div>' +
             '<div class="section-title">Eligibility Snapshot</div>' +
             '<div class="chips" style="margin-bottom:18px">' +
-              '<span class="chip ' + (eligibility.aiVerified ? 'good' : 'warn') + '">AI Verified: ' + (eligibility.aiVerified ? 'Yes' : 'No') + '</span>' +
+              '<span class="chip ' + (eligibility.aiVerified ? 'good' : 'warn') + '">Basic Verified: ' + (eligibility.aiVerified ? 'Yes' : 'No') + '</span>' +
               '<span class="chip info">Sessions ' + escapeHtml(String(eligibility.sessionsCompleted || 0)) + '/' + escapeHtml(String(eligibility.sessionsRequired || 5)) + '</span>' +
-              '<span class="chip info">Rating ' + escapeHtml(Number(eligibility.averageRating || 0).toFixed(1)) + '/' + escapeHtml(String(eligibility.ratingRequired || 4)) + '</span>' +
-              '<span class="chip info">Feedback ' + escapeHtml(String(eligibility.writtenFeedbackCount || 0)) + '/' + escapeHtml(String(eligibility.feedbackRequired || 2)) + '</span>' +
             '</div>' +
             '<div class="section-title">Recent Learner Feedback</div>' +
             feedbackList +
@@ -417,13 +455,7 @@
               '<div class="form-grid">' +
                 '<div class="field">' +
                   '<label class="field-label">Decision</label>' +
-                  '<select class="select" data-credit-action="' + escapeHtml(item.id) + '">' +
-                    '<option value="payout_full">Full payout to teacher</option>' +
-                    '<option value="refund_full" selected>Full refund to learner</option>' +
-                    '<option value="split">Split credits between both sides</option>' +
-                    '<option value="waive_penalty">Waive penalty and refund learner</option>' +
-                    '<option value="close_no_change">Close with no credit change</option>' +
-                  '</select>' +
+                  renderCustomSelectHtml('data-credit-action="' + escapeHtml(item.id) + '"', 'credit-action-' + item.id, getCreditDecisionOptions(), 'refund_full', 'Select a decision...') +
                 '</div>' +
                 '<div class="field">' +
                   '<label class="field-label">Teacher Amount (for split)</label>' +
@@ -438,6 +470,94 @@
             '</div>' +
           '</div>';
       }).join('');
+    }
+
+    function closeReviewerSelects(exceptRoot) {
+      document.querySelectorAll('.custom-select.open').forEach(root => {
+        if (exceptRoot && root === exceptRoot) return;
+        root.classList.remove('open');
+        const trigger = root.querySelector('[data-select-trigger]');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+      });
+    }
+
+    function bindReviewerSelectDelegation() {
+      if (document.body.dataset.reviewerSelectBound === '1') return;
+      document.body.dataset.reviewerSelectBound = '1';
+
+      document.addEventListener('click', function(event) {
+        const option = event.target.closest('.custom-select-option');
+        if (option) {
+          const root = option.closest('.custom-select');
+          const field = root && root.previousElementSibling;
+          const trigger = root && root.querySelector('[data-select-trigger]');
+          const label = root && root.querySelector('[data-select-label]');
+          if (field) field.value = option.getAttribute('data-select-value') || '';
+          if (label) label.textContent = option.textContent || '';
+          if (trigger) trigger.classList.remove('is-placeholder');
+          if (root) {
+            root.querySelectorAll('.custom-select-option').forEach(item => item.classList.remove('active'));
+            option.classList.add('active');
+            closeReviewerSelects();
+            if (trigger) trigger.focus();
+          }
+          return;
+        }
+
+        const trigger = event.target.closest('[data-select-trigger]');
+        if (!trigger) {
+          closeReviewerSelects();
+          return;
+        }
+
+        const root = trigger.closest('.custom-select');
+        const willOpen = !root.classList.contains('open');
+        closeReviewerSelects(root);
+        root.classList.toggle('open', willOpen);
+        trigger.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+      });
+
+      document.addEventListener('keydown', function(event) {
+        const trigger = event.target.closest('[data-select-trigger]');
+        const option = event.target.closest('.custom-select-option');
+        if (trigger) {
+          const root = trigger.closest('.custom-select');
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            trigger.click();
+          } else if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            if (!root.classList.contains('open')) trigger.click();
+            const first = root.querySelector('.custom-select-option');
+            if (first) first.focus();
+          } else if (event.key === 'Escape') {
+            closeReviewerSelects();
+          }
+        } else if (option) {
+          const root = option.closest('.custom-select');
+          const options = Array.from(root.querySelectorAll('.custom-select-option'));
+          const index = options.indexOf(option);
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            if (options[index + 1]) options[index + 1].focus();
+          } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            if (options[index - 1]) options[index - 1].focus();
+            else {
+              const rootTrigger = root.querySelector('[data-select-trigger]');
+              if (rootTrigger) rootTrigger.focus();
+            }
+          } else if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            option.click();
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            closeReviewerSelects();
+            const rootTrigger = root.querySelector('[data-select-trigger]');
+            if (rootTrigger) rootTrigger.focus();
+          }
+        }
+      });
     }
 
     async function handleHumanDecision(requestId, action) {
@@ -559,6 +679,8 @@
       await signOut(auth);
       window.location.href = 'Registration.html';
     });
+
+    bindReviewerSelectDelegation();
 
     $('topupSubmitBtn').addEventListener('click', handleTopup);
 

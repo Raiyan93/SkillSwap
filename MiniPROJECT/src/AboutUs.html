@@ -1,61 +1,138 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>About Us | SkillSwap</title>
-    <link rel="stylesheet" href="./src/output.css">
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <style>
+        body { font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        
+        .animate-fade-in { animation: fadeIn 0.8s ease-out forwards; }
+        .animate-slide-up { animation: slideUp 0.8s ease-out forwards; opacity: 0; }
+        
+        .delay-100 { animation-delay: 100ms; }
+        .delay-200 { animation-delay: 200ms; }
+        .delay-300 { animation-delay: 300ms; }
+        
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
 </head>
+<body class="bg-gradient-to-br from-indigo-600 via-gray-950 to-blue-500 text-slate-200 min-h-screen flex flex-col relative">
+    
+    <!-- Background atmospheric glow effects -->
+    <div class="fixed top-[10%] left-[-10%] w-[50%] h-[50%] bg-purple-600/20 blur-[120px] rounded-full pointer-events-none z-0"></div>
+    <div class="fixed bottom-[10%] right-[-10%] w-[50%] h-[50%] bg-blue-600/20 blur-[120px] rounded-full pointer-events-none z-0"></div>
 
-<body class="premium-mesh-bg min-h-screen text-slate-800">
-    <header class="w-full px-8 py-6 flex justify-between items-center">
-        <a href="LandingPage.html" class="text-3xl font-bold text-slate-900">Skill<span class="text-blue-600">Swap</span></a>
-        <nav>
-            <ul class="flex gap-6 font-medium">
-                <li><a href="LandingPage.html" class="hover:text-blue-600 transition">Home</a></li>
-                <li><a href="#" class="text-blue-600">About Us</a></li>
+    <!-- Header / Nav -->
+    <header class="fixed top-0 left-0 w-full z-50 px-6 py-4 animate-fade-in">
+        <nav class="max-w-7xl mx-auto bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-8 py-3 flex justify-between items-center shadow-2xl">
+            <a href="LandingPage.html" class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                SkillSwap
+            </a>
+            <ul class="hidden md:flex items-center gap-8 text-white font-medium">
+                <li><a href="LandingPage.html" class="hover:text-blue-400 transition">Home</a></li>
+                <li><a href="AboutUs.html" class="text-blue-400 font-bold transition drop-shadow-md">About Us</a></li>
+                <li><a href="Services.html" class="hover:text-blue-400 transition">Services</a></li>
+                <li><a href="ContactUs.html" class="hover:text-blue-400 transition">Contact Us</a></li>
+                <li>
+                    <a href="Registration.html" class="bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-2 rounded-xl font-bold hover:scale-105 transition-all active:scale-95 shadow-lg shadow-blue-500/20 inline-block">
+                        Sign In
+                    </a>
+                </li>
             </ul>
         </nav>
     </header>
 
-    <main class="container mx-auto px-6 py-16 animate-fade-in">
-        <section class="text-center mb-20">
-            <h1 class="text-5xl font-extrabold text-slate-900 mb-6 tracking-tight">
-                Our Mission: Knowledge is <span class="text-blue-600">Free</span>
-            </h1>
-            <p class="text-xl text-slate-600 max-w-3xl mx-auto leading-relaxed">
-                SkillSwap was born at <span class="font-semibold">SIES Graduate School of Technology</span> with a simple idea: everyone is a master of something and a student of everything else. We've built a platform where your expertise is the only currency you need.
-            </p>
-        </section>
-
-        <section class="flex flex-col md:flex-row items-center gap-12 mb-20">
-            <div class="md:w-1/2 animate-float">
-                <img src="Images/undraw_online-community_3o0l.svg" class="w-full max-w-md mx-auto drop-shadow-2xl" alt="Community">
+    <!-- Main Content -->
+    <main class="flex-grow pt-40 pb-20 px-6 relative z-10">
+        <div class="max-w-7xl mx-auto">
+            
+            <div class="text-center mb-16 animate-slide-up">
+                <span class="px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-sm font-semibold tracking-wide uppercase mb-6 inline-block">The Vision</span>
+                <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">Redefining How The World <span class="bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">Learns Together</span></h1>
+                <p class="text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed">We believe that everyone has something valuable to teach, and something incredible to learn. SkillSwap exists to bridge that gap without monetary friction.</p>
             </div>
-            <div class="md:w-1/2">
-                <h2 class="text-3xl font-bold mb-4 text-slate-900">Why we started SkillSwap</h2>
-                <p class="text-lg text-slate-600 mb-6">
-                    In a world of expensive courses and gatekept knowledge, we believe in peer-to-peer growth. Whether you're a second-year student teaching <strong>Data Structures</strong> or a fitness enthusiast sharing <strong>workout routines</strong>, you're helping build a smarter community.
-                </p>
-                <ul class="space-y-4">
-                    <li class="flex items-center gap-3">
-                        <span class="bg-blue-100 text-blue-600 p-2 rounded-full text-sm">✓</span>
-                        <span>Zero cost, 100% community-driven learning.</span>
-                    </li>
-                    <li class="flex items-center gap-3">
-                        <span class="bg-blue-100 text-blue-600 p-2 rounded-full text-sm">✓</span>
-                        <span>Build your portfolio through teaching others.</span>
-                    </li>
-                </ul>
-            </div>
-        </section>
 
-        <section class="text-center bg-white/50 backdrop-blur-md p-12 rounded-3xl border border-white shadow-xl">
-            <h2 class="text-3xl font-bold mb-6">Ready to share your talent?</h2>
-            <a href="LandingPage.html" class="inline-block bg-blue-600 text-white px-10 py-4 rounded-xl font-bold hover:bg-blue-700 transition transform hover:-translate-y-1">
-                Back to Home
-            </a>
-        </section>
+            <!-- About Section 1 -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center mb-24 animate-slide-up delay-100">
+                <div class="relative">
+                    <div class="aspect-square rounded-[3rem] bg-gradient-to-tr from-blue-500/20 to-purple-500/20 border border-white/10 backdrop-blur-md overflow-hidden p-8 flex items-center justify-center">
+                        <img src="Images/undraw_online-community_3o0l-removebg-preview (1).png" alt="Community Graphic" class="w-full h-auto drop-shadow-2xl hover:scale-105 transition-transform duration-500">
+                    </div>
+                </div>
+                <div>
+                    <h2 class="text-3xl font-bold text-white mb-6">Built For Peer-to-Peer Growth</h2>
+                    <p class="text-slate-300 leading-relaxed mb-6 text-lg">Traditional education platforms are one-sided: you pay for a course, you watch it. SkillSwap fundamentally flips this model. By tokenizing human expertise into 'credits', we've created an ecosystem where your existing skills are the currency to unlock new ones.</p>
+                    <p class="text-slate-300 leading-relaxed text-lg">Whether you are an established software engineer looking to learn conversational Spanish, or a fitness trainer wanting to learn graphic design, our algorithm matches you instantly.</p>
+                </div>
+            </div>
+            
+            <!-- Stats -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6 mb-24 animate-slide-up delay-200">
+                <div class="bg-white/5 border border-white/10 backdrop-blur-sm rounded-3xl p-8 text-center hover:bg-white/10 transition-colors">
+                    <div class="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 mb-2">10k+</div>
+                    <div class="text-sm font-medium text-slate-400 uppercase tracking-wider">Active Users</div>
+                </div>
+                <div class="bg-white/5 border border-white/10 backdrop-blur-sm rounded-3xl p-8 text-center hover:bg-white/10 transition-colors">
+                    <div class="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 mb-2">50k+</div>
+                    <div class="text-sm font-medium text-slate-400 uppercase tracking-wider">Hours Swapped</div>
+                </div>
+                <div class="bg-white/5 border border-white/10 backdrop-blur-sm rounded-3xl p-8 text-center hover:bg-white/10 transition-colors">
+                    <div class="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-orange-400 mb-2">350+</div>
+                    <div class="text-sm font-medium text-slate-400 uppercase tracking-wider">Skill Topics</div>
+                </div>
+                <div class="bg-white/5 border border-white/10 backdrop-blur-sm rounded-3xl p-8 text-center hover:bg-white/10 transition-colors">
+                    <div class="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-blue-400 mb-2">100%</div>
+                    <div class="text-sm font-medium text-slate-400 uppercase tracking-wider">Cash Free</div>
+                </div>
+            </div>
+
+        </div>
     </main>
+
+    <!-- Footer -->
+    <footer class="relative z-10 bg-slate-950/80 backdrop-blur-md border-t border-white/10 text-white py-12 mt-auto">
+      <div class="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-8">
+        <div class="col-span-1 md:col-span-1">
+          <h2 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent mb-2">
+            SkillSwap
+          </h2>
+          <p class="mt-4 text-slate-400 text-sm leading-relaxed">
+            Building digital experiences with a touch of magic. Let's create something extraordinary together.
+          </p>
+        </div>
+        <div>
+          <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-200">Services</h3>
+          <ul class="mt-4 space-y-2 text-slate-400 text-sm">
+            <li><a href="#" class="hover:text-purple-400 transition">Web Development</a></li>
+            <li><a href="#" class="hover:text-purple-400 transition">UI/UX Design</a></li>
+            <li><a href="#" class="hover:text-purple-400 transition">Freelance Solutions</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-200">Connect</h3>
+          <ul class="mt-4 space-y-2 text-slate-400 text-sm">
+            <li><a href="#" class="hover:text-blue-400 transition">LinkedIn</a></li>
+            <li><a href="#" class="hover:text-blue-400 transition">GitHub</a></li>
+            <li><a href="#" class="hover:text-pink-400 transition">Instagram</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-200">Stay Updated</h3>
+          <div class="mt-4 flex">
+            <input type="email" placeholder="Email" class="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-l-md focus:outline-none focus:border-purple-500 text-sm placeholder-slate-500">
+            <button class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-r-md transition text-sm font-medium">
+              Join
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="max-w-7xl mx-auto px-6 mt-12 pt-8 border-t border-white/5 text-center text-slate-500 text-xs">
+        © 2026 SkillSwap. All rights reserved.
+      </div>
+    </footer>
 </body>
 </html>

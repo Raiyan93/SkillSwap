@@ -330,9 +330,6 @@ main{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:110px 24p
         <button class="vtype-btn" id="tab-certlink" onclick="switchVerifyType('certlink')">
           <span class="vtype-icon">🔗</span>Cert Link<br><span style="font-size:.7rem;font-weight:400;color:var(--muted);">Coursera, Google…</span>
         </button>
-        <button class="vtype-btn" id="tab-video" onclick="switchVerifyType('video')">
-          <span class="vtype-icon">🎬</span>YouTube<br><span style="font-size:.7rem;font-weight:400;color:var(--muted);">Tutorial / demo video</span>
-        </button>
       </div>
 
       <!-- Technical Input -->
@@ -408,17 +405,6 @@ main{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:110px 24p
         </div>
       </div>
 
-      <!-- YouTube Input -->
-      <div class="verify-input-section" id="input-video">
-        <div class="field">
-          <label>YouTube Video URL <span style="color:var(--muted);font-weight:400;font-size:.75rem;">— a tutorial or demo showing your skill</span></label>
-          <input type="text" id="youtubeURL" placeholder="https://www.youtube.com/watch?v=abc123  OR  https://youtu.be/abc123" />
-        </div>
-        <div class="notice" style="margin-bottom:16px;">
-          <span class="icon">⚠️</span>
-          <span>The AI analyzes the video <strong>title</strong>, <strong>thumbnail</strong>, and <strong>channel</strong> (it cannot stream the full video). Confidence is capped at 70/100 for this method. Use GitHub or certificates if you want a higher score. Video must be <strong>public</strong>.</span>
-        </div>
-      </div>
 
       <!-- Verify Button -->
       <button class="btn-verify" id="verifyBtn" onclick="verifyWithAI()">
@@ -837,7 +823,7 @@ let _profileFirstName='',_profileLastName='';
 /* ── VERIFICATION TYPE SWITCH — now handles 4 tabs ── */
 window.switchVerifyType=function(type){
   _currentVerifyType=type;
-  ['technical','creative','certlink','video'].forEach(t=>{
+  ['technical','creative','certlink'].forEach(t=>{
     document.getElementById('tab-'+t).classList.toggle('active',t===type);
     document.getElementById('input-'+t).classList.toggle('show',t===type);
   });
@@ -977,11 +963,6 @@ window.verifyWithAI=async function(){
       payload.certLinkUrl=certURL;
       btn.innerHTML='<span class="spinner"></span> Fetching certificate page...';
 
-    }else if(_currentVerifyType==='video'){
-      const ytURL=document.getElementById('youtubeURL').value.trim();
-      if(!ytURL){btn.disabled=false;btn.innerHTML='🤖 Verify My Skills with AI';window.showError&&window.showError('Please enter a YouTube video URL.');return;}
-      payload.youtubeUrl=ytURL;
-      btn.innerHTML='<span class="spinner"></span> Fetching video metadata...';
     }
 
     const response=await fetch('http://localhost:5000/api/verify',{

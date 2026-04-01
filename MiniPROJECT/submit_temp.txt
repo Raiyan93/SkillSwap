@@ -1,0 +1,23 @@
+function submitCompletion() {
+  if (window.submitCompletion && window.submitCompletion !== submitCompletion) return window.submitCompletion();
+  var sessionId = document.getElementById('completeSessionId').value;
+  var feedback = document.getElementById('sessionFeedback').value.trim();
+  var reportIssue = document.getElementById('reportIssueCheck').checked;
+  var issueReason = document.getElementById('issueReason').value;
+
+  if (!sessionId) { showToast('⚠️','Error','No session selected'); return; }
+  if (reportIssue && !issueReason) { showToast('⚠️','Select Reason','Please select an issue reason'); return; }
+
+  var btn = document.querySelector('#completeModal .modal-btn.primary');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processing...';
+
+  try {
+    if (window.completeSession) {
+      await window.completeSession(sessionId, currentRating, feedback, reportIssue, issueReason);
+    }
+    closeModal('completeModal');
+  } catch(err) {
+    showToast('⚠️','Error', err.message || 'Failed to complete session');
+    btn.disabled = false; btn.innerHTML = 'Save Session Outcome';
+  }
+}
