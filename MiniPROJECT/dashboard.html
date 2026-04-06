@@ -378,10 +378,17 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
 .badge-chip.silver{background:linear-gradient(135deg,#374151,#9ca3af);color:#fff;box-shadow:0 2px 6px rgba(156,163,175,.35)}
 .badge-chip.gold{background:linear-gradient(135deg,#b45309,#fbbf24);color:#fff;box-shadow:0 2px 6px rgba(251,191,36,.35)}
 .moderation-banner,.moderation-lock-card{background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.24);border-radius:18px}
-.moderation-banner{display:none;padding:16px 18px;margin-bottom:18px}
-.moderation-banner.probation{display:block;background:rgba(245,158,11,0.1);border-color:rgba(245,158,11,0.28)}
-.moderation-banner strong{display:block;font-size:.92rem;margin-bottom:6px}
-.moderation-banner p{font-size:.82rem;color:var(--text2);line-height:1.65}
+.moderation-banner{display:none;margin-bottom:18px}
+.moderation-banner.show{display:flex;flex-direction:column;gap:12px;background:transparent;border:none;padding:0}
+.moderation-banner-card{padding:18px 20px;border-radius:18px;border:1px solid rgba(248,113,113,0.24);background:rgba(248,113,113,0.08)}
+.moderation-banner-card.warning{background:rgba(248,113,113,0.1);border-color:rgba(248,113,113,0.28)}
+.moderation-banner-card.probation{background:rgba(245,158,11,0.1);border-color:rgba(245,158,11,0.28)}
+.moderation-banner-card strong{display:block;font-size:1.02rem;margin-bottom:8px}
+.moderation-banner-card p{font-size:.86rem;color:var(--text2);line-height:1.72}
+.moderation-banner-meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.moderation-banner-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.moderation-banner-action{padding:9px 15px;border-radius:12px;border:1px solid var(--border2);background:rgba(255,255,255,0.05);color:var(--text);font-size:.8rem;font-weight:700;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;transition:all .2s}
+.moderation-banner-action:hover{border-color:var(--purple);background:rgba(124,92,252,0.12);color:#fff}
 .moderation-lock-card{padding:26px;max-width:880px}
 .moderation-lock-title{font-family:'Inter',sans-serif;font-size:1.5rem;font-weight:800;margin-bottom:10px}
 .moderation-lock-copy{color:var(--text2);font-size:.9rem;line-height:1.7;margin-bottom:16px}
@@ -1265,7 +1272,7 @@ function updateActiveSwapCard(profile, partner, session) {
     setText('activeSwapPartnerName', 'No active partner');
     setText('activeSwapPartnerSkill', 'Connect to start learning');
     var avFallback = document.getElementById('activeSwapPartnerAvatar');
-    if (avFallback) avFallback.textContent = 'ðŸ‘¤';
+    if (avFallback) avFallback.textContent = '‘¤';
     var cdEmpty = document.getElementById('activeSwapCountdown');
     if (cdEmpty) cdEmpty.innerHTML = 'No session scheduled';
     setText('activeSwapTopic', 'Accept a connection to plan your first lesson');
@@ -1299,6 +1306,144 @@ function refreshConnectedUi() {
   window.updateActiveSwapCard(state.profile || null, partner || null, nextSession || null);
 }
 
+function getAcceptedPartnerRoleContextLabel(role) {
+  return role === 'teacher' ? 'Learning From' : 'Teaching';
+}
+
+function getAcceptedPartnerRoleBadgeLabel(role) {
+  return role === 'teacher' ? 'Teacher' : 'Learner';
+}
+
+function normalizePartnerSkillName(skill) {
+  return String(skill || '').trim() || 'General guidance';
+}
+
+function resolveAcceptedPartnerSkill(item) {
+  if (!item) return 'General guidance';
+  var requested = String(item.skillRequested || '').trim();
+  if (requested && lower(requested) !== 'general guidance') return requested;
+  var primary = String(item.primaryTeach || '').trim();
+  if (primary) return primary;
+  var teaches = String(item.teaches || '').split('+').map(function(part) {
+    return String(part || '').trim();
+  }).filter(Boolean);
+  return teaches[0] || requested || 'General guidance';
+}
+
+function buildAcceptedPartnerGroupKey(item) {
+  return [item && item.partnerUid ? item.partnerUid : 'unknown', item && item.role ? item.role : 'peer'].join('::');
+}
+
+function pickPreferredAcceptedPartner(currentBest, nextItem) {
+  if (!currentBest) return nextItem || null;
+  if (!nextItem) return currentBest;
+  var currentPriority = Number(currentBest._priority || 0);
+  var nextPriority = Number(nextItem._priority || 0);
+  if (nextPriority > currentPriority) return nextItem;
+  if (nextPriority < currentPriority) return currentBest;
+  return String(nextItem.requestId || '') < String(currentBest.requestId || '') ? nextItem : currentBest;
+}
+
+function lower(v) {
+  return (v || '').toString().trim().toLowerCase();
+}
+
+function toMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === 'function') return value.toMillis();
+  if (typeof value.toDate === 'function') return value.toDate().getTime();
+  var date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function uniquePartnerSkills(skills) {
+  var seen = Object.create(null);
+  return (skills || []).map(normalizePartnerSkillName).filter(function(skill) {
+    var key = lower(skill);
+    if (seen[key]) return false;
+    seen[key] = true;
+    return true;
+  });
+}
+
+function summarizePartnerSkills(skills) {
+  var safeSkills = uniquePartnerSkills(skills);
+  if (!safeSkills.length) return 'General guidance';
+  if (safeSkills.length <= 3) return safeSkills.join(', ');
+  return safeSkills.slice(0, 3).join(', ') + ' +' + (safeSkills.length - 3) + ' more';
+}
+
+function getAcceptedPartnerGroups(items) {
+  var order = 0;
+  var map = Object.create(null);
+  (items || []).forEach(function(item) {
+    if (!item || !item.partnerUid) return;
+    var key = buildAcceptedPartnerGroupKey(item);
+    if (!map[key]) {
+      map[key] = {
+        groupKey: key,
+        partnerUid: item.partnerUid,
+        partnerName: item.partnerName || 'Partner',
+        partnerEmoji: item.partnerEmoji || '👤',
+        role: item.role || 'teacher',
+        teacherUid: item.teacherUid || null,
+        studentUid: item.studentUid || null,
+        items: [],
+        requestIds: [],
+        skills: [],
+        order: order++,
+        primaryItem: null
+      };
+    }
+    var group = map[key];
+    group.items.push(item);
+    group.requestIds.push(item.requestId);
+    group.primaryItem = pickPreferredAcceptedPartner(group.primaryItem, item);
+    group.skills.push(normalizePartnerSkillName(resolveAcceptedPartnerSkill(item)));
+    if (item.partnerName) group.partnerName = item.partnerName;
+    if (item.partnerEmoji) group.partnerEmoji = item.partnerEmoji;
+    if (!group.teacherUid && item.teacherUid) group.teacherUid = item.teacherUid;
+    if (!group.studentUid && item.studentUid) group.studentUid = item.studentUid;
+  });
+  return Object.keys(map).map(function(key) {
+    var group = map[key];
+    group.skills = uniquePartnerSkills(group.skills);
+    group.skillSummary = summarizePartnerSkills(group.skills);
+    group.defaultRequestId = group.primaryItem ? group.primaryItem.requestId : (group.requestIds[0] || '');
+    group.defaultConnectionId = group.primaryItem ? group.primaryItem.connectionId : null;
+    group.defaultSessionType = group.primaryItem ? group.primaryItem.sessionType : 'credit';
+    group.defaultCredits = group.primaryItem ? getSafeCreditAmount(group.primaryItem) : 0;
+    group.roleContextLabel = getAcceptedPartnerRoleContextLabel(group.role);
+    group.roleBadgeLabel = getAcceptedPartnerRoleBadgeLabel(group.role);
+    group.contactId = 'accepted-group:' + group.groupKey;
+    return group;
+  }).sort(function(a, b) {
+    var priorityDiff = Number((b.primaryItem && b.primaryItem._priority) || 0) - Number((a.primaryItem && a.primaryItem._priority) || 0);
+    if (priorityDiff) return priorityDiff;
+    return a.order - b.order;
+  });
+}
+
+function getAcceptedPartnerGroupByKey(groupKey) {
+  return getAcceptedPartnerGroups(state.acceptedPartners || []).find(function(group) {
+    return group.groupKey === groupKey;
+  }) || null;
+}
+window.getAcceptedPartnerGroupByKey = getAcceptedPartnerGroupByKey;
+
+function getAcceptedPartnerGroupByRequestId(requestId) {
+  return getAcceptedPartnerGroups(state.acceptedPartners || []).find(function(group) {
+    return group.requestIds.indexOf(requestId) !== -1;
+  }) || null;
+}
+window.getAcceptedPartnerGroupByRequestId = getAcceptedPartnerGroupByRequestId;
+
+function getAcceptedPartnerGroupsByPartnerUid(partnerUid) {
+  return getAcceptedPartnerGroups(state.acceptedPartners || []).filter(function(group) {
+    return group.partnerUid === partnerUid;
+  });
+}
+
 function startSessionUiTicker() {
   if (window.__sessionUiTickerStarted) return;
   window.__sessionUiTickerStarted = true;
@@ -1311,18 +1456,19 @@ function startSessionUiTicker() {
 function renderPartnerOptions(users) {
   var select = document.getElementById('sessionPartner');
   if (!select) return;
-  if (!users || !users.length) {
+  var groups = getAcceptedPartnerGroups(users || []);
+  if (!groups.length) {
     select.innerHTML = '<option value="">No accepted partners yet</option>';
     if (window.updateScheduleSubmitState) window.updateScheduleSubmitState();
     return;
   }
-  select.innerHTML = users.map(function(u) {
-    var roleLabel = u.role === 'teacher' ? 'Teacher' : 'Student';
-    var partnerProfile = (state.userMap && u.partnerUid) ? state.userMap[u.partnerUid] : null;
-    var blocked = getPartnerFeatureBlock(partnerProfile, 'canSchedule', u.partnerName);
-    return '<option value="' + escapeHtml(u.requestId) + '">' + escapeHtml(u.partnerName) + ' - ' + roleLabel + ' - ' + escapeHtml(u.skillRequested||'General guidance') + (blocked ? ' - unavailable' : '') + '</option>';
+  select.innerHTML = groups.map(function(group) {
+    var roleLabel = group.role === 'teacher' ? 'Teacher' : 'Student';
+    var partnerProfile = (state.userMap && group.partnerUid) ? state.userMap[group.partnerUid] : null;
+    var blocked = getPartnerFeatureBlock(partnerProfile, 'canSchedule', group.partnerName);
+    return '<option value="' + escapeHtml(group.defaultRequestId) + '">' + escapeHtml(group.partnerName) + ' - ' + roleLabel + ' - ' + escapeHtml(group.skillSummary) + (blocked ? ' - unavailable' : '') + '</option>';
   }).join('');
-  if (users.length === 1) select.value = users[0].requestId;
+  if (groups.length === 1) select.value = groups[0].defaultRequestId;
   if (window.updateScheduleSubmitState) window.updateScheduleSubmitState();
 }
 
@@ -1354,7 +1500,7 @@ function renderIncomingRequests(items) {
 }
 
 function renderAcceptedPartners(items) {
-  var all = items || [];
+  var all = getAcceptedPartnerGroups(items || []);
   var count = document.getElementById('acceptedPartnerCount');
   var learningList = document.getElementById('acceptedLearningFromList');
   var teachingList = document.getElementById('acceptedTeachingList');
@@ -1366,21 +1512,32 @@ function renderAcceptedPartners(items) {
     if (!list.length) {
       return '<div class="request-empty">' + escapeHtml(emptyText) + '</div>';
     }
-    return list.map(function(item) {
-      var creditText = item.sessionType === 'demo'
+    return list.map(function(group) {
+      var item = Object.assign({}, group.primaryItem || group, {
+        skillRequested: group.skillSummary,
+        sessionType: group.defaultSessionType,
+        requestId: group.groupKey
+      });
+      var creditText = group.defaultSessionType === 'demo'
         ? 'Free demo session'
-        : String(getSafeCreditAmount(item)) + ' credits per session';
+        : String(group.defaultCredits) + ' credits per session';
       return '<div class="request-item">' +
-        '<div class="request-avatar">' + escapeHtml(item.partnerEmoji || 'ðŸ‘¤') + '</div>' +
+        '<div class="request-avatar">' + escapeHtml(group.partnerEmoji || '👤') + '</div>' +
         '<div class="request-main">' +
-          '<div class="request-title">' + escapeHtml(item.partnerName || 'Partner') + '</div>' +
+          '<div class="request-title">' + escapeHtml(group.partnerName || 'Partner') + '</div>' +
+          '<div class="pill-row">' +
+            group.skills.map(function(skill) {
+              return '<span class="pill info">' + escapeHtml(skill) + '</span>';
+            }).join('') +
+          '</div>' +
           '<div class="request-meta">' + escapeHtml(item.skillRequested || 'General guidance') + ' Â· ' + escapeHtml(creditText) + '</div>' +
           '<div class="pill-row">' +
             '<span class="pill">' + escapeHtml(item.role === 'teacher' ? 'Teacher' : 'Learner') + '</span>' +
             '<span class="pill info">' + escapeHtml(item.sessionType === 'demo' ? 'Demo' : 'Paid') + '</span>' +
+            '<span class="pill">' + escapeHtml(group.skills.length + ' skill' + (group.skills.length === 1 ? '' : 's')) + '</span>' +
           '</div>' +
           '<div class="request-actions">' +
-            '<button class="mini-btn success" onclick="switchTab(\'messages\',null); if(window.loadConversationById){ window.loadConversationById(\'accepted:' + escapeHtml(item.requestId) + '\'); }">Chat</button>' +
+            '<button class="mini-btn success" onclick="switchTab(\'messages\',null); if(window.loadConversationById){ window.loadConversationById(\'accepted-group:' + escapeHtml(group.groupKey) + '\'); }">Chat</button>' +
             '<button class="mini-btn" style="background:rgba(124,92,252,0.12);color:var(--purple2);border:1px solid rgba(124,92,252,0.25)" onclick="openScheduleModal()">Schedule</button>' +
           '</div>' +
         '</div>' +
@@ -1537,7 +1694,7 @@ openMatchModal = function(encoded) {
   }).join('');
   document.getElementById('matchModalContent').innerHTML =
     '<div style="text-align:center;margin-bottom:24px">' +
-      '<div style="width:70px;height:70px;border-radius:50%;background:linear-gradient(135deg,#7c5cfc,#4facfe);display:flex;align-items:center;justify-content:center;font-size:2rem;margin:0 auto 12px">' + escapeHtml(u.emoji||'ðŸ‘¤') + '</div>' +
+      '<div style="width:70px;height:70px;border-radius:50%;background:linear-gradient(135deg,#7c5cfc,#4facfe);display:flex;align-items:center;justify-content:center;font-size:2rem;margin:0 auto 12px">' + escapeHtml(u.emoji||'‘¤') + '</div>' +
       '<div class="modal-title">' + escapeHtml(u.name) + '</div><div style="color:var(--muted);font-size:.82rem">' + escapeHtml(u.uni||'') + '</div>' +
     '</div>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">' +
@@ -1558,7 +1715,7 @@ openMatchModal = function(encoded) {
       '<div id="matchRequestPricingText" style="font-size:.84rem;color:var(--text2);line-height:1.6">Checking pricing...</div>' +
     '</div>' +
     '<div class="field-m"><label>Message to Teacher</label><textarea id="requestNote" placeholder="Tell the teacher what you want to learn and your current level..."></textarea></div>' +
-    '<button class="modal-btn primary" onclick="sendRequest(\'' + encodeURIComponent(JSON.stringify(u)).replace(/'/g, '%27') + '\')">ðŸ“¨ Send Lesson Request</button>' +
+    '<button class="modal-btn primary" onclick="sendRequest(\'' + encodeURIComponent(JSON.stringify(u)).replace(/'/g, '%27') + '\')"> Send Lesson Request</button>' +
     '<button class="modal-btn secondary" onclick="closeModal(\'matchModal\')" style="margin-top:8px">Maybe Later</button>';
   var requestSkillEl = document.getElementById('requestSkill');
   var requestTypeEl = document.getElementById('requestType');
@@ -1590,10 +1747,10 @@ sendRequest = function(encoded) {
   closeModal('matchModal');
   if (window.ssCreateLessonRequest && u.uid && !u.uid.startsWith('mock-') && !['aarav','priya','dev','ravi','arjun','kavya','ishaan','tanvi','neha'].includes(u.uid)) {
     window.ssCreateLessonRequest(u, { skillRequested:skill, sessionType:type, studentMessage:note, creditsOffered:safeCreditsFrom })
-      .then(function(){ showToast('ðŸ¤','Request Sent!','Lesson request sent to ' + u.name + '.'); })
-      .catch(function(err){ showToast('âš ï¸','Request Failed', err&&err.message?err.message:'Could not send right now.'); });
+      .then(function(){ showToast('Request Sent!','Lesson request sent to ' + u.name + '.'); })
+      .catch(function(err){ showToast('Request Failed', err&&err.message?err.message:'Could not send right now.'); });
   } else {
-    showToast('ðŸ¤','Request Sent!','Lesson request sent to ' + u.name + '. They\'ll be notified when they accept.');
+    showToast('Request Sent!','Lesson request sent to ' + u.name + '. They\'ll be notified when they accept.');
   }
 };
 
@@ -1919,6 +2076,48 @@ function setMessagesEmptyState(isEmpty) {
   }
 }
 
+function getConversationPartnerRole(conversation) {
+  if (!conversation) return '';
+  if (conversation.role) return conversation.role;
+  var myUid = state.currentUser ? state.currentUser.uid : '';
+  if (conversation.teacherUid && conversation.teacherUid === myUid) return 'student';
+  if (conversation.studentUid && conversation.studentUid === myUid) return 'teacher';
+  return '';
+}
+
+function buildConversationContactKey(conversation) {
+  if (!conversation) return '';
+  var role = getConversationPartnerRole(conversation);
+  if (conversation.otherUid && role) return conversation.otherUid + '::' + role;
+  if (conversation.otherUid) return conversation.otherUid + '::legacy';
+  return 'conversation:' + String(conversation.id || '');
+}
+
+function buildMessageSkillSubtitle(role, skills) {
+  var skillSummary = summarizePartnerSkills(skills || []);
+  if (!skillSummary) return 'SkillSwap';
+  return (role === 'teacher' ? 'Learning' : role === 'student' ? 'Teaching' : 'Connected') + ' - ' + skillSummary;
+}
+
+function getAcceptedPartnerGroupFromMessageId(id) {
+  if (!id) return null;
+  var rawId = String(id);
+  if (rawId.indexOf('accepted-group:') === 0) {
+    return getAcceptedPartnerGroupByKey(rawId.replace('accepted-group:', ''));
+  }
+  if (rawId.indexOf('accepted:') === 0) {
+    var requestToken = rawId.replace('accepted:', '');
+    return getAcceptedPartnerGroupByRequestId(requestToken) || getAcceptedPartnerGroupByKey(requestToken);
+  }
+  return null;
+}
+
+function getMessagingContactById(id) {
+  return buildMessagingContacts().find(function(contact) {
+    return contact.id === id;
+  }) || null;
+}
+
 function initMessages() {
   var contacts = buildMessagingContacts();
   renderContactList();
@@ -1935,6 +2134,95 @@ window.initMessages = initMessages;
 function buildMessagingContacts() {
   if (!(window.state && window.state.conversations)) return CONTACTS;
   var conversations = window.state.conversations || [];
+  var acceptedGroups = getAcceptedPartnerGroups(state.acceptedPartners || []);
+  var groupMap = Object.create(null);
+  acceptedGroups.forEach(function(group) {
+    groupMap[group.groupKey] = group;
+  });
+  var contactMap = Object.create(null);
+
+  conversations.forEach(function(conversation) {
+    var matchedGroup = null;
+    var role = getConversationPartnerRole(conversation);
+    if (conversation.otherUid && role) {
+      matchedGroup = groupMap[conversation.otherUid + '::' + role] || null;
+    }
+    if (!matchedGroup && conversation.otherUid) {
+      var possibleGroups = getAcceptedPartnerGroupsByPartnerUid(conversation.otherUid);
+      if (possibleGroups.length === 1) matchedGroup = possibleGroups[0];
+      else if (role) {
+        matchedGroup = possibleGroups.find(function(group) { return group.role === role; }) || null;
+      }
+    }
+    if (!matchedGroup) return;
+    var key = matchedGroup.groupKey;
+    var skills = uniquePartnerSkills((conversation.skills || []).concat(matchedGroup.skills || []));
+    role = role || matchedGroup.role || '';
+    var subtitle = buildMessageSkillSubtitle(role, skills);
+    var existing = contactMap[key];
+    var candidate = {
+      id: conversation.id,
+      key: key,
+      otherUid: conversation.otherUid,
+      name: conversation.name || matchedGroup.partnerName || 'Partner',
+      emoji: conversation.emoji || matchedGroup.partnerEmoji || '👤',
+      preview: subtitle,
+      unread: Number(conversation.unread || 0),
+      online: false,
+      swap: subtitle,
+      role: role,
+      skills: skills,
+      groupKey: matchedGroup.groupKey,
+      lastActivityAt: conversation.lastActivityAt,
+      conversationId: conversation.id,
+      messagePreview: conversation.preview || '',
+      isAcceptedFallback: false
+    };
+    if (!existing || toMillis(candidate.lastActivityAt) > toMillis(existing.lastActivityAt)) {
+      contactMap[key] = candidate;
+    } else {
+      existing.unread = Math.max(existing.unread || 0, candidate.unread || 0);
+      existing.skills = uniquePartnerSkills((existing.skills || []).concat(candidate.skills || []));
+      existing.preview = buildMessageSkillSubtitle(existing.role, existing.skills);
+      existing.swap = existing.preview;
+    }
+  });
+
+  acceptedGroups.forEach(function(group) {
+    if (contactMap[group.groupKey]) {
+      var existing = contactMap[group.groupKey];
+      existing.skills = uniquePartnerSkills((existing.skills || []).concat(group.skills || []));
+      existing.preview = buildMessageSkillSubtitle(existing.role || group.role, existing.skills);
+      existing.swap = existing.preview;
+      if (!existing.name) existing.name = group.partnerName;
+      if (!existing.emoji) existing.emoji = group.partnerEmoji || '👤';
+      return;
+    }
+    contactMap[group.groupKey] = {
+      id: group.contactId,
+      key: group.groupKey,
+      otherUid: group.partnerUid,
+      name: group.partnerName,
+      emoji: group.partnerEmoji || '👤',
+      preview: buildMessageSkillSubtitle(group.role, group.skills),
+      unread: 0,
+      online: false,
+      swap: buildMessageSkillSubtitle(group.role, group.skills),
+      role: group.role,
+      skills: group.skills.slice(),
+      groupKey: group.groupKey,
+      requestId: group.defaultRequestId,
+      isAcceptedFallback: true,
+      lastActivityAt: null
+    };
+  });
+
+  return Object.keys(contactMap).map(function(key) {
+    return contactMap[key];
+  }).sort(function(a, b) {
+    return toMillis(b.lastActivityAt) - toMillis(a.lastActivityAt);
+  });
+  /*
   var connectedUids = new Set(conversations.map(function(c) { return c.otherUid; }).filter(Boolean));
   var acceptedFallbacks = (state.acceptedPartners || []).filter(function(p) {
     return p.partnerUid && !connectedUids.has(p.partnerUid);
@@ -1953,6 +2241,7 @@ function buildMessagingContacts() {
     };
   });
   return conversations.concat(acceptedFallbacks);
+  */
 }
 function renderContactList() {
   var list = document.getElementById('msgContactList'); if (!list) return;
@@ -1982,6 +2271,73 @@ function renderContactList() {
 window.renderContactList = renderContactList;
 
 async function loadConversationById(id) {
+  var contact = getMessagingContactById(id);
+  var firebaseConvo = window.state && window.state.conversations ? window.state.conversations.find(function(c){ return c.id === id; }) : null;
+  var acceptedGroup = !firebaseConvo ? getAcceptedPartnerGroupFromMessageId(id) : (contact && contact.groupKey ? getAcceptedPartnerGroupByKey(contact.groupKey) : null);
+
+  if (firebaseConvo) {
+    setMessagesEmptyState(false);
+    if (window.state) window.state.activeConversation = id;
+    setText('msgHeaderName', (contact && contact.name) || firebaseConvo.name);
+    var headerAvatar = document.getElementById('msgHeaderAvatar');
+    if (headerAvatar) headerAvatar.textContent = (contact && contact.emoji) || firebaseConvo.emoji || '👤';
+    var headerStatus = document.getElementById('msgHeaderStatus');
+    if (headerStatus) {
+      headerStatus.innerHTML = '<span style="width:6px;height:6px;border-radius:50%;background:var(--muted);display:inline-block"></span> ' + escapeHtml((contact && contact.swap) || firebaseConvo.swap || 'SkillSwap');
+    }
+    renderContactList();
+    if (window.updateMessageHeaderAction) window.updateMessageHeaderAction();
+    if (window.subscribeToConversationMessages) window.subscribeToConversationMessages(id);
+    try {
+      var messages = await window.loadMessagesFromFirebase(id);
+      renderMessageBubbles(messages);
+    } catch (e) {
+      console.error('Load messages error:', e);
+    }
+    return;
+  }
+
+  if (acceptedGroup) {
+    setMessagesEmptyState(false);
+    if (window.state) window.state.activeConversation = 'accepted-group:' + acceptedGroup.groupKey;
+    setText('msgHeaderName', acceptedGroup.partnerName);
+    var acceptedAvatar = document.getElementById('msgHeaderAvatar');
+    if (acceptedAvatar) acceptedAvatar.textContent = acceptedGroup.partnerEmoji || '👤';
+    var acceptedStatus = document.getElementById('msgHeaderStatus');
+    if (acceptedStatus) {
+      acceptedStatus.innerHTML = '<span style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block"></span> ' + escapeHtml(buildMessageSkillSubtitle(acceptedGroup.role, acceptedGroup.skills));
+    }
+    renderContactList();
+    if (window.updateMessageHeaderAction) window.updateMessageHeaderAction();
+    renderMessageBubbles([]);
+    try {
+      var conversationId = await getOrCreateConversation(
+        acceptedGroup.partnerUid,
+        acceptedGroup.partnerName,
+        buildMessageSkillSubtitle(acceptedGroup.role, acceptedGroup.skills),
+        {
+          teacherUid: acceptedGroup.teacherUid,
+          studentUid: acceptedGroup.studentUid,
+          skillRequested: acceptedGroup.skills[0] || acceptedGroup.skillSummary
+        }
+      );
+      state.conversations = window.loadConversations ? await window.loadConversations(state.currentUser.uid) : (state.conversations || []);
+      state.activeConversation = conversationId;
+      renderContactList();
+      if (window.updateMessageHeaderAction) window.updateMessageHeaderAction();
+      if (window.subscribeToConversationMessages) window.subscribeToConversationMessages(conversationId);
+      var acceptedMessages = await window.loadMessagesFromFirebase(conversationId);
+      renderMessageBubbles(acceptedMessages);
+    } catch (e2) {
+      console.error('Accepted contact conversation error:', e2);
+    }
+    return;
+  }
+
+  setMessagesEmptyState(true);
+  return;
+
+  /*
   // Check if it's a Firebase conversation
   var firebaseConvo = window.state && window.state.conversations ? window.state.conversations.find(function(c){ return c.id === id; }) : null;
   var acceptedFallback = !firebaseConvo && String(id).indexOf('accepted:') === 0
@@ -2027,6 +2383,7 @@ async function loadConversationById(id) {
   } else {
     setMessagesEmptyState(true);
   }
+  */
 }
 window.loadConversationById = loadConversationById;
 
@@ -2064,11 +2421,27 @@ async function sendMsg() {
   if (window.state) {
     try {
       var activeConversationId = window.state.activeConversation;
+      var acceptedGroup = getAcceptedPartnerGroupFromMessageId(activeConversationId);
+      if (acceptedGroup) {
+        activeConversationId = await getOrCreateConversation(
+          acceptedGroup.partnerUid,
+          acceptedGroup.partnerName,
+          buildMessageSkillSubtitle(acceptedGroup.role, acceptedGroup.skills),
+          {
+            teacherUid: acceptedGroup.teacherUid,
+            studentUid: acceptedGroup.studentUid,
+            skillRequested: acceptedGroup.skills[0] || acceptedGroup.skillSummary
+          }
+        );
+        state.conversations = window.loadConversations ? await window.loadConversations(state.currentUser.uid) : (state.conversations || []);
+        window.state.activeConversation = activeConversationId;
+        renderContactList();
+      }
       if (activeConversationId && String(activeConversationId).indexOf('accepted:') === 0) {
         var acceptedPartner = window.getAcceptedPartnerByRequestId ? window.getAcceptedPartnerByRequestId(String(activeConversationId).replace('accepted:','')) : null;
         if (acceptedPartner) {
           activeConversationId = await getOrCreateConversation(acceptedPartner.partnerUid, acceptedPartner.partnerName, (acceptedPartner.skillRequested || 'SkillSwap') + ' lesson');
-          state.conversations = await loadConversations(state.currentUser.uid);
+          state.conversations = window.loadConversations ? await window.loadConversations(state.currentUser.uid) : (state.conversations || []);
           window.state.activeConversation = activeConversationId;
           renderContactList();
         }
@@ -2538,17 +2911,18 @@ function renderProfile() {
 
   // Partners
   var partnersCard = document.getElementById('profilePartnersCard');
-  var activePartners = (state.acceptedPartners || []).slice(0, 6);
+  var activePartners = getAcceptedPartnerGroups(state.acceptedPartners || []).slice(0, 6);
   if (partnersCard) partnersCard.style.display = activePartners.length ? 'block' : 'none';
   if (activePartners.length) {
-    setHtml('profilePartners', activePartners.map(function(item) {
-      var partner = state.userMap[item.partnerUid] || {};
-      var partnerName = item.partnerName || partner.fullName || partner.firstName || 'Partner';
-      var context = item.role === 'teacher' ? 'Learning from' : 'Teaching';
+    setHtml('profilePartners', activePartners.map(function(group) {
+      var partner = state.userMap[group.partnerUid] || {};
+      var partnerName = group.partnerName || partner.fullName || partner.firstName || 'Partner';
+      var context = group.role === 'teacher' ? 'Learning from' : 'Teaching';
+      var item = { skillRequested: group.skillSummary };
       return '<div style="display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--border2)">' +
         '<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,rgba(124,92,252,.3),rgba(79,172,254,.3));display:flex;align-items:center;justify-content:center;font-size:1.3rem;border:2px solid rgba(124,92,252,.3);overflow:hidden">' + (partner.photoURL ? '<img src="' + escapeHtml(partner.photoURL) + '" style="width:100%;height:100%;object-fit:cover">' : escapeHtml(partner.emoji || '👤')) + '</div>' +
         '<div style="flex:1"><div style="font-weight:700;font-size:.88rem">' + escapeHtml(partnerName) + '</div><div style="font-size:.75rem;color:var(--muted)">' + escapeHtml(context + ' • ' + (item.skillRequested || 'SkillSwap')) + '</div></div>' +
-        '<button onclick="switchTab(\'messages\',null);loadConversationById(\'accepted:' + escapeHtml(item.requestId) + '\')" style="background:rgba(124,92,252,.12);border:1px solid rgba(124,92,252,.25);color:var(--purple2);padding:6px 14px;border-radius:8px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:\'Plus Jakarta Sans\',sans-serif">Chat</button>' +
+        '<button onclick="switchTab(\'messages\',null);loadConversationById(\'accepted-group:' + escapeHtml(group.groupKey) + '\')" style="background:rgba(124,92,252,.12);border:1px solid rgba(124,92,252,.25);color:var(--purple2);padding:6px 14px;border-radius:8px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:\'Plus Jakarta Sans\',sans-serif">Chat</button>' +
       '</div>';
     }).join(''));
   }
@@ -3178,8 +3552,14 @@ function isTerminatedProfile(profile) {
   return getAccountStatus(profile) === 'terminated';
 }
 
+function isProbationExpired(probation) {
+  if (!(probation && probation.active && probation.endsAt)) return false;
+  var endsAt = toJsDate(probation.endsAt);
+  return !!(endsAt && endsAt.getTime() <= Date.now());
+}
+
 function isProbationProfile(profile) {
-  return !!(profile && profile.probation && profile.probation.active);
+  return !!(profile && profile.probation && profile.probation.active && !isProbationExpired(profile.probation));
 }
 
 function getModerationCategoryLabel(category) {
@@ -3219,7 +3599,7 @@ function getModerationReasonText(profile) {
   if (profile.termination) {
     return profile.termination.reason || profile.termination.notes || profile.termination.categoryLabel || '';
   }
-  if (profile.probation) {
+  if (isProbationProfile(profile)) {
     return profile.probation.reason || '';
   }
   return '';
@@ -3291,23 +3671,103 @@ function updateSidebarModerationState(profile) {
   });
 }
 
+function getLatestAccountWarning(profile) {
+  var warnings = profile && Array.isArray(profile.accountWarnings) ? profile.accountWarnings.slice() : [];
+  warnings.sort(function(a, b) {
+    return toMillis(b && b.createdAt) - toMillis(a && a.createdAt);
+  });
+  return warnings[0] || null;
+}
+
+function getWarningSignature(profile) {
+  var warning = getLatestAccountWarning(profile);
+  if (!warning) return '';
+  return [
+    warning.id || '',
+    warning.createdAt || '',
+    warning.category || '',
+    warning.reason || '',
+    warning.notes || ''
+  ].join('::');
+}
+
+function getWarningDismissKey(profile) {
+  var uid = profile && profile.uid ? profile.uid : (state.currentUser ? state.currentUser.uid : 'guest');
+  return 'skillswap-warning-dismissed:' + uid;
+}
+
+function isLatestWarningDismissed(profile) {
+  try {
+    var signature = getWarningSignature(profile);
+    if (!signature || !window.localStorage) return false;
+    return window.localStorage.getItem(getWarningDismissKey(profile)) === signature;
+  } catch (_err) {
+    return false;
+  }
+}
+
+function dismissLatestWarning() {
+  try {
+    var profile = state.profile || null;
+    var signature = getWarningSignature(profile);
+    if (!signature || !window.localStorage) return;
+    window.localStorage.setItem(getWarningDismissKey(profile), signature);
+  } catch (_err) {}
+  renderModerationBanner(state.profile || null);
+}
+window.dismissLatestWarning = dismissLatestWarning;
+
 function renderModerationBanner(profile) {
   var banner = document.getElementById('moderationBanner');
   if (!banner) return;
-  if (!isProbationProfile(profile) || isSuspendedProfile(profile) || isTerminatedProfile(profile)) {
+  if (isSuspendedProfile(profile) || isTerminatedProfile(profile)) {
     banner.className = 'moderation-banner';
     banner.style.display = 'none';
     banner.innerHTML = '';
     return;
   }
-  var restrictions = getProbationRestrictions(profile);
-  var labels = getRestrictionLabels(restrictions);
-  banner.className = 'moderation-banner probation';
-  banner.style.display = 'block';
-  banner.innerHTML = '<strong>Probation Active</strong><p>Your account is active, but some SkillSwap features are temporarily limited while admin probation is in effect.'
-    + (profile.probation && profile.probation.reason ? ' Reason: ' + escapeHtml(profile.probation.reason) + '.' : '')
-    + '</p>'
-    + (labels.length ? '<div class="restriction-list">' + labels.map(function(label){ return '<span class="restriction-chip">' + escapeHtml(label) + '</span>'; }).join('') + '</div>' : '');
+  var cards = [];
+  var latestWarning = getLatestAccountWarning(profile);
+  if (latestWarning && !isLatestWarningDismissed(profile)) {
+    cards.push(
+      '<div class="moderation-banner-card warning">'
+      + '<strong>Account Warning</strong>'
+      + '<p>Please review this warning carefully before continuing on SkillSwap.'
+      + (latestWarning.reason ? ' Reason: ' + escapeHtml(latestWarning.reason) + '.' : '')
+      + (latestWarning.notes ? ' ' + escapeHtml(latestWarning.notes) : '')
+      + '</p>'
+      + '<div class="moderation-banner-meta">'
+      + '<span class="restriction-chip">' + escapeHtml(getModerationCategoryLabel(latestWarning.category)) + '</span>'
+      + '<span class="restriction-chip">' + escapeHtml(latestWarning.createdAt ? new Date(latestWarning.createdAt).toLocaleString() : 'Recently') + '</span>'
+      + '</div>'
+      + '<div class="moderation-banner-actions"><button class="moderation-banner-action" onclick="dismissLatestWarning()">I\'ll keep in mind</button></div>'
+      + '</div>'
+    );
+  }
+  if (isProbationProfile(profile)) {
+    var restrictions = getProbationRestrictions(profile);
+    var labels = getRestrictionLabels(restrictions);
+    var probationEnds = profile && profile.probation && profile.probation.endsAt ? toJsDate(profile.probation.endsAt) : null;
+    cards.push(
+      '<div class="moderation-banner-card probation">'
+      + '<strong>Probation Active</strong>'
+      + '<p>Your account is active, but some SkillSwap features are temporarily limited while admin probation is in effect.'
+      + (profile.probation && profile.probation.reason ? ' Reason: ' + escapeHtml(profile.probation.reason) + '.' : '')
+      + (probationEnds ? ' Probation ends on ' + escapeHtml(probationEnds.toLocaleString()) + '.' : '')
+      + '</p>'
+      + (labels.length ? '<div class="restriction-list">' + labels.map(function(label){ return '<span class="restriction-chip">' + escapeHtml(label) + '</span>'; }).join('') + '</div>' : '')
+      + '</div>'
+    );
+  }
+  if (!cards.length) {
+    banner.className = 'moderation-banner';
+    banner.style.display = 'none';
+    banner.innerHTML = '';
+    return;
+  }
+  banner.className = 'moderation-banner show';
+  banner.style.display = '';
+  banner.innerHTML = cards.join('');
 }
 
 function renderDashboardLockState(profile) {
@@ -3344,7 +3804,6 @@ function renderDashboardLockState(profile) {
 }
 
 // ── UTILS ──────────────────────────────────────────────────────
-const lower = v => (v||'').toString().trim().toLowerCase();
 const toJsDate = v => !v ? null : typeof v.toDate==='function' ? v.toDate() : v instanceof Date ? v : new Date(v);
 const getTeachSkills = user => ((user.skills&&user.skills.toTeach)||[]).map(s=>s.name);
 const getLearnSkills = user => ((user.skills&&user.skills.toLearn)||[]).map(s=>s.name);
@@ -3476,6 +3935,10 @@ function findSessionForPartnerUid(partnerUid) {
 
 function findSessionForConversation(activeConversationId) {
   if (!activeConversationId) return null;
+  var acceptedGroup = getAcceptedPartnerGroupFromMessageId(activeConversationId);
+  if (acceptedGroup) {
+    return findSessionForPartnerUid(acceptedGroup.partnerUid);
+  }
   if (String(activeConversationId).indexOf('accepted:') === 0) {
     var accepted = getAcceptedPartnerByRequestId(String(activeConversationId).replace('accepted:',''));
     return accepted ? findSessionForPartnerUid(accepted.partnerUid) : null;
@@ -4291,8 +4754,42 @@ async function loadTransactions(uid, limitCount = 20) {
 }
 
 // ── CONVERSATIONS & MESSAGES ───────────────────────────────────
+function buildConversationRecord(itemId, data, uid) {
+  const d = data || {};
+  const participants = Array.isArray(d.participants) ? d.participants : [];
+  const otherUid = participants.find(function(p) { return p !== uid; }) || d.otherUid || '';
+  const otherName = (d.participantNames && otherUid ? d.participantNames[otherUid] : '') || 'User';
+  const role = d.teacherUid === uid ? 'student' : (d.studentUid === uid ? 'teacher' : '');
+  const skills = uniquePartnerSkills((Array.isArray(d.skills) ? d.skills : []).concat(d.primarySkill ? [d.primarySkill] : []));
+  return {
+    id: itemId,
+    otherUid: otherUid,
+    name: otherName,
+    emoji: '👤',
+    preview: d.lastMessage?.text || 'No messages yet',
+    unread: d.unreadCounts?.[uid] || 0,
+    online: false,
+    swap: d.swapContext || 'SkillSwap',
+    lastActivityAt: d.lastActivityAt,
+    teacherUid: d.teacherUid || null,
+    studentUid: d.studentUid || null,
+    role: role,
+    skills: skills
+  };
+}
+
 async function loadConversations(uid) {
   try {
+    const liveSnap = await getDocs(query(collection(db,'conversations'),where('participants','array-contains',uid)));
+    const normalizedConversations = [];
+    liveSnap.forEach(item => {
+      normalizedConversations.push(buildConversationRecord(item.id, item.data(), uid));
+    });
+    normalizedConversations.sort(function(a, b) {
+      const ta = toJsDate(a.lastActivityAt); const tb = toJsDate(b.lastActivityAt);
+      return (tb ? tb.getTime() : 0) - (ta ? ta.getTime() : 0);
+    });
+    return normalizedConversations;
     const snap = await getDocs(query(collection(db,'conversations'),where('participants','array-contains',uid)));
     const conversations = [];
     snap.forEach(item => {
@@ -4376,9 +4873,19 @@ async function sendMessageToFirebase(conversationId, text) {
   });
 }
 
-async function getOrCreateConversation(otherUid, otherName, swapContext) {
+async function getOrCreateConversation(otherUid, otherName, swapContext, options) {
   if (!state.currentUser || !state.profile) throw new Error('Not authenticated');
-  const existing = state.conversations.find(c => c.otherUid === otherUid);
+  const normalizedOptions = options || {};
+  const teacherUid = normalizedOptions.teacherUid || null;
+  const studentUid = normalizedOptions.studentUid || null;
+  const skillRequested = normalizedOptions.skillRequested || '';
+  const existing = state.conversations.find(function(c) {
+    if (c.otherUid !== otherUid) return false;
+    if (teacherUid && studentUid) {
+      return c.teacherUid === teacherUid && c.studentUid === studentUid;
+    }
+    return !c.teacherUid || !c.studentUid;
+  });
   if (existing) return existing.id;
 
   const myName = state.profile.fullName || state.profile.firstName || 'User';
@@ -4386,6 +4893,10 @@ async function getOrCreateConversation(otherUid, otherName, swapContext) {
     participants: [state.currentUser.uid, otherUid],
     participantNames: { [state.currentUser.uid]: myName, [otherUid]: otherName },
     swapContext: swapContext || 'SkillSwap',
+    teacherUid: teacherUid,
+    studentUid: studentUid,
+    primarySkill: skillRequested || null,
+    skills: skillRequested ? [skillRequested] : [],
     lastMessage: null,
     lastActivityAt: serverTimestamp(),
     createdAt: serverTimestamp(),
@@ -4394,6 +4905,7 @@ async function getOrCreateConversation(otherUid, otherName, swapContext) {
   return ref.id;
 }
 window.getOrCreateConversation = getOrCreateConversation;
+window.loadConversations = loadConversations;
 window.sendMessageToFirebase = sendMessageToFirebase;
 window.loadMessagesFromFirebase = loadMessages;
 window.subscribeToConversationMessages = subscribeToConversationMessages;
@@ -5575,6 +6087,22 @@ function setupRealtimeListeners(uid) {
   const unsubConversations = onSnapshot(
     query(collection(db,'conversations'),where('participants','array-contains',uid)),
     (snap) => {
+      const normalizedConversations = [];
+      snap.forEach(item => {
+        normalizedConversations.push(buildConversationRecord(item.id, item.data(), uid));
+      });
+      normalizedConversations.sort(function(a, b) {
+        const ta = toJsDate(a.lastActivityAt); const tb = toJsDate(b.lastActivityAt);
+        return (tb ? tb.getTime() : 0) - (ta ? ta.getTime() : 0);
+      });
+      state.conversations = normalizedConversations;
+      if (state.activeConversation && !buildMessagingContacts().some(function(c){ return c.id === state.activeConversation; })) {
+        var nextContacts = buildMessagingContacts();
+        state.activeConversation = nextContacts[0] ? nextContacts[0].id : null;
+      }
+      if(window.renderContactList) window.renderContactList();
+      return;
+      /*
       const conversations = [];
       snap.forEach(item => {
         const d = item.data();
@@ -5594,6 +6122,7 @@ function setupRealtimeListeners(uid) {
       if (state.activeConversation && !conversations.some(function(c){ return c.id === state.activeConversation; })) {
         state.activeConversation = conversations[0] ? conversations[0].id : null;
       }
+      */
       if(window.renderContactList) window.renderContactList();
     }
   );
@@ -5798,7 +6327,11 @@ window.acceptLessonRequest = async function(requestId) {
 
     const sideEffects = await Promise.allSettled([
       updateDoc(doc(db,'lessonRequests',requestId),{ status:'accepted', respondedAt:serverTimestamp() }),
-      getOrCreateConversation(req.studentUid, req.studentName, (req.skillRequested||'SkillSwap') + ' lesson'),
+      getOrCreateConversation(req.studentUid, req.studentName, (req.skillRequested||'SkillSwap') + ' lesson', {
+        teacherUid: req.teacherUid,
+        studentUid: req.studentUid,
+        skillRequested: req.skillRequested || 'SkillSwap'
+      }),
       addDoc(collection(db,'notifications'),{
         uid: req.studentUid, type:'request-status', title:'Request Accepted',
         message: (state.profile.firstName||'Your teacher')+' accepted your request for '+req.skillRequested+'. You can now chat and schedule your session.',

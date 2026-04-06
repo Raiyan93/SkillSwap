@@ -370,7 +370,8 @@ async function getUserProfileOrThrow(uid) {
         err.statusCode = 404;
         throw err;
     }
-    return { uid: snap.id, ...snap.data() };
+    const profile = { uid: snap.id, ...snap.data() };
+    return clearExpiredProbationIfNeeded(uid, profile);
 }
 
 async function requireReviewer(req, res, next) {
@@ -418,6 +419,7 @@ const DEFAULT_PROBATION_RESTRICTIONS = {
     canSessionAct: true,
     canRequestVerification: true
 };
+const DEFAULT_PROBATION_DURATION_DAYS = 7;
 
 function sanitizePlainText(value, maxLen = 500) {
     return typeof value === 'string' ? value.trim().slice(0, maxLen) : '';
@@ -535,6 +537,49 @@ async function setUserModerationState(targetUid, patch) {
         ...patch,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
+}
+
+function isProbationExpired(probation) {
+    if (!(probation && probation.active && probation.endsAt)) return false;
+    return toMillis(probation.endsAt) > 0 && toMillis(probation.endsAt) <= Date.now();
+}
+
+function buildClearedProbation(probation, actorUid, actorName) {
+    return {
+        active: false,
+        reason: '',
+        restrictions: { ...DEFAULT_PROBATION_RESTRICTIONS },
+        startedAt: probation?.startedAt || null,
+        endsAt: probation?.endsAt || null,
+        clearedAt: new Date().toISOString(),
+        actorUid: actorUid || '',
+        actorName: actorName || ''
+    };
+}
+
+async function clearExpiredProbationIfNeeded(uid, profile) {
+    if (!profile || !isProbationExpired(profile.probation)) return profile;
+    const clearedProbation = buildClearedProbation(profile.probation, 'system', 'System');
+    await setUserModerationState(uid, { probation: clearedProbation });
+    await appendAdminAuditLog(uid, {
+        action: 'probation_auto_cleared',
+        category: sanitizeModerationCategory(profile.suspension?.category),
+        reason: 'Probation automatically expired.',
+        notes: 'Probation access restrictions were removed automatically after the expiry window elapsed.',
+        previousStatus: profile.accountStatus || 'active',
+        nextStatus: profile.accountStatus || 'active',
+        actorUid: 'system',
+        actorName: 'System',
+        targetName: getDisplayName(profile, profile.email || uid),
+        metadata: { previousProbation: profile.probation || null, probation: clearedProbation }
+    }).catch(() => null);
+    await createNotificationDirect({
+        uid,
+        type: 'probation-cleared',
+        title: 'Probation Ended',
+        message: 'Your probation period has ended automatically and full SkillSwap access is restored.'
+    }).catch(() => null);
+    return { ...profile, probation: clearedProbation };
 }
 
 function getModerationRestrictionSummary(probation) {
@@ -5393,11 +5438,16 @@ async function resolveRecoveryAppeal(appealId, adminProfile, action, body = {}) 
     const reviewNotes = sanitizePlainText(body.reviewNotes, 500);
     if (action === 'approve') {
         const restrictions = sanitizeProbationRestrictions(body.restrictions);
+        const durationDays = Number(body.durationDays || DEFAULT_PROBATION_DURATION_DAYS) > 0
+            ? Number(body.durationDays || DEFAULT_PROBATION_DURATION_DAYS)
+            : DEFAULT_PROBATION_DURATION_DAYS;
+        const probationEndsAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
         const probation = {
             active: true,
             reason: decisionReason || 'Account restored under probation after suspension appeal approval.',
             restrictions,
             startedAt: new Date().toISOString(),
+            endsAt: probationEndsAt,
             clearedAt: null,
             actorUid: adminProfile.uid,
             actorName
@@ -5433,7 +5483,7 @@ async function resolveRecoveryAppeal(appealId, adminProfile, action, body = {}) 
             uid: appeal.uid,
             type: 'account-reactivated',
             title: 'Appeal Approved',
-            message: `Your account is active again under probation.${decisionReason ? ` ${decisionReason}` : ''}`
+            message: `Your account is active again under probation until ${new Date(probationEndsAt).toLocaleString()}.${decisionReason ? ` ${decisionReason}` : ''}`
         });
         return { ok: true, status: 'approved', probation };
     }
@@ -5499,15 +5549,11 @@ app.post('/api/admin/users/:uid/clear-probation', requireAuth, requireAdmin, asy
         const decisionReason = sanitizePlainText(req.body?.decisionReason, 240);
         const reviewNotes = sanitizePlainText(req.body?.reviewNotes, 500);
         await setUserModerationState(req.params.uid, {
-            probation: {
-                active: false,
-                reason: '',
-                restrictions: { ...DEFAULT_PROBATION_RESTRICTIONS },
-                startedAt: user.probation?.startedAt || null,
-                clearedAt: new Date().toISOString(),
-                actorUid: req.adminProfile.uid,
-                actorName: getDisplayName(req.adminProfile, 'Admin')
-            }
+            probation: buildClearedProbation(
+                user.probation || null,
+                req.adminProfile.uid,
+                getDisplayName(req.adminProfile, 'Admin')
+            )
         });
         await appendAdminAuditLog(req.params.uid, {
             action: 'probation_cleared',
