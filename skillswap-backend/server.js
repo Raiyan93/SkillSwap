@@ -16,9 +16,11 @@ const cors    = require('cors');
 const axios   = require('axios');
 const crypto  = require('crypto');
 const fs      = require('fs');
+const path    = require('path');
 const admin   = require('firebase-admin');
 const { google } = require('googleapis');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const skillPricing = require(path.join(__dirname, '..', 'MiniPROJECT', 'skill-pricing.js'));
 
 const app = express();
 
@@ -37,7 +39,7 @@ app.use(cors({
         if (ALLOWED_ORIGINS.some(o => origin.startsWith(o))) return cb(null, true);
         cb(new Error(`CORS blocked: ${origin}`));
     },
-    methods: ['GET', 'POST'],
+    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json({ limit: '2mb' }));
@@ -495,8 +497,11 @@ async function buildUserStatsSnapshot(uid, profile = null) {
 
     let sessionsCompleted = 0;
     let sessionsTaught = 0;
-    let totalRatings = 0;
-    let ratingTotal = 0;
+    let paidSessionsTaught = 0;
+    let teacherTotalRatings = 0;
+    let teacherRatingTotal = 0;
+    let learnerTotalRatings = 0;
+    let learnerRatingTotal = 0;
 
     sessionMap.forEach((session) => {
         if (!isSettledCompletedSession(session)) return;
@@ -505,23 +510,38 @@ async function buildUserStatsSnapshot(uid, profile = null) {
         }
         if (session.teacherUid === uid) {
             sessionsTaught += 1;
+            if (isPaidSession(session)) paidSessionsTaught += 1;
         }
-        const counterpartUid = session.teacherUid === uid
-            ? session.studentUid
-            : (session.studentUid === uid ? session.teacherUid : null);
-        const receivedRating = getCanonicalOrDerivedRatingEntry(session, counterpartUid);
-        const ratingValue = Number(receivedRating?.rating || 0);
-        if (ratingValue > 0) {
-            totalRatings += 1;
-            ratingTotal += ratingValue;
+        if (session.teacherUid === uid) {
+            const teacherRatingEntry = getCanonicalOrDerivedRatingEntry(session, session.studentUid);
+            const teacherRatingValue = Number(teacherRatingEntry?.rating || 0);
+            if (teacherRatingValue > 0) {
+                teacherTotalRatings += 1;
+                teacherRatingTotal += teacherRatingValue;
+            }
+        }
+        if (session.studentUid === uid) {
+            const learnerRatingEntry = getCanonicalOrDerivedRatingEntry(session, session.teacherUid);
+            const learnerRatingValue = Number(learnerRatingEntry?.rating || 0);
+            if (learnerRatingValue > 0) {
+                learnerTotalRatings += 1;
+                learnerRatingTotal += learnerRatingValue;
+            }
         }
     });
 
+    const teacherAverageRating = teacherTotalRatings ? teacherRatingTotal / teacherTotalRatings : Number(profile?.stats?.teacherAverageRating || 0);
+    const learnerAverageRating = learnerTotalRatings ? learnerRatingTotal / learnerTotalRatings : Number(profile?.stats?.learnerAverageRating || 0);
     return {
-        averageRating: totalRatings ? ratingTotal / totalRatings : Number(profile?.stats?.averageRating || 0),
-        totalRatings,
+        averageRating: teacherAverageRating || learnerAverageRating || Number(profile?.stats?.averageRating || 0),
+        totalRatings: teacherTotalRatings,
+        teacherAverageRating,
+        teacherTotalRatings,
+        learnerAverageRating,
+        learnerTotalRatings,
         sessionsCompleted,
-        sessionsTaught
+        sessionsTaught,
+        paidSessionsTaught
     };
 }
 
@@ -544,28 +564,29 @@ function getSessionCreditAmount(session) {
     const explicit = Number(session?.creditsAgreed || 0);
     if (explicit > 0) return explicit;
     if (session?.sessionType === 'demo') return 0;
-    return Math.max(0, Math.round(((Number(session?.durationMinutes || 60)) / 60) * 20));
+    return skillPricing.getFallbackCredits('intermediate');
 }
 
 function getFallbackCreditByLevel(level) {
-    const normalized = String(level || '').trim().toLowerCase();
-    if (normalized === 'expert') return 44;
-    if (normalized === 'beginner') return 20;
-    return 30;
+    return skillPricing.getFallbackCredits(level);
 }
 
 function sanitizeSkillCreditValue(rawCredits, fallbackLevel) {
     const parsed = Number(rawCredits || 0);
     if (parsed > 0 && parsed <= 100) return Math.round(parsed);
-    return getFallbackCreditByLevel(fallbackLevel);
+    return skillPricing.getCredits('', fallbackLevel);
 }
 
 function getSkillCreditFromProfile(profile, skillRequested) {
     const teachEntries = Array.isArray(profile?.skills?.toTeach) ? profile.skills.toTeach : [];
-    if (!teachEntries.length) return 30;
-    const normalizedSkill = String(skillRequested || '').trim().toLowerCase();
-    const matched = teachEntries.find(entry => String(entry?.name || '').trim().toLowerCase() === normalizedSkill) || teachEntries[0];
-    return sanitizeSkillCreditValue(matched?.credits, matched?.level);
+    if (!teachEntries.length) return skillPricing.getFallbackCredits('intermediate');
+    const targetKey = skillPricing.resolveSkillKey(skillRequested || '');
+    const matched = teachEntries.find(entry => skillPricing.resolveSkillKey(entry?.name || '') === targetKey)
+        || teachEntries.find(entry => String(entry?.name || '').trim().toLowerCase() === String(skillRequested || '').trim().toLowerCase());
+    if (matched) {
+        return skillPricing.getCredits(matched?.name || skillRequested || '', matched?.level || 'intermediate');
+    }
+    return skillPricing.getCredits(skillRequested || '', 'intermediate');
 }
 
 function normalizeAcceptedConnectionCredits(connection, teacherProfile) {
@@ -573,6 +594,244 @@ function normalizeAcceptedConnectionCredits(connection, teacherProfile) {
     const rawCredits = Number(connection?.creditsOffered || 0);
     if (rawCredits > 0 && rawCredits <= 100) return Math.round(rawCredits);
     return getSkillCreditFromProfile(teacherProfile, connection?.skillRequested);
+}
+
+const ROADMAP_LEVEL_LABELS = {
+    beginner: 'Beginner',
+    intermediate: 'Intermediate',
+    advanced: 'Advanced'
+};
+
+function normalizeRoadmapLevel(level) {
+    const value = String(level || '').trim().toLowerCase();
+    if (!value) return null;
+    if (['beginner', 'complete beginner', 'foundational', 'foundation'].includes(value)) return 'beginner';
+    if (['intermediate', 'inter'].includes(value)) return 'intermediate';
+    if (['advanced', 'adv'].includes(value)) return 'advanced';
+    return null;
+}
+
+function formatRoadmapLevel(levelKey) {
+    return ROADMAP_LEVEL_LABELS[levelKey] || ROADMAP_LEVEL_LABELS.beginner;
+}
+
+function getRoadmapSkillKey(skill) {
+    return skillPricing.resolveSkillKey(skill || '')
+        || String(skill || 'skill').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+        || 'skill';
+}
+
+function getRoadmapSkillTitle(skill) {
+    return String(skill || 'Skill')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getRoadmapCategory(skill) {
+    const value = String(skill || '').toLowerCase();
+    if (/(python|javascript|typescript|java|react|node|html|css|sql|c\+\+|go|rust|php|django|flask)/.test(value)) return 'programming';
+    if (/(figma|design|photoshop|illustrator|ui|ux|blender|animation)/.test(value)) return 'design';
+    if (/(english|french|spanish|german|japanese|hindi|language|speaking|grammar)/.test(value)) return 'language';
+    if (/(data|machine learning|ml|ai|analytics|statistics)/.test(value)) return 'data';
+    return 'general';
+}
+
+function buildFallbackRoadmap(skill, levelKey) {
+    const skillTitle = getRoadmapSkillTitle(skill);
+    const category = getRoadmapCategory(skillTitle);
+    const templates = {
+        programming: {
+            beginner: {
+                weeks: ['Set up tools and environment', 'Learn core syntax and data types', 'Practice control flow and functions', 'Work with files, markup, or APIs', 'Build one guided mini project', 'Ship a simple independent project'],
+                syllabus: ['Tooling and environment basics', skillTitle + ' syntax essentials', 'Core problem-solving patterns', 'Debugging common mistakes', 'Mini project planning', 'Project presentation and next steps']
+            },
+            intermediate: {
+                weeks: ['Review advanced fundamentals', 'Design cleaner project structure', 'Use testing and debugging workflows', 'Optimize performance and maintainability', 'Build a capstone project', 'Prepare for advanced specialization'],
+                syllabus: ['Architecture choices in ' + skillTitle, 'Testing and debugging strategy', 'Performance and optimization', 'Code quality and maintainability', 'Capstone planning and delivery', 'Next specialization paths']
+            },
+            advanced: {
+                weeks: ['Design production-grade architecture', 'Master advanced tooling and automation', 'Apply testing, profiling, and observability', 'Handle scale, security, and edge cases', 'Ship an advanced capstone with deployment', 'Prepare for expert specialization or interviews'],
+                syllabus: ['Production architecture for ' + skillTitle, 'Advanced automation and workflows', 'Profiling and deep debugging', 'Security and reliability patterns', 'Deployment and scale considerations', 'Senior-level capstone review']
+            }
+        },
+        design: {
+            beginner: {
+                weeks: ['Learn the interface and design workflow', 'Study typography, color, and spacing', 'Practice layout and hierarchy', 'Create simple reusable components', 'Rebuild an existing screen', 'Design one full beginner project'],
+                syllabus: ['Design tool fundamentals', 'Visual hierarchy basics', 'Color and typography practice', 'Component thinking', 'Redesign exercise', 'Portfolio presentation']
+            },
+            intermediate: {
+                weeks: ['Design with systems thinking', 'Handle complex user journeys', 'Improve accessibility and consistency', 'Prototype advanced interactions', 'Build a capstone case study', 'Prepare for interviews or client delivery'],
+                syllabus: ['Design system structure', 'Accessibility reviews', 'Advanced prototyping', 'Stakeholder communication', 'Capstone delivery', 'Portfolio and interview refinement']
+            },
+            advanced: {
+                weeks: ['Build robust design systems', 'Solve multi-surface user journeys', 'Lead accessibility and consistency reviews', 'Prototype nuanced product interactions', 'Run a senior-level case study', 'Prepare for design leadership or client delivery'],
+                syllabus: ['Design system governance', 'Complex product flows', 'Accessibility at scale', 'Advanced prototyping systems', 'Stakeholder alignment and critique', 'Senior portfolio case study']
+            }
+        },
+        language: {
+            beginner: {
+                weeks: ['Build your core vocabulary base', 'Practice pronunciation and listening', 'Learn essential grammar structures', 'Use the language in short conversations', 'Write simple personal responses', 'Hold a beginner conversation confidently'],
+                syllabus: ['Vocabulary starter pack', 'Pronunciation drills', 'Essential grammar patterns', 'Listening practice', 'Speaking prompts', 'Simple writing tasks']
+            },
+            intermediate: {
+                weeks: ['Strengthen fluency under pressure', 'Expand vocabulary by theme', 'Improve advanced grammar accuracy', 'Discuss opinions and explain ideas', 'Practice real-world speaking scenarios', 'Prepare for long-form conversation or exams'],
+                syllabus: ['Fluency practice', 'Advanced vocabulary growth', 'Accuracy and correction', 'Opinion speaking', 'Listening to native-speed content', 'Exam or conversation prep']
+            },
+            advanced: {
+                weeks: ['Speak with near-native fluency goals', 'Master nuance, idioms, and tone', 'Debate and explain complex topics', 'Analyze advanced written and spoken content', 'Practice professional or academic scenarios', 'Prepare for certification or real-world mastery'],
+                syllabus: ['Nuance and idiomatic usage', 'Advanced listening comprehension', 'Formal and informal tone control', 'Debate and discussion skills', 'Professional or academic communication', 'High-level fluency review']
+            }
+        },
+        data: {
+            beginner: {
+                weeks: ['Set up your data workflow', 'Understand datasets and basic analysis', 'Learn core formulas or syntax', 'Create first visualizations', 'Run one guided analysis project', 'Present your findings clearly'],
+                syllabus: ['Data workflow basics', 'Core analysis concepts', 'Cleaning and preparation', 'Simple visualization', 'Guided analysis project', 'Insight communication']
+            },
+            intermediate: {
+                weeks: ['Review advanced analysis concepts', 'Build a stronger workflow', 'Use validation and testing', 'Optimize dashboards or models', 'Deliver a capstone project', 'Prepare for specialization or interviews'],
+                syllabus: ['Advanced analytics workflow', 'Validation and testing', 'Model or dashboard optimization', 'Capstone delivery', 'Insight communication', 'Interview-ready project review']
+            },
+            advanced: {
+                weeks: ['Architect end-to-end analysis workflows', 'Handle large-scale or messy datasets', 'Validate advanced models and assumptions', 'Optimize dashboards, models, or pipelines', 'Deliver an advanced capstone with business impact', 'Prepare for senior analytics or ML specialization'],
+                syllabus: ['End-to-end analytics systems', 'Large-scale data handling', 'Advanced validation strategies', 'Pipeline and dashboard optimization', 'Business-impact storytelling', 'Senior-level capstone review']
+            }
+        },
+        general: {
+            beginner: {
+                weeks: ['Understand the basics', 'Practice core concepts', 'Apply them with guidance', 'Build confidence through repetition', 'Create one small project', 'Review and plan the next step'],
+                syllabus: ['Core fundamentals', 'Guided practice', 'Simple exercises', 'Mini project', 'Feedback review', 'Next-step plan']
+            },
+            intermediate: {
+                weeks: ['Strengthen advanced concepts', 'Handle more complex tasks', 'Build consistency and speed', 'Complete a capstone-style project', 'Review quality and polish', 'Plan your specialization path'],
+                syllabus: ['Advanced concept review', 'Complex practice tasks', 'Capstone delivery', 'Quality improvement', 'Performance and polish', 'Specialization planning']
+            },
+            advanced: {
+                weeks: ['Master higher-order concepts', 'Solve expert-level scenarios', 'Build systems with strong quality standards', 'Deliver a substantial capstone project', 'Refine performance and decision-making', 'Plan your expert specialization path'],
+                syllabus: ['Expert concept review', 'Advanced scenario practice', 'Systems thinking and quality', 'Capstone execution', 'Performance refinement', 'Expert roadmap planning']
+            }
+        }
+    };
+    const templateGroup = templates[category] || templates.general;
+    const template = templateGroup[levelKey] || templateGroup.beginner;
+    const weeks = template.weeks.map((label, index) => ({
+        label: label.replace(/^Learn /i, index === 0 ? 'Learn ' : 'Practice '),
+        state: index === 0 ? 'active' : 'pending'
+    }));
+    const syllabus = template.syllabus.map((text) => ({ done: false, text: text.includes(skillTitle) ? text : `${skillTitle}: ${text}` }));
+    return {
+        skill: skillTitle,
+        level: formatRoadmapLevel(levelKey),
+        source: 'fallback',
+        pct: 0,
+        weeks,
+        syllabus
+    };
+}
+
+function sanitizeRoadmapPayload(skill, levelKey, rawRoadmap, source) {
+    const fallback = buildFallbackRoadmap(skill, levelKey);
+    const rawWeeks = Array.isArray(rawRoadmap?.weeks) ? rawRoadmap.weeks : fallback.weeks;
+    const rawSyllabus = Array.isArray(rawRoadmap?.syllabus) ? rawRoadmap.syllabus : fallback.syllabus;
+    const weeks = rawWeeks
+        .map((week, index) => {
+            const labelSource = typeof week === 'string'
+                ? week
+                : (week?.label || week?.title || week?.name || '');
+            const label = sanitize(labelSource, 120, 'roadmap week').value || fallback.weeks[index % fallback.weeks.length].label;
+            const requestedState = String(typeof week === 'string' ? '' : (week?.state || '')).toLowerCase();
+            const state = ['done', 'active', 'pending'].includes(requestedState)
+                ? requestedState
+                : (index === 0 ? 'active' : 'pending');
+            return { label, state };
+        })
+        .filter((week) => !!week.label)
+        .slice(0, 8);
+    if (!weeks.length) {
+        fallback.weeks.forEach((week) => weeks.push(week));
+    }
+    if (!weeks.some((week) => week.state === 'active') && !weeks.some((week) => week.state === 'done')) {
+        weeks[0].state = 'active';
+    }
+    const syllabus = rawSyllabus
+        .map((item, index) => {
+            const textSource = typeof item === 'string' ? item : (item?.text || item?.label || '');
+            const text = sanitize(textSource, 160, 'roadmap syllabus item').value || fallback.syllabus[index % fallback.syllabus.length].text;
+            return {
+                done: !!(typeof item === 'object' && item?.done),
+                text
+            };
+        })
+        .filter((item) => !!item.text)
+        .slice(0, 10);
+    if (!syllabus.length) {
+        fallback.syllabus.forEach((item) => syllabus.push(item));
+    }
+    const completedWeeks = weeks.filter((week) => week.state === 'done').length;
+    return {
+        skill: getRoadmapSkillTitle(skill),
+        level: formatRoadmapLevel(levelKey),
+        source: source || 'fallback',
+        pct: Math.round((completedWeeks / weeks.length) * 100),
+        weeks,
+        syllabus
+    };
+}
+
+async function generateRoadmapWithGroq(skill, levelKey) {
+    if (!process.env.GROQ_API_KEY) return null;
+    const levelLabel = formatRoadmapLevel(levelKey);
+    const prompt = `Create a focused learning roadmap for "${skill}" at the "${levelLabel}" level.
+
+Return ONLY valid JSON with this exact shape:
+{
+  "weeks": [
+    { "label": "Week focus", "state": "active" },
+    { "label": "Week focus", "state": "pending" }
+  ],
+  "syllabus": [
+    "Learning item 1",
+    "Learning item 2"
+  ]
+}
+
+Requirements:
+- 6 weeks exactly
+- 6 to 8 syllabus items
+- Make the roadmap specific to ${skill}
+- Make it appropriate for ${levelLabel}
+- Use only "active" for the first week and "pending" for the rest
+- No markdown fences`;
+    const response = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+            model: 'llama-3.3-70b-versatile',
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You create concise study roadmaps and always return valid JSON only.'
+                },
+                {
+                    role: 'user',
+                    content: prompt
+                }
+            ],
+            temperature: 0.4,
+            max_tokens: 1200
+        },
+        {
+            headers: {
+                Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 20000
+        }
+    );
+    const aiText = String(response?.data?.choices?.[0]?.message?.content || '')
+        .replace(/```json/gi, '')
+        .replace(/```/g, '')
+        .trim();
+    return aiText ? JSON.parse(aiText) : null;
 }
 
 function getCreditSnapshot(profile) {
@@ -791,14 +1050,16 @@ async function applyCompletedSessionRatings(tx, db, sessionRef, session) {
         const teacherRef = db.collection('users').doc(session.teacherUid);
         const teacherSnap = await tx.get(teacherRef);
         const teacherData = teacherSnap.exists ? teacherSnap.data() || {} : {};
-        const currentRating = Number(teacherData?.stats?.averageRating || 0);
-        const totalRatings = Number(teacherData?.stats?.totalRatings || 0);
+        const currentRating = Number(teacherData?.stats?.teacherAverageRating || 0);
+        const totalRatings = Number(teacherData?.stats?.teacherTotalRatings || 0);
         const learnerRating = Number(ratings[session.studentUid].rating || 0);
         const newAverage = ((currentRating * totalRatings) + learnerRating) / (totalRatings + 1);
         tx.set(teacherRef, {
             stats: {
                 averageRating: newAverage,
-                totalRatings: admin.firestore.FieldValue.increment(1)
+                totalRatings: totalRatings + 1,
+                teacherAverageRating: newAverage,
+                teacherTotalRatings: totalRatings + 1
             }
         }, { merge: true });
         updates[`ratingStatsApplied.${session.studentUid}`] = true;
@@ -808,14 +1069,14 @@ async function applyCompletedSessionRatings(tx, db, sessionRef, session) {
         const learnerRef = db.collection('users').doc(session.studentUid);
         const learnerSnap = await tx.get(learnerRef);
         const learnerData = learnerSnap.exists ? learnerSnap.data() || {} : {};
-        const currentRating = Number(learnerData?.stats?.averageRating || 0);
-        const totalRatings = Number(learnerData?.stats?.totalRatings || 0);
+        const currentRating = Number(learnerData?.stats?.learnerAverageRating || 0);
+        const totalRatings = Number(learnerData?.stats?.learnerTotalRatings || 0);
         const teacherRating = Number(ratings[session.teacherUid].rating || 0);
         const newAverage = ((currentRating * totalRatings) + teacherRating) / (totalRatings + 1);
         tx.set(learnerRef, {
             stats: {
-                averageRating: newAverage,
-                totalRatings: admin.firestore.FieldValue.increment(1)
+                learnerAverageRating: newAverage,
+                learnerTotalRatings: totalRatings + 1
             }
         }, { merge: true });
         updates[`ratingStatsApplied.${session.teacherUid}`] = true;
@@ -828,11 +1089,15 @@ async function applyCompletedSessionRatings(tx, db, sessionRef, session) {
                 sessionsCompleted: admin.firestore.FieldValue.increment(1)
             }
         }, { merge: true });
+        const teacherStatsPatch = {
+            sessionsCompleted: admin.firestore.FieldValue.increment(1),
+            sessionsTaught: admin.firestore.FieldValue.increment(1)
+        };
+        if (isPaidSession(session)) {
+            teacherStatsPatch.paidSessionsTaught = admin.firestore.FieldValue.increment(1);
+        }
         tx.set(db.collection('users').doc(session.teacherUid), {
-            stats: {
-                sessionsCompleted: admin.firestore.FieldValue.increment(1),
-                sessionsTaught: admin.firestore.FieldValue.increment(1)
-            }
+            stats: teacherStatsPatch
         }, { merge: true });
         updates.completionStatsApplied = true;
     }
@@ -3389,6 +3654,85 @@ Create 3-5 branches, 10+ flashcards, 5+ quiz questions. Make it comprehensive an
         }
         
         res.status(500).json({ error: err.message || 'Failed to generate study materials' });
+    }
+});
+
+app.post('/api/roadmaps/generate', requireAuth, async (req, res) => {
+    try {
+        const skillResult = sanitize(req.body?.skill, 80, 'skill');
+        const skill = skillResult.value;
+        const levelKey = normalizeRoadmapLevel(req.body?.level);
+        if (skillResult.error || !skill) {
+            return res.status(400).json({ error: skillResult.error || 'Skill is required.' });
+        }
+        if (!levelKey) {
+            return res.status(400).json({ error: 'Level must be Beginner, Intermediate, or Advanced.' });
+        }
+        let rawRoadmap = null;
+        let source = 'fallback';
+        try {
+            rawRoadmap = await generateRoadmapWithGroq(skill, levelKey);
+            if (rawRoadmap) source = 'ai';
+        } catch (aiErr) {
+            console.warn('[roadmaps generate] falling back to curated roadmap:', aiErr.message);
+        }
+        const roadmap = sanitizeRoadmapPayload(skill, levelKey, rawRoadmap, source);
+        const skillKey = getRoadmapSkillKey(skill);
+        await getAdminDb().collection('users').doc(req.user.uid).set({
+            roadmaps: {
+                [skillKey]: {
+                    ...roadmap,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                }
+            },
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        res.json({ skillKey, roadmap });
+    } catch (err) {
+        console.error('[roadmaps generate]', err.message);
+        res.status(500).json({ error: err.message || 'Could not generate roadmap.' });
+    }
+});
+
+app.patch('/api/roadmaps/:skillKey', requireAuth, async (req, res) => {
+    try {
+        const requestedKey = getRoadmapSkillKey(req.params.skillKey || '');
+        const roadmapInput = req.body?.roadmap || req.body || {};
+        const skill = sanitize(roadmapInput.skill || requestedKey, 80, 'skill').value || requestedKey;
+        const rawLevel = roadmapInput.level || roadmapInput.levelLabel;
+        const levelKey = normalizeRoadmapLevel(rawLevel) || 'beginner';
+        const source = roadmapInput.source || 'manual';
+        const roadmap = sanitizeRoadmapPayload(skill, levelKey, roadmapInput, source);
+        await getAdminDb().collection('users').doc(req.user.uid).set({
+            roadmaps: {
+                [requestedKey]: {
+                    ...roadmap,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                }
+            },
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        res.json({ skillKey: requestedKey, roadmap });
+    } catch (err) {
+        console.error('[roadmaps patch]', err.message);
+        res.status(500).json({ error: err.message || 'Could not save roadmap progress.' });
+    }
+});
+
+app.delete('/api/roadmaps/:skillKey', requireAuth, async (req, res) => {
+    try {
+        const skillKey = getRoadmapSkillKey(req.params.skillKey || '');
+        await getAdminDb().collection('users').doc(req.user.uid).update({
+            [`roadmaps.${skillKey}`]: admin.firestore.FieldValue.delete(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        res.json({ ok: true, skillKey });
+    } catch (err) {
+        console.error('[roadmaps delete]', err.message);
+        if (err.code === 5 || /No document to update/i.test(err.message || '')) {
+            return res.json({ ok: true, skillKey: getRoadmapSkillKey(req.params.skillKey || '') });
+        }
+        res.status(500).json({ error: err.message || 'Could not delete roadmap.' });
     }
 });
 

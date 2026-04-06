@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SkillSwap Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#090913; --surface:#121220; --surface-2:#17172b; --border:rgba(255,255,255,.08); --text:#f5f5fb; --muted:#9ea3b8; --purple:#7c5cfc; --purple-2:#a78bfa; --green:#34d399; --red:#f87171; --orange:#f59e0b; --blue:#60a5fa; --teal:#2dd4bf; }
+    * { box-sizing:border-box; }
+    html,body { margin:0; min-height:100%; }
+    body { font-family:'Plus Jakarta Sans',sans-serif; color:var(--text); background:radial-gradient(circle at top left, rgba(124,92,252,.18), transparent 30%),radial-gradient(circle at bottom right, rgba(45,212,191,.12), transparent 32%),var(--bg); }
+    a { color:inherit; }
+    button,input,select,textarea { font:inherit; }
+    .shell { max-width:1440px; margin:0 auto; padding:28px 22px 60px; }
+    .topbar,.detail-head,.panel-head,.user-top,.toolbar,.detail-meta,.audit-head { display:flex; justify-content:space-between; gap:14px; }
+    .topbar { align-items:flex-start; margin-bottom:24px; }
+    .title { font-family:'Syne',sans-serif; font-size:2.05rem; font-weight:800; letter-spacing:-.04em; }
+    .subtitle,.helper,.muted,.mini-meta,.empty-copy,.meta-line { color:var(--muted); font-size:.92rem; line-height:1.6; }
+    .actions,.chips,.stat-row,.tabs,.stack,.detail-grid,.directory-meta,.kv-list,.toolbar-filters,.mini-stack,.split { display:flex; gap:12px; flex-wrap:wrap; }
+    .btn,.tab-btn,.user-card { border:none; cursor:pointer; }
+    .btn { border-radius:12px; padding:11px 16px; font-weight:700; }
+    .btn.primary { background:linear-gradient(135deg,var(--purple),#5132db); color:#fff; }
+    .btn.ghost { background:rgba(255,255,255,.04); color:var(--text); border:1px solid var(--border); }
+    .btn.warn { background:rgba(245,158,11,.12); color:#ffd58a; border:1px solid rgba(245,158,11,.28); }
+    .btn.danger { background:rgba(248,113,113,.12); color:#ffc2c2; border:1px solid rgba(248,113,113,.28); }
+    .btn.good { background:rgba(52,211,153,.12); color:#bff8e3; border:1px solid rgba(52,211,153,.28); }
+    .btn:disabled { opacity:.55; cursor:not-allowed; }
+    .panel,.stat,.section-card,.user-card,.summary-card,.toolbar { background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:18px; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:14px; margin-bottom:20px; }
+    .stat { padding:18px; }
+    .stat-label,.section-label,.field-label { color:var(--muted); text-transform:uppercase; letter-spacing:.08em; font-size:.72rem; }
+    .stat-value { margin-top:10px; font-size:1.6rem; font-family:'Syne',sans-serif; font-weight:800; }
+    .toolbar { padding:16px; margin-bottom:20px; align-items:center; }
+    .toolbar input,.toolbar select,.textarea,.input { background:#101223; border:1px solid var(--border); color:var(--text); border-radius:14px; padding:13px 14px; }
+    .toolbar select,.input,select,textarea { color-scheme:dark; }
+    select option { background:#101223; color:var(--text); }
+    .toolbar input { min-width:260px; flex:1; }
+    .toolbar-filters { margin-left:auto; }
+    .layout { display:grid; grid-template-columns:360px minmax(0,1fr); gap:20px; align-items:start; }
+    .panel { padding:18px; }
+    .panel-title { font-family:'Syne',sans-serif; font-size:1.2rem; font-weight:800; }
+    .side { position:sticky; top:18px; max-height:calc(100vh - 48px); overflow:auto; }
+    .stack { flex-direction:column; }
+    .user-card { width:100%; text-align:left; padding:16px; transition:transform .18s ease,border-color .18s ease,background .18s ease; }
+    .user-card:hover,.user-card.active { transform:translateY(-1px); border-color:rgba(124,92,252,.34); background:rgba(124,92,252,.1); }
+    .avatar { width:58px; height:58px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-weight:800; background:linear-gradient(135deg,var(--purple),#2b9dff); color:#fff; flex:0 0 auto; overflow:hidden; }
+    .avatar.small { width:48px; height:48px; border-radius:16px; font-size:.95rem; }
+    .avatar img { width:100%; height:100%; object-fit:cover; }
+    .user-row,.identity { display:flex; gap:12px; align-items:flex-start; }
+    .user-name { font-size:1rem; font-weight:800; }
+    .rating-pill { color:#ffe083; font-weight:800; font-size:.92rem; }
+    .chip { padding:7px 11px; border-radius:999px; border:1px solid var(--border); font-size:.74rem; font-weight:700; background:rgba(255,255,255,.03); }
+    .chip.good { color:#c9ffea; border-color:rgba(52,211,153,.3); background:rgba(52,211,153,.1); }
+    .chip.bad { color:#ffd1d1; border-color:rgba(248,113,113,.3); background:rgba(248,113,113,.1); }
+    .chip.warn { color:#ffe0ae; border-color:rgba(245,158,11,.3); background:rgba(245,158,11,.1); }
+    .chip.info { color:#d7cbff; border-color:rgba(167,139,250,.28); background:rgba(124,92,252,.12); }
+    .chip.blue { color:#cae2ff; border-color:rgba(96,165,250,.28); background:rgba(96,165,250,.1); }
+    .detail-pane { min-height:720px; }
+    .detail-head { align-items:flex-start; margin-bottom:18px; }
+    .detail-meta { align-items:center; }
+    .summary-grid,.detail-grid { display:grid; gap:14px; }
+    .summary-grid { grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); margin:18px 0; }
+    .summary-card { padding:14px; }
+    .summary-value { margin-top:8px; font-size:1.12rem; font-weight:800; }
+    .tabs { margin:14px 0 18px; border-bottom:1px solid rgba(255,255,255,.08); padding-bottom:14px; }
+    .tab-btn { background:rgba(255,255,255,.03); color:var(--muted); border:1px solid var(--border); border-radius:12px; padding:10px 14px; font-weight:700; }
+    .tab-btn.active { background:rgba(124,92,252,.16); color:#fff; border-color:rgba(124,92,252,.34); }
+    .detail-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .section-card { padding:16px; }
+    .section-title { margin:6px 0 12px; font-weight:800; font-size:1.02rem; }
+    .kv-list { flex-direction:column; gap:10px; }
+    .kv-row,.list-row,.message-row,.audit-row,.material-row,.partner-row { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; padding:12px 0; border-top:1px solid rgba(255,255,255,.06); }
+    .kv-row:first-child,.list-row:first-child,.message-row:first-child,.audit-row:first-child,.material-row:first-child,.partner-row:first-child { border-top:none; padding-top:0; }
+    .kv-key { color:var(--muted); min-width:120px; }
+    .kv-value { text-align:right; word-break:break-word; }
+    .mini-stack { flex-direction:column; gap:8px; }
+    .mini-card { padding:14px; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.05); }
+    .mini-title { font-weight:800; margin-bottom:4px; }
+    .tiny { font-size:.82rem; color:var(--muted); }
+    .split { align-items:flex-start; }
+    .split > * { flex:1; min-width:0; }
+    .badge-link { color:#c7dbff; text-decoration:none; }
+    .badge-link:hover { text-decoration:underline; }
+    .textarea { width:100%; min-height:92px; resize:vertical; }
+    .input { width:100%; }
+    .field { display:flex; flex-direction:column; gap:8px; }
+    .actions-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+    .empty { padding:34px 20px; border-radius:18px; border:1px dashed rgba(255,255,255,.16); text-align:center; color:var(--muted); }
+    .toast { position:fixed; right:22px; bottom:20px; min-width:260px; max-width:360px; background:linear-gradient(135deg,#6d5af7,#4733ce); border:1px solid rgba(255,255,255,.12); color:#fff; border-radius:18px; padding:14px 16px; box-shadow:0 18px 50px rgba(0,0,0,.35); display:none; z-index:30; }
+    .toast.show { display:block; }
+    .toast-title { font-weight:800; margin-bottom:4px; }
+    .toast-msg { font-size:.88rem; opacity:.92; line-height:1.5; }
+    @media (max-width:1180px) { .layout { grid-template-columns:1fr; } .side { position:static; max-height:none; } }
+    @media (max-width:860px) { .detail-grid,.actions-grid { grid-template-columns:1fr; } .toolbar { flex-direction:column; align-items:stretch; } .toolbar-filters { margin-left:0; width:100%; } .toolbar-filters select { flex:1; min-width:0; } .topbar,.detail-head { flex-direction:column; } }
+    @media (max-width:640px) { .shell { padding:22px 14px 50px; } .stats,.summary-grid { grid-template-columns:1fr 1fr; } .actions,.tabs { width:100%; } .actions .btn,.tabs .tab-btn { flex:1; } .stats { gap:10px; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="topbar">
+      <div>
+        <div class="title">Admin Console</div>
+        <div class="subtitle" id="adminSubtitle">Loading platform operations workspace...</div>
+      </div>
+      <div class="actions">
+        <button class="btn ghost" id="refreshBtn" type="button">Refresh</button>
+        <button class="btn primary" id="logoutBtn" type="button">Logout</button>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-label">Total Users</div><div class="stat-value" id="statTotalUsers">0</div></div>
+      <div class="stat"><div class="stat-label">Active Teachers</div><div class="stat-value" id="statActiveTeachers">0</div></div>
+      <div class="stat"><div class="stat-label">Total Sessions</div><div class="stat-value" id="statTotalSessions">0</div></div>
+      <div class="stat"><div class="stat-label">Held Credits</div><div class="stat-value" id="statHeldCredits">0</div></div>
+      <div class="stat"><div class="stat-label">Pending Reviews</div><div class="stat-value" id="statPendingReviews">0</div></div>
+      <div class="stat"><div class="stat-label">Credit Cases</div><div class="stat-value" id="statCreditCases">0</div></div>
+      <div class="stat"><div class="stat-label">Recovery Appeals</div><div class="stat-value" id="statRecoveryAppeals">0</div></div>
+    </div>
+
+    <div class="toolbar">
+      <input id="searchInput" type="search" placeholder="Search by name, email, UID, or skill..." />
+      <div class="toolbar-filters">
+        <select id="roleFilter">
+          <option value="all">All Roles</option>
+          <option value="user">Users</option>
+          <option value="reviewer">Reviewers</option>
+          <option value="admin">Admins</option>
+        </select>
+        <select id="statusFilter">
+          <option value="all">All Statuses</option>
+          <option value="active">Active</option>
+          <option value="suspended">Suspended</option>
+          <option value="terminated">Terminated</option>
+        </select>
+        <select id="verificationFilter">
+          <option value="all">All Verification</option>
+          <option value="human_verified">Human Verified</option>
+          <option value="ai_verified">AI Verified</option>
+          <option value="pending_review">Pending Review</option>
+          <option value="unverified">Unverified</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="layout">
+      <div class="panel side">
+        <div class="panel-head" style="margin-bottom:14px;">
+          <div>
+            <div class="panel-title">Recovery Appeals</div>
+            <div class="helper" id="appealSubtitle">Suspended-account repentance requests waiting for admin review.</div>
+          </div>
+        </div>
+        <div class="stack" id="appealList" style="margin-bottom:18px;">
+          <div class="empty">Loading recovery queue...</div>
+        </div>
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">User Directory</div>
+            <div class="helper" id="directorySubtitle">Each user appears once here. Relationships stay nested inside that user view.</div>
+          </div>
+        </div>
+        <div class="stack" id="userList">
+          <div class="empty">Loading user directory...</div>
+        </div>
+      </div>
+
+      <div class="panel detail-pane" id="detailPane">
+        <div class="empty">
+          <div class="panel-title" style="margin-bottom:10px;">Select A User</div>
+          <div class="empty-copy">The right pane will show profile data, grouped relationships, sessions, credits, notifications, and admin actions for the selected account.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">
+    <div class="toast-title" id="toastTitle"></div>
+    <div class="toast-msg" id="toastMsg"></div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+    import { getAuth, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+    import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+    const firebaseConfig = {
+      apiKey: 'AIzaSyA6aCr1L8MaEE9aeQ-nNGEzxdjiGVPUMCU',
+      authDomain: 'skillswap-d2626.firebaseapp.com',
+      projectId: 'skillswap-d2626',
+      storageBucket: 'skillswap-d2626.firebasestorage.app',
+      messagingSenderId: '34762810999',
+      appId: '1:34762810999:web:cae33caad1337b0eebc872'
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const BACKEND_BASE_URL = 'http://localhost:5000';
+    const state = {
+      currentUser: null,
+      profile: null,
+      overview: null,
+      users: [],
+      recoveryAppeals: [],
+      selectedUserId: '',
+      selectedAppealId: '',
+      selectedDetail: null,
+      activeTab: 'overview',
+      filters: { search: '', role: 'all', status: 'all', verification: 'all' }
+    };
+
+    function $(id) { return document.getElementById(id); }
+
+    function escapeHtml(value) {
+      return (value == null ? '' : String(value))
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function showToast(title, message) {
+      $('toastTitle').textContent = title || 'Admin';
+      $('toastMsg').textContent = message || '';
+      $('toast').classList.add('show');
+      window.clearTimeout(window.__adminToastTimer);
+      window.__adminToastTimer = window.setTimeout(() => $('toast').classList.remove('show'), 3600);
+    }
+
+    function getBackendUrl(path) {
+      return BACKEND_BASE_URL.replace(/\/+$/, '') + path;
+    }
+
+    async function getAuthToken() {
+      if (!state.currentUser) throw new Error('Please sign in first.');
+      return state.currentUser.getIdToken ? state.currentUser.getIdToken(true) : '';
+    }
+
+    async function apiJson(path, options) {
+      const token = await getAuthToken();
+      const opts = options || {};
+      const headers = Object.assign({
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + token
+      }, opts.headers || {});
+      const response = await fetch(getBackendUrl(path), Object.assign({}, opts, { headers }));
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Request failed.');
+      return data;
+    }
+
+    function toDate(value) {
+      if (!value) return null;
+      if (typeof value.toDate === 'function') return value.toDate();
+      if (typeof value.seconds === 'number') return new Date(value.seconds * 1000);
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    function formatDate(value) {
+      const date = toDate(value);
+      return date ? date.toLocaleString() : '—';
+    }
+
+    function formatCount(value) {
+      const safe = Number(value || 0);
+      return Number.isFinite(safe) ? safe.toLocaleString() : '0';
+    }
+
+    function formatCredits(value) {
+      return formatCount(Math.max(0, Number(value || 0))) + ' cr';
+    }
+
+    function formatRating(value) {
+      const safe = Number(value || 0);
+      return safe > 0 ? safe.toFixed(1) : '—';
+    }
+
+    function getSessionRatingEntry(session, raterUid) {
+      if (!session || !raterUid) return null;
+      const direct = session.ratings && session.ratings[raterUid];
+      if (direct && Number(direct.rating || 0) > 0) return Number(direct.rating || 0);
+      const teacherUid = session.teacherUid || '';
+      const studentUid = session.studentUid || '';
+      if (raterUid === teacherUid && Number(session.teacherResponse && session.teacherResponse.rating || 0) > 0) {
+        return Number(session.teacherResponse.rating || 0);
+      }
+      if (raterUid === studentUid && Number(session.studentResponse && session.studentResponse.rating || 0) > 0) {
+        return Number(session.studentResponse.rating || 0);
+      }
+      return null;
+    }
+
+    function getRoleRatingSummary(uid, sessions, role) {
+      const relevant = Array.isArray(sessions) ? sessions : [];
+      let total = 0;
+      let count = 0;
+      relevant.forEach(function(session) {
+        const actorIsTeacher = session && session.teacherUid === uid;
+        const actorIsLearner = session && session.studentUid === uid;
+        if (role === 'teacher' && !actorIsTeacher) return;
+        if (role === 'learner' && !actorIsLearner) return;
+        const raterUid = role === 'teacher' ? session.studentUid : session.teacherUid;
+        const rating = getSessionRatingEntry(session, raterUid);
+        if (rating > 0) {
+          total += rating;
+          count += 1;
+        }
+      });
+      return {
+        average: count ? total / count : 0,
+        totalRatings: count
+      };
+    }
+
+    function formatRoleRatingValue(summary) {
+      if (!summary || !summary.totalRatings) return '—';
+      return summary.average.toFixed(1) + ' (' + formatCount(summary.totalRatings) + ')';
+    }
+
+    function getPreferredRoleRatingSummary(user, sessions, role) {
+      const fallback = getRoleRatingSummary(user && user.uid, sessions || [], role);
+      if (role === 'teacher') {
+        return {
+          average: Number(user && user.stats && user.stats.teachingAverageRating || user && user.teacherReputation && user.teacherReputation.averageRating || fallback.average || 0),
+          totalRatings: Number(user && user.stats && user.stats.teachingTotalRatings || user && user.teacherReputation && user.teacherReputation.totalRatings || fallback.totalRatings || 0)
+        };
+      }
+      return {
+        average: Number(user && user.stats && user.stats.learnerAverageRating || fallback.average || 0),
+        totalRatings: Number(user && user.stats && user.stats.learnerTotalRatings || fallback.totalRatings || 0)
+      };
+    }
+
+    function getInitials(name) {
+      const parts = String(name || 'SS').trim().split(/\s+/).filter(Boolean);
+      return (parts[0]?.[0] || 'S') + (parts[1]?.[0] || parts[0]?.[1] || 'S');
+    }
+
+    function capitalize(value) {
+      const text = String(value || '').trim();
+      return text ? text.charAt(0).toUpperCase() + text.slice(1).replace(/_/g, ' ') : '—';
+    }
+
+    function chipClass(value) {
+      const status = String(value || '').trim().toLowerCase();
+      if (['active', 'verified', 'completed', 'resolved', 'accepted', 'settled'].includes(status)) return 'good';
+      if (['pending', 'awaiting_counterparty', 'review_pending', 'not-requested', 'scheduled'].includes(status)) return 'warn';
+      if (['suspended', 'terminated', 'rejected', 'cancelled', 'disputed', 'failed'].includes(status)) return 'bad';
+      if (['admin', 'reviewer'].includes(status)) return 'blue';
+      return 'info';
+    }
+
+    function renderChip(text, variant) {
+      const cls = variant || chipClass(text);
+      return `<span class="chip ${cls}">${escapeHtml(text)}</span>`;
+    }
+
+    function renderAvatar(user, small) {
+      const cls = small ? 'avatar small' : 'avatar';
+      if (user?.photoURL) {
+        return `<div class="${cls}"><img src="${escapeHtml(user.photoURL)}" alt="${escapeHtml(user.fullName || 'User')}" /></div>`;
+      }
+      return `<div class="${cls}">${escapeHtml(getInitials(user?.fullName || user?.email || 'SkillSwap'))}</div>`;
+    }
+
+    function renderEmpty(title, copy) {
+      return `<div class="empty"><div class="panel-title" style="margin-bottom:10px;">${escapeHtml(title)}</div><div class="empty-copy">${escapeHtml(copy)}</div></div>`;
+    }
+
+    function renderRows(items, renderer, emptyText) {
+      if (!items || !items.length) return `<div class="empty">${escapeHtml(emptyText)}</div>`;
+      return items.map(renderer).join('');
+    }
+
+    function renderInfoRows(rows) {
+      return `<div class="kv-list">${rows.map(function(row) {
+        return `<div class="kv-row"><div class="kv-key">${escapeHtml(row.label)}</div><div class="kv-value">${row.html != null ? row.html : escapeHtml(row.value || '—')}</div></div>`;
+      }).join('')}</div>`;
+    }
+
+    function renderSkillChips(items, emptyText) {
+      if (!items || !items.length) return `<div class="muted">${escapeHtml(emptyText)}</div>`;
+      return `<div class="chips">${items.map(item => renderChip(item, 'info')).join('')}</div>`;
+    }
+
+    function renderLinks(links) {
+      const entries = Object.entries(links || {}).filter(function(entry) {
+        return entry[1] && /^https?:\/\//i.test(String(entry[1]));
+      });
+      if (!entries.length) return `<div class="muted">No public links saved.</div>`;
+      return `<div class="kv-list">${entries.map(function(entry) {
+        return `<div class="kv-row"><div class="kv-key">${escapeHtml(capitalize(entry[0]))}</div><div class="kv-value"><a class="badge-link" href="${escapeHtml(entry[1])}" target="_blank" rel="noopener">Open link</a></div></div>`;
+      }).join('')}</div>`;
+    }
+
+    function getRoleImpactSummary(user) {
+      const impact = user && user.roleImpact ? user.roleImpact : {};
+      return {
+        teacher: Array.isArray(impact.teacher) ? impact.teacher : [],
+        learner: Array.isArray(impact.learner) ? impact.learner : []
+      };
+    }
+
+    function renderImpactBlock(title, items, fallbackText) {
+      return `<div class="mini-card"><div class="mini-title">${escapeHtml(title)}</div><div class="tiny">${escapeHtml(items && items.length ? items.join(' | ') : fallbackText)}</div></div>`;
+    }
+
+    function getAppealById(appealId) {
+      if (!appealId || !state.selectedDetail || !Array.isArray(state.selectedDetail.accountRecoveryAppeals)) return null;
+      return state.selectedDetail.accountRecoveryAppeals.find(function(item) { return item.id === appealId; }) || null;
+    }
+
+    function renderStats() {
+      const overview = state.overview || {};
+      $('statTotalUsers').textContent = formatCount(overview.totalUsers || 0);
+      $('statActiveTeachers').textContent = formatCount(overview.activeTeachers || 0);
+      $('statTotalSessions').textContent = formatCount(overview.totalSessions || 0);
+      $('statHeldCredits').textContent = formatCredits(overview.totalHeldCredits || 0);
+      $('statPendingReviews').textContent = formatCount(overview.pendingHumanReviews || 0);
+      $('statCreditCases').textContent = formatCount(overview.pendingCreditCases || 0);
+      $('statRecoveryAppeals').textContent = formatCount(overview.pendingRecoveryAppeals || 0);
+      $('directorySubtitle').textContent = formatCount(state.users.length) + ' users loaded. Relationships stay nested inside each user view.';
+      $('appealSubtitle').textContent = formatCount(state.recoveryAppeals.filter(function(item) { return (item.status || 'pending') === 'pending'; }).length) + ' pending reactivation requests in the queue.';
+      $('adminSubtitle').textContent = state.profile
+        ? `Signed in as ${state.profile.fullName || state.profile.email || 'Admin'}. Monitor users, relationships, sessions, credits, and audit actions from one place.`
+        : 'Loading platform operations workspace...';
+    }
+
+    function getVerificationFilterValue(user) {
+      const human = String(user?.humanVerificationStatus || '').toLowerCase();
+      const ai = String(user?.verificationStatus || '').toLowerCase();
+      if (human === 'verified') return 'human_verified';
+      if (human === 'pending') return 'pending_review';
+      if (ai === 'verified') return 'ai_verified';
+      return 'unverified';
+    }
+
+    function syncFiltersFromToolbar() {
+      state.filters.search = $('searchInput').value.trim().toLowerCase();
+      state.filters.role = $('roleFilter').value;
+      state.filters.status = $('statusFilter').value;
+      state.filters.verification = $('verificationFilter').value;
+    }
+
+    function getFilteredUsers() {
+      syncFiltersFromToolbar();
+      return state.users.filter(function(user) {
+        if (state.filters.role !== 'all' && (user.appRole || 'user') !== state.filters.role) return false;
+        if (state.filters.status !== 'all' && (user.accountStatus || 'active') !== state.filters.status) return false;
+        if (state.filters.verification !== 'all' && getVerificationFilterValue(user) !== state.filters.verification) return false;
+        if (!state.filters.search) return true;
+        const haystack = [
+          user.uid,
+          user.fullName,
+          user.email,
+          (user.teachSkills || []).join(' '),
+          (user.learnSkills || []).join(' ')
+        ].join(' ').toLowerCase();
+        return haystack.includes(state.filters.search);
+      });
+    }
+
+    function renderUserList() {
+      const users = getFilteredUsers();
+      if (!users.length) {
+        $('userList').innerHTML = renderEmpty('No Matching Users', 'Try clearing one of the filters or search terms.');
+        return;
+      }
+      $('userList').innerHTML = users.map(function(user) {
+        const isActive = user.uid === state.selectedUserId ? ' active' : '';
+        const verificationLabel = getVerificationFilterValue(user).replace(/_/g, ' ');
+        return `
+          <button class="user-card${isActive}" type="button" data-user-id="${escapeHtml(user.uid)}">
+            <div class="user-row">
+              ${renderAvatar(user, true)}
+              <div style="flex:1; min-width:0;">
+                <div class="user-top">
+                  <div class="user-name">${escapeHtml(user.fullName || user.email || user.uid)}</div>
+                  <div class="rating-pill">${formatRating(user.averageRating)}</div>
+                </div>
+                <div class="meta-line">${escapeHtml(user.email || user.uid)}</div>
+                <div class="chips" style="margin-top:10px;">
+                  ${renderChip(user.appRole || 'user')}
+                  ${renderChip(user.accountStatus || 'active')}
+                  ${renderChip(verificationLabel)}
+                </div>
+                <div class="directory-meta" style="margin-top:12px;">
+                  <span class="tiny">${formatCount(user.relationshipCount || 0)} relationships</span>
+                  <span class="tiny">${formatCount(user.sessionCount || 0)} sessions</span>
+                  <span class="tiny">${formatCredits(user.creditBalance || 0)}</span>
+                </div>
+              </div>
+            </div>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function renderAppealList() {
+      const appeals = (state.recoveryAppeals || []).filter(function(item) {
+        return (item.status || 'pending') === 'pending';
+      });
+      if (!appeals.length) {
+        $('appealList').innerHTML = `<div class="empty">No pending recovery appeals right now.</div>`;
+        return;
+      }
+      $('appealList').innerHTML = appeals.map(function(appeal) {
+        const user = appeal.user || {};
+        const active = state.selectedAppealId === appeal.id ? ' active' : '';
+        return `
+          <button class="user-card${active}" type="button" data-appeal-id="${escapeHtml(appeal.id)}" data-appeal-uid="${escapeHtml(appeal.uid || user.uid || '')}">
+            <div class="user-row">
+              ${renderAvatar(user, true)}
+              <div style="flex:1;min-width:0;">
+                <div class="user-top">
+                  <div class="user-name">${escapeHtml(user.fullName || user.email || appeal.uid || 'Suspended user')}</div>
+                  <div class="rating-pill">${escapeHtml(formatDate(appeal.submittedAt))}</div>
+                </div>
+                <div class="meta-line">${escapeHtml(appeal.suspensionReasonSnapshot || 'Suspension reason saved in appeal.')}</div>
+                <div class="chips" style="margin-top:10px;">
+                  ${renderChip(appeal.status || 'pending')}
+                  ${renderChip(user.accountStatus || 'suspended')}
+                </div>
+              </div>
+            </div>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function renderSummaryCards(detail) {
+      const user = detail.user || {};
+      const summary = detail.summary || {};
+      const teacherRating = getPreferredRoleRatingSummary(user, detail.sessions || [], 'teacher');
+      const learnerRating = getPreferredRoleRatingSummary(user, detail.sessions || [], 'learner');
+      return `
+        <div class="summary-grid">
+          <div class="summary-card"><div class="stat-label">Available Credits</div><div class="summary-value">${formatCredits(user.creditBalance || 0)}</div></div>
+          <div class="summary-card"><div class="stat-label">Held Credits</div><div class="summary-value">${formatCredits(user.heldCreditBalance || 0)}</div></div>
+          <div class="summary-card"><div class="stat-label">Teaching Rating</div><div class="summary-value">${formatRoleRatingValue(teacherRating)}</div></div>
+          <div class="summary-card"><div class="stat-label">Learner Rating</div><div class="summary-value">${formatRoleRatingValue(learnerRating)}</div></div>
+          <div class="summary-card"><div class="stat-label">Sessions Taught</div><div class="summary-value">${formatCount(user.sessionsTaught || summary.taughtSessions || 0)}</div></div>
+          <div class="summary-card"><div class="stat-label">Sessions Completed</div><div class="summary-value">${formatCount(user.sessionsCompleted || summary.sessionCount || 0)}</div></div>
+          <div class="summary-card"><div class="stat-label">Relationships</div><div class="summary-value">${formatCount(summary.relationshipCount || 0)}</div></div>
+        </div>
+      `;
+    }
+
+    function renderOverviewTab(detail) {
+      const user = detail.user || {};
+      const summary = detail.summary || {};
+      const teacherRep = user.teacherReputation || {};
+      const teacherRating = getPreferredRoleRatingSummary(user, detail.sessions || [], 'teacher');
+      const learnerRating = getPreferredRoleRatingSummary(user, detail.sessions || [], 'learner');
+      const roleImpact = getRoleImpactSummary(user);
+      const availabilityDays = Array.isArray(user.availability?.days) ? user.availability.days.join(', ') : '';
+      const timeSlots = Array.isArray(user.availability?.timeSlots) ? user.availability.timeSlots.join(', ') : '';
+      return `
+        <div class="detail-grid">
+          <div class="section-card">
+            <div class="section-label">Profile</div>
+            <div class="section-title">Identity And Teaching Snapshot</div>
+            ${renderInfoRows([
+              { label: 'UID', value: user.uid },
+              { label: 'University', value: user.university || '—' },
+              { label: 'Field', value: user.fieldOfStudy || '—' },
+              { label: 'Year', value: user.year || '—' },
+              { label: 'Account Status', html: renderChip(user.accountStatus || 'active') },
+              { label: 'Probation', html: renderChip(user.probation?.active ? 'active' : 'clear', user.probation?.active ? 'warn' : 'good') },
+              { label: 'Auth Disabled', html: renderChip(user.authDisabled ? 'yes' : 'no', user.authDisabled ? 'bad' : 'good') }
+            ])}
+            <div class="section-title" style="margin-top:16px;">Bio</div>
+            <div class="muted">${escapeHtml(user.bio || 'No bio saved.')}</div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-label">Verification</div>
+            <div class="section-title">Trust, Sessions, And Activity</div>
+            ${renderInfoRows([
+              { label: 'AI Verification', html: renderChip(user.verification?.status || 'unverified') + ' <span class="tiny">Score ' + formatCount(user.verification?.score || 0) + '</span>' },
+              { label: 'Human Verification', html: renderChip(user.humanVerification?.status || 'not-requested') },
+              { label: 'Teacher Rating', value: formatRoleRatingValue(teacherRating) },
+              { label: 'Learner Rating', value: formatRoleRatingValue(learnerRating) },
+              { label: 'Conversations', value: formatCount(summary.conversationCount || 0) },
+              { label: 'Notifications', value: formatCount(summary.notificationCount || 0) },
+              { label: 'Latest Activity', value: formatDate(summary.latestActivityAt) }
+            ])}
+            <div class="section-title" style="margin-top:16px;">Availability</div>
+            <div class="muted">${escapeHtml([availabilityDays, timeSlots].filter(Boolean).join(' | ') || 'No availability saved.')}</div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-label">Skills</div>
+            <div class="section-title">Teaches</div>
+            ${renderSkillChips(user.teachSkills || [], 'No teaching skills saved.')}
+            <div class="section-title" style="margin-top:16px;">Learns</div>
+            ${renderSkillChips(user.learnSkills || [], 'No learning skills saved.')}
+          </div>
+
+          <div class="section-card">
+            <div class="section-label">Links</div>
+            <div class="section-title">Public Footprint</div>
+            ${renderLinks(user.links || {})}
+          </div>
+
+          <div class="section-card">
+            <div class="section-label">Saved Materials</div>
+            <div class="section-title">Learning Assets</div>
+            ${renderRows((detail.savedMaterials || []).slice(0, 6), function(item) {
+              return `<div class="material-row"><div><div class="mini-title">${escapeHtml(item.title || item.topic || item.skill || 'Saved material')}</div><div class="tiny">${escapeHtml(item.type || item.category || 'material')}</div></div><div class="tiny">${formatDate(item.createdAt || item.updatedAt)}</div></div>`;
+            }, 'No saved materials for this user.')}
+          </div>
+
+          <div class="section-card">
+            <div class="section-label">Platform Hooks</div>
+            <div class="section-title">Calendar And Human Review</div>
+            ${renderInfoRows([
+              { label: 'Calendar Connected', html: renderChip(detail.googleCalendarConnection ? 'connected' : 'not connected', detail.googleCalendarConnection ? 'good' : 'info') },
+              { label: 'Calendar Email', value: detail.googleCalendarConnection?.email || '—' },
+              { label: 'Review Requests', value: formatCount((detail.humanVerificationRequests || []).length) },
+              { label: 'Pending Credit Cases', value: formatCount(summary.pendingCreditCases || 0) }
+            ])}
+          </div>
+
+          <div class="section-card">
+            <div class="section-label">Restriction Impact</div>
+            <div class="section-title">Learner And Teacher Side Effects</div>
+            <div class="split">
+              ${renderImpactBlock('Learner Impact', roleImpact.learner, 'No learner-side restrictions active.')}
+              ${renderImpactBlock('Teacher Impact', roleImpact.teacher, 'No teacher-side restrictions active.')}
+            </div>
+            <div class="section-title" style="margin-top:16px;">Probation Reason</div>
+            <div class="muted">${escapeHtml(user.probation?.reason || 'No probation reason saved for this account.')}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderRelationshipsTab(detail) {
+      const groups = detail.relationshipGroups || [];
+      if (!groups.length) return renderEmpty('No Relationships Yet', 'This account has no recorded partner relationships.');
+      return groups.map(function(group) {
+        const partner = group.partner || {};
+        return `
+          <div class="section-card" style="margin-bottom:14px;">
+            <div class="partner-row">
+              <div class="identity">
+                ${renderAvatar(partner, true)}
+                <div>
+                  <div class="mini-title">${escapeHtml(partner.fullName || partner.email || group.partnerUid)}</div>
+                  <div class="tiny">${escapeHtml(partner.email || group.partnerUid)}</div>
+                  <div class="chips" style="margin-top:10px;">
+                    ${(group.roles || []).map(role => renderChip(role === 'teacher' ? 'acted as teacher' : 'acted as learner', 'blue')).join('')}
+                    ${renderChip(partner.accountStatus || 'active')}
+                  </div>
+                </div>
+              </div>
+              <div class="mini-stack" style="align-items:flex-end;">
+                <div class="tiny">Latest interaction</div>
+                <div>${formatDate(group.latestInteractionAt)}</div>
+              </div>
+            </div>
+            <div class="summary-grid" style="margin-top:14px;">
+              <div class="summary-card"><div class="stat-label">Taught Sessions</div><div class="summary-value">${formatCount(group.taughtSessions || 0)}</div></div>
+              <div class="summary-card"><div class="stat-label">Learned Sessions</div><div class="summary-value">${formatCount(group.learnedSessions || 0)}</div></div>
+              <div class="summary-card"><div class="stat-label">Requests</div><div class="summary-value">${formatCount(group.requestCount || 0)}</div></div>
+              <div class="summary-card"><div class="stat-label">Connections</div><div class="summary-value">${formatCount(group.connectionCount || 0)}</div></div>
+              <div class="summary-card"><div class="stat-label">Conversations</div><div class="summary-value">${formatCount(group.conversationCount || 0)}</div></div>
+            </div>
+            <div class="split" style="margin-top:10px;">
+              <div class="mini-card">
+                <div class="mini-title">Recent Sessions</div>
+                ${renderRows((group.sessions || []).slice(0, 4), function(item) {
+                  return `<div class="list-row"><div><div>${escapeHtml(item.topic || item.skillRequested || 'Session')}</div><div class="tiny">${escapeHtml(item.role || '')}</div></div><div class="mini-stack" style="align-items:flex-end;"><div>${renderChip(item.status || 'scheduled')}</div><div class="tiny">${formatDate(item.startAt || item.updatedAt)}</div></div></div>`;
+                }, 'No sessions with this partner yet.')}
+              </div>
+              <div class="mini-card">
+                <div class="mini-title">Requests And Connections</div>
+                ${renderRows([].concat((group.requests || []).slice(0, 2), (group.connections || []).slice(0, 2)), function(item) {
+                  return `<div class="list-row"><div><div>${escapeHtml(item.skillRequested || item.topic || 'Connection')}</div><div class="tiny">${escapeHtml(item.sessionType || item.role || '')}</div></div><div class="mini-stack" style="align-items:flex-end;"><div>${renderChip(item.status || 'accepted')}</div><div class="tiny">${formatDate(item.createdAt || item.updatedAt)}</div></div></div>`;
+                }, 'No requests or accepted connections with this partner yet.')}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderSessionsTab(detail) {
+      return `
+        <div class="detail-grid">
+          <div class="section-card">
+            <div class="section-label">Sessions</div>
+            <div class="section-title">Booked Session History</div>
+            ${renderRows(detail.sessions || [], function(item) {
+              return `<div class="list-row"><div><div class="mini-title">${escapeHtml(item.topic || item.skillRequested || 'Session')}</div><div class="tiny">${escapeHtml((item.teacherName || item.teacherUid || 'Teacher') + ' -> ' + (item.studentName || item.studentUid || 'Learner'))}</div></div><div class="mini-stack" style="align-items:flex-end;"><div>${renderChip(item.status || item.settlementStatus || 'scheduled')}</div><div class="tiny">${formatCredits(item.creditsAgreed || 0)} | ${formatDate(item.startAt || item.updatedAt)}</div></div></div>`;
+            }, 'No sessions found for this user.')}
+          </div>
+
+          <div class="section-card">
+            <div class="section-label">Requests</div>
+            <div class="section-title">Lesson Requests</div>
+            ${renderRows(detail.lessonRequests || [], function(item) {
+              return `<div class="list-row"><div><div class="mini-title">${escapeHtml(item.skillRequested || 'Lesson request')}</div><div class="tiny">${escapeHtml(item.message || item.notes || 'No request note')}</div></div><div class="mini-stack" style="align-items:flex-end;"><div>${renderChip(item.status || 'pending')}</div><div class="tiny">${formatDate(item.createdAt || item.updatedAt)}</div></div></div>`;
+            }, 'No lesson requests found for this user.')}
+          </div>
+
+          <div class="section-card">
+            <div class="section-label">Connections</div>
+            <div class="section-title">Accepted Partners</div>
+            ${renderRows(detail.lessonConnections || [], function(item) {
+              return `<div class="list-row"><div><div class="mini-title">${escapeHtml(item.skillRequested || item.topic || 'Connection')}</div><div class="tiny">${escapeHtml(item.sessionType || 'credit lesson')}</div></div><div class="mini-stack" style="align-items:flex-end;"><div>${renderChip(item.status || 'accepted')}</div><div class="tiny">${formatDate(item.createdAt || item.updatedAt)}</div></div></div>`;
+            }, 'No accepted connections found for this user.')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderCreditsTab(detail) {
+      return `
+        <div class="detail-grid">
+          <div class="section-card">
+            <div class="section-label">Transactions</div>
+            <div class="section-title">Credit Ledger</div>
+            ${renderRows(detail.transactions || [], function(item) {
+              return `<div class="list-row"><div><div class="mini-title">${escapeHtml(item.description || item.type || 'Transaction')}</div><div class="tiny">${escapeHtml(item.category || 'general')}</div></div><div class="mini-stack" style="align-items:flex-end;"><div>${renderChip(item.type || 'transaction', item.type === 'earn' || item.type === 'refund' || item.type === 'manual_grant' ? 'good' : item.type === 'hold' ? 'warn' : 'info')}</div><div class="tiny">${formatCredits(item.amount || 0)} | ${formatDate(item.createdAt || item.updatedAt)}</div></div></div>`;
+            }, 'No credit transactions recorded for this user.')}
+          </div>
+
+          <div class="section-card">
+            <div class="section-label">Review Cases</div>
+            <div class="section-title">Credit Issue History</div>
+            ${renderRows(detail.creditReviewCases || [], function(item) {
+              return `<div class="list-row"><div><div class="mini-title">${escapeHtml(item.topic || item.caseType || 'Credit case')}</div><div class="tiny">${escapeHtml(item.reviewNotes || item.reason || 'No review notes')}</div></div><div class="mini-stack" style="align-items:flex-end;"><div>${renderChip(item.status || 'pending')}</div><div class="tiny">${formatCredits(item.creditsHeld || 0)} | ${formatDate(item.openedAt || item.updatedAt)}</div></div></div>`;
+            }, 'No credit review cases for this user.')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderMessagesTab(detail) {
+      return `
+        <div class="detail-grid">
+          <div class="section-card">
+            <div class="section-label">Conversations</div>
+            <div class="section-title">Message Threads</div>
+            ${renderRows(detail.conversations || [], function(conversation) {
+              return `<div class="mini-card" style="margin-bottom:12px;"><div class="audit-head"><div><div class="mini-title">${escapeHtml(conversation.partnerName || conversation.partnerUid || 'Conversation')}</div><div class="tiny">${formatDate(conversation.lastMessageAt || conversation.updatedAt)}</div></div><div>${renderChip(formatCount((conversation.messages || []).length) + ' messages', 'blue')}</div></div>${renderRows((conversation.messages || []).slice(0, 4), function(message) {
+                return `<div class="message-row"><div><div>${escapeHtml(message.text || message.message || message.body || 'Message')}</div><div class="tiny">${escapeHtml(message.senderName || message.senderUid || '')}</div></div><div class="tiny">${formatDate(message.createdAt || message.sentAt)}</div></div>`;
+              }, 'No messages in this conversation yet.')}</div>`;
+            }, 'No conversations found for this user.')}
+          </div>
+
+          <div class="section-card">
+            <div class="section-label">Notifications</div>
+            <div class="section-title">System Messages</div>
+            ${renderRows(detail.notifications || [], function(item) {
+              return `<div class="list-row"><div><div class="mini-title">${escapeHtml(item.title || item.type || 'Notification')}</div><div class="tiny">${escapeHtml(item.message || '')}</div></div><div class="mini-stack" style="align-items:flex-end;"><div>${renderChip(item.type || 'notification', 'info')}</div><div class="tiny">${formatDate(item.createdAt || item.updatedAt)}</div></div></div>`;
+            }, 'No notifications found for this user.')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAppealsTab(detail) {
+      const user = detail.user || {};
+      const appeals = detail.accountRecoveryAppeals || [];
+      const selectedAppeal = getAppealById(state.selectedAppealId) || appeals[0] || null;
+      const roleImpact = getRoleImpactSummary(user);
+      const probation = user.probation || {};
+      if (!appeals.length) {
+        return `
+          <div class="detail-grid">
+            <div class="section-card">
+              <div class="section-label">Recovery Appeals</div>
+              <div class="section-title">No Reactivation Requests</div>
+              <div class="muted">This user has not submitted an in-app suspension recovery request yet.</div>
+            </div>
+            <div class="section-card">
+              <div class="section-label">Probation</div>
+              <div class="section-title">Current Restriction State</div>
+              ${renderInfoRows([
+                { label: 'Probation Active', html: renderChip(probation.active ? 'active' : 'clear', probation.active ? 'warn' : 'good') },
+                { label: 'Reason', value: probation.reason || '—' }
+              ])}
+              <div class="split" style="margin-top:14px;">
+                ${renderImpactBlock('Learner Impact', roleImpact.learner, 'No learner-side restrictions active.')}
+                ${renderImpactBlock('Teacher Impact', roleImpact.teacher, 'No teacher-side restrictions active.')}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="detail-grid">
+          <div class="section-card">
+            <div class="section-label">Recovery Queue</div>
+            <div class="section-title">Appeal History</div>
+            ${renderRows(appeals, function(appeal) {
+              const active = selectedAppeal && selectedAppeal.id === appeal.id;
+              return `<button class="user-card${active ? ' active' : ''}" type="button" data-detail-appeal-id="${escapeHtml(appeal.id)}" style="padding:14px;margin-bottom:12px">
+                <div class="user-top">
+                  <div class="mini-title">${escapeHtml(appeal.status || 'pending')}</div>
+                  <div class="tiny">${formatDate(appeal.submittedAt || appeal.updatedAt)}</div>
+                </div>
+                <div class="tiny" style="margin-top:6px">${escapeHtml(appeal.suspensionReasonSnapshot || 'Suspension reason saved in appeal.')}</div>
+              </button>`;
+            }, 'No appeals saved for this user.')}
+          </div>
+
+          <div class="section-card">
+            <div class="section-label">Appeal Detail</div>
+            <div class="section-title">Structured Repentance Submission</div>
+            ${selectedAppeal ? `
+              ${renderInfoRows([
+                { label: 'Status', html: renderChip(selectedAppeal.status || 'pending') },
+                { label: 'Submitted', value: formatDate(selectedAppeal.submittedAt) },
+                { label: 'Reviewed', value: formatDate(selectedAppeal.reviewedAt) },
+                { label: 'Suspension Reason', value: selectedAppeal.suspensionReasonSnapshot || '—' }
+              ])}
+              <div class="section-title" style="margin-top:16px;">Acknowledgement</div>
+              <div class="muted">${escapeHtml(selectedAppeal.apologyText || 'No acknowledgement submitted.')}</div>
+              <div class="section-title" style="margin-top:16px;">What Happened</div>
+              <div class="muted">${escapeHtml(selectedAppeal.incidentExplanation || 'No incident explanation submitted.')}</div>
+              <div class="section-title" style="margin-top:16px;">Corrective Actions</div>
+              <div class="muted">${escapeHtml(selectedAppeal.correctiveActions || 'No corrective actions submitted.')}</div>
+              <div class="section-title" style="margin-top:16px;">Evidence</div>
+              <div class="muted">${selectedAppeal.evidenceUrl ? `<a class="badge-link" href="${escapeHtml(selectedAppeal.evidenceUrl)}" target="_blank" rel="noopener">Open supporting link</a>` : escapeHtml(selectedAppeal.supportingNote || 'No evidence or supporting note added.')}</div>
+
+              <div class="section-title" style="margin-top:16px;">Restriction Impact</div>
+              <div class="split">
+                ${renderImpactBlock('Learner Impact', roleImpact.learner, 'No learner-side restrictions active.')}
+                ${renderImpactBlock('Teacher Impact', roleImpact.teacher, 'No teacher-side restrictions active.')}
+              </div>
+
+              ${selectedAppeal.status === 'pending' ? `
+                <div class="section-title" style="margin-top:18px;">Admin Decision</div>
+                <div class="field">
+                  <label class="field-label" for="appealDecisionReason">Decision Reason</label>
+                  <input class="input" id="appealDecisionReason" type="text" maxlength="160" placeholder="Explain approval or rejection outcome" />
+                </div>
+                <div class="field" style="margin-top:12px;">
+                  <label class="field-label" for="appealReviewNotes">Review Notes</label>
+                  <textarea class="textarea" id="appealReviewNotes" maxlength="500" placeholder="Internal notes for the audit trail and future reviews."></textarea>
+                </div>
+                <div class="section-title" style="margin-top:16px;">Probation Restrictions After Approval</div>
+                <div class="chips" style="gap:10px">
+                  ${[
+                    ['probationCanTeach', 'Allow teaching'],
+                    ['probationCanReceiveRequests', 'Allow receiving requests'],
+                    ['probationCanSendRequests', 'Allow sending requests'],
+                    ['probationCanSchedule', 'Allow scheduling'],
+                    ['probationCanSessionAct', 'Allow session actions'],
+                    ['probationCanRequestVerification', 'Allow verification requests']
+                  ].map(function(entry) {
+                    return `<label class="chip info" style="display:flex;align-items:center;gap:8px"><input id="${entry[0]}" type="checkbox" /> ${escapeHtml(entry[1])}</label>`;
+                  }).join('')}
+                </div>
+                <div class="actions-grid" style="margin-top:16px;">
+                  <button class="btn good" type="button" data-appeal-action="approve" data-appeal-id="${escapeHtml(selectedAppeal.id)}">Approve & Reactivate</button>
+                  <button class="btn warn" type="button" data-appeal-action="reject" data-appeal-id="${escapeHtml(selectedAppeal.id)}">Reject Appeal</button>
+                  <button class="btn ghost" type="button" disabled>Awaiting Admin Review</button>
+                </div>
+              ` : `
+                <div class="section-title" style="margin-top:18px;">Decision</div>
+                ${renderInfoRows([
+                  { label: 'Decision Reason', value: selectedAppeal.decisionReason || '—' },
+                  { label: 'Review Notes', value: selectedAppeal.reviewNotes || '—' },
+                  { label: 'Reviewed By', value: selectedAppeal.reviewedByName || selectedAppeal.reviewedBy || '—' }
+                ])}
+              `}
+            ` : '<div class="muted">Select an appeal to inspect the full repentance details.</div>'}
+          </div>
+
+          <div class="section-card">
+            <div class="section-label">Probation</div>
+            <div class="section-title">Current Restriction State</div>
+            ${renderInfoRows([
+              { label: 'Probation Active', html: renderChip(probation.active ? 'active' : 'clear', probation.active ? 'warn' : 'good') },
+              { label: 'Reason', value: probation.reason || '—' }
+            ])}
+            <div class="actions-grid" style="margin-top:16px;">
+              <button class="btn primary" type="button" data-appeal-action="clear-probation" ${probation.active ? '' : 'disabled'}>Clear Probation</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderActionsTab(detail) {
+      const user = detail.user || {};
+      return `
+        <div class="detail-grid">
+          <div class="section-card">
+            <div class="section-label">Admin Actions</div>
+            <div class="section-title">Account Controls</div>
+            <div class="helper">Suspension keeps the user signed in with restricted access. Termination disables login through Firebase Auth. History stays preserved for auditability.</div>
+            <div class="field" style="margin-top:16px;">
+              <label class="field-label" for="adminActionReason">Reason</label>
+              <input class="input" id="adminActionReason" type="text" maxlength="160" placeholder="Reason required for suspension or termination" />
+            </div>
+            <div class="field" style="margin-top:12px;">
+              <label class="field-label" for="adminActionNotes">Notes</label>
+              <textarea class="textarea" id="adminActionNotes" maxlength="500" placeholder="Add internal admin notes, ticket references, or context."></textarea>
+            </div>
+            <div class="actions-grid" style="margin-top:16px;">
+              <button class="btn warn" type="button" data-admin-action="suspend" ${user.uid === state.currentUser?.uid ? 'disabled' : ''}>Suspend User</button>
+              <button class="btn good" type="button" data-admin-action="reactivate">Reactivate User</button>
+              <button class="btn danger" type="button" data-admin-action="terminate" ${user.uid === state.currentUser?.uid ? 'disabled' : ''}>Terminate User</button>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-label">Audit Trail</div>
+            <div class="section-title">Admin History</div>
+            ${renderRows(detail.adminAuditLogs || [], function(item) {
+              return `<div class="audit-row"><div><div class="mini-title">${escapeHtml(item.action || 'admin_action')}</div><div class="tiny">${escapeHtml((item.actorName || item.actorUid || 'Admin') + ' -> ' + (item.targetName || item.targetUid || 'User'))}</div><div class="tiny">${escapeHtml(item.reason || item.notes || 'No notes')}</div></div><div class="mini-stack" style="align-items:flex-end;"><div>${renderChip(item.nextStatus || item.previousStatus || 'logged')}</div><div class="tiny">${formatDate(item.createdAt)}</div></div></div>`;
+            }, 'No admin audit logs for this user yet.')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderDetail() {
+      const detail = state.selectedDetail;
+      if (!detail) {
+        $('detailPane').innerHTML = renderEmpty('Select A User', 'The right pane will show profile data, grouped relationships, sessions, credits, recovery appeals, and admin actions for the selected account.');
+        return;
+      }
+      const user = detail.user || {};
+      const tabs = [
+        ['overview', 'Overview'],
+        ['relationships', 'Relationships'],
+        ['sessions', 'Sessions'],
+        ['credits', 'Credits'],
+        ['appeals', 'Recovery Appeals'],
+        ['actions', 'Admin Actions']
+      ];
+      let tabHtml = '';
+      if (state.activeTab === 'overview') tabHtml = renderOverviewTab(detail);
+      else if (state.activeTab === 'relationships') tabHtml = renderRelationshipsTab(detail);
+      else if (state.activeTab === 'sessions') tabHtml = renderSessionsTab(detail);
+      else if (state.activeTab === 'credits') tabHtml = renderCreditsTab(detail);
+      else if (state.activeTab === 'appeals') tabHtml = renderAppealsTab(detail);
+      else tabHtml = renderActionsTab(detail);
+      $('detailPane').innerHTML = `
+        <div class="detail-head">
+          <div class="identity">
+            ${renderAvatar(user)}
+            <div>
+              <div class="title" style="font-size:1.6rem;">${escapeHtml(user.fullName || user.email || user.uid)}</div>
+              <div class="subtitle">${escapeHtml(user.email || user.uid)}</div>
+              <div class="chips" style="margin-top:12px;">
+                ${renderChip(user.appRole || 'user')}
+                ${renderChip(user.accountStatus || 'active')}
+                ${renderChip(user.verification?.status || 'unverified')}
+                ${renderChip(user.humanVerification?.status || 'not-requested')}
+              </div>
+            </div>
+          </div>
+          <div class="mini-stack" style="align-items:flex-end;">
+            <div class="tiny">Created</div>
+            <div>${formatDate(user.createdAt)}</div>
+            <div class="tiny">Updated</div>
+            <div>${formatDate(user.updatedAt)}</div>
+          </div>
+        </div>
+        ${renderSummaryCards(detail)}
+        <div class="tabs">${tabs.map(function(tab) {
+          return `<button class="tab-btn ${state.activeTab === tab[0] ? 'active' : ''}" type="button" data-tab="${tab[0]}">${tab[1]}</button>`;
+        }).join('')}</div>
+        ${tabHtml}
+      `;
+    }
+
+    async function resolveProfile(user) {
+      const snap = await getDoc(doc(db, 'users', user.uid));
+      return snap.exists() ? { uid: snap.id, ...snap.data() } : null;
+    }
+
+    async function loadOverview() {
+      const data = await apiJson('/api/admin/overview');
+      state.overview = data.overview || {};
+      renderStats();
+    }
+
+    async function loadUsers() {
+      const data = await apiJson('/api/admin/users');
+      state.users = Array.isArray(data.users) ? data.users : [];
+      renderStats();
+      renderUserList();
+    }
+
+    async function loadRecoveryAppeals() {
+      const data = await apiJson('/api/admin/account-recovery-appeals?status=all');
+      state.recoveryAppeals = Array.isArray(data.appeals) ? data.appeals : [];
+      renderStats();
+      renderAppealList();
+    }
+
+    async function loadSelectedUser(uid) {
+      if (!uid) return;
+      $('detailPane').innerHTML = renderEmpty('Loading User', 'Fetching that user profile, grouped relationships, credit history, and audit trail...');
+      const data = await apiJson('/api/admin/users/' + encodeURIComponent(uid));
+      state.selectedUserId = uid;
+      state.selectedDetail = data.detail || null;
+      if (!state.selectedAppealId || !(state.selectedDetail?.accountRecoveryAppeals || []).some(function(item) { return item.id === state.selectedAppealId; })) {
+        state.selectedAppealId = state.selectedDetail?.accountRecoveryAppeals?.[0]?.id || '';
+      }
+      renderAppealList();
+      renderUserList();
+      renderDetail();
+    }
+
+    async function refreshSelectedUser() {
+      if (state.selectedUserId) await loadSelectedUser(state.selectedUserId);
+      else renderDetail();
+    }
+
+    async function loadAllAdminData() {
+      await Promise.all([loadOverview(), loadUsers(), loadRecoveryAppeals()]);
+      const candidateId = state.selectedUserId || state.users[0]?.uid || '';
+      if (candidateId) await loadSelectedUser(candidateId);
+      else renderDetail();
+    }
+
+    async function selectAdminUser(uid) {
+      if (!uid || uid === state.selectedUserId) return;
+      state.activeTab = 'overview';
+      await loadSelectedUser(uid);
+    }
+
+    async function selectRecoveryAppeal(appealId, uid) {
+      if (!appealId || !uid) return;
+      state.selectedAppealId = appealId;
+      state.activeTab = 'appeals';
+      if (state.selectedUserId !== uid) {
+        await loadSelectedUser(uid);
+        return;
+      }
+      renderAppealList();
+      renderDetail();
+    }
+
+    function switchAdminTab(tab) {
+      if (!tab || tab === state.activeTab) return;
+      state.activeTab = tab;
+      renderDetail();
+    }
+
+    async function runAdminAction(action) {
+      if (!state.selectedDetail?.user?.uid) return;
+      const targetUid = state.selectedDetail.user.uid;
+      const reason = $('adminActionReason')?.value?.trim() || '';
+      const notes = $('adminActionNotes')?.value?.trim() || '';
+      const route = action === 'suspend' ? 'suspend' : action === 'reactivate' ? 'reactivate' : 'terminate';
+      const btn = document.querySelector('[data-admin-action="' + action + '"]');
+      if (btn) btn.disabled = true;
+      try {
+        await apiJson('/api/admin/users/' + encodeURIComponent(targetUid) + '/' + route, {
+          method: 'POST',
+          body: JSON.stringify({ reason, notes })
+        });
+        showToast('Admin action saved', capitalize(action) + ' completed for ' + (state.selectedDetail.user.fullName || targetUid) + '.');
+        await Promise.all([loadOverview(), loadUsers(), refreshSelectedUser()]);
+      } catch (err) {
+        showToast('Action failed', err.message || 'Could not update that account.');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function runRecoveryAppealAction(action, appealId) {
+      const user = state.selectedDetail?.user || {};
+      const decisionReason = $('appealDecisionReason')?.value?.trim() || '';
+      const reviewNotes = $('appealReviewNotes')?.value?.trim() || '';
+      const restrictions = {
+        canTeach: !!$('probationCanTeach')?.checked,
+        canReceiveRequests: !!$('probationCanReceiveRequests')?.checked,
+        canSendRequests: !!$('probationCanSendRequests')?.checked,
+        canSchedule: !!$('probationCanSchedule')?.checked,
+        canSessionAct: !!$('probationCanSessionAct')?.checked,
+        canRequestVerification: !!$('probationCanRequestVerification')?.checked
+      };
+      const btn = document.querySelector('[data-appeal-action="' + action + '"]' + (appealId ? '[data-appeal-id="' + appealId + '"]' : ''));
+      if (btn) btn.disabled = true;
+      try {
+        if (action === 'approve') {
+          await apiJson('/api/admin/account-recovery-appeals/' + encodeURIComponent(appealId) + '/approve', {
+            method: 'POST',
+            body: JSON.stringify({ decisionReason, reviewNotes, restrictions })
+          });
+          showToast('Recovery appeal approved', (user.fullName || user.email || 'This user') + ' is active again under probation.');
+        } else if (action === 'reject') {
+          await apiJson('/api/admin/account-recovery-appeals/' + encodeURIComponent(appealId) + '/reject', {
+            method: 'POST',
+            body: JSON.stringify({ decisionReason, reviewNotes })
+          });
+          showToast('Recovery appeal rejected', 'The suspension stays in place and the user was notified.');
+        } else if (action === 'clear-probation') {
+          await apiJson('/api/admin/users/' + encodeURIComponent(user.uid) + '/clear-probation', {
+            method: 'POST',
+            body: JSON.stringify({ decisionReason, reviewNotes })
+          });
+          showToast('Probation cleared', (user.fullName || user.email || 'This user') + ' now has normal access again.');
+        }
+        await Promise.all([loadOverview(), loadUsers(), loadRecoveryAppeals(), refreshSelectedUser()]);
+      } catch (err) {
+        showToast('Appeal action failed', err.message || 'Could not update the suspension recovery workflow.');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    $('refreshBtn').addEventListener('click', function() {
+      loadAllAdminData().then(function() {
+        showToast('Admin data refreshed', 'The user directory and selected account view are up to date.');
+      }).catch(function(err) {
+        showToast('Refresh failed', err.message || 'Could not reload admin data.');
+      });
+    });
+
+    $('logoutBtn').addEventListener('click', async function() {
+      await signOut(auth);
+      window.location.href = 'Registration.html';
+    });
+
+    $('searchInput').addEventListener('input', renderUserList);
+    $('roleFilter').addEventListener('change', renderUserList);
+    $('statusFilter').addEventListener('change', renderUserList);
+    $('verificationFilter').addEventListener('change', renderUserList);
+
+    $('userList').addEventListener('click', function(event) {
+      const card = event.target.closest('[data-user-id]');
+      if (!card) return;
+      selectAdminUser(card.getAttribute('data-user-id'));
+    });
+
+    $('appealList').addEventListener('click', function(event) {
+      const card = event.target.closest('[data-appeal-id]');
+      if (!card) return;
+      selectRecoveryAppeal(card.getAttribute('data-appeal-id'), card.getAttribute('data-appeal-uid'));
+    });
+
+    $('detailPane').addEventListener('click', function(event) {
+      const tab = event.target.closest('[data-tab]');
+      if (tab) {
+        switchAdminTab(tab.getAttribute('data-tab'));
+        return;
+      }
+      const appealCard = event.target.closest('[data-detail-appeal-id]');
+      if (appealCard) {
+        state.selectedAppealId = appealCard.getAttribute('data-detail-appeal-id');
+        renderDetail();
+        renderAppealList();
+        return;
+      }
+      const action = event.target.closest('[data-admin-action]');
+      if (action) {
+        runAdminAction(action.getAttribute('data-admin-action'));
+        return;
+      }
+      const appealAction = event.target.closest('[data-appeal-action]');
+      if (appealAction) {
+        runRecoveryAppealAction(appealAction.getAttribute('data-appeal-action'), appealAction.getAttribute('data-appeal-id'));
+      }
+    });
+
+    onAuthStateChanged(auth, async function(user) {
+      if (!user) {
+        window.location.href = 'Registration.html';
+        return;
+      }
+      state.currentUser = user;
+      try {
+        const profile = await resolveProfile(user);
+        state.profile = profile;
+        if (!profile) {
+          window.location.href = 'createprofile.html';
+          return;
+        }
+        if (profile.appRole === 'reviewer') {
+          window.location.href = 'reviewer.html';
+          return;
+        }
+        if (profile.appRole !== 'admin') {
+          window.location.href = profile.profileCompleted ? 'dashboard.html' : 'createprofile.html';
+          return;
+        }
+        await loadAllAdminData();
+        showToast('Admin console ready', 'Platform operations data is now loaded.');
+      } catch (err) {
+        console.error('[admin-init]', err.message);
+        $('detailPane').innerHTML = renderEmpty('Admin Loading Failed', err.message || 'Could not load the admin workspace.');
+        showToast('Admin load failed', err.message || 'Could not load the admin workspace.');
+      }
+    });
+  </script>
+</body>
+</html>

@@ -503,6 +503,8 @@ main{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:110px 24p
   </div>
 </main>
 
+<script src="skill-pricing.js"></script>
+
 <!-- Firebase Module -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -561,7 +563,7 @@ function loadExistingProfile(data) {
 
   // Skills
   if(data.skills && data.skills.toTeach) {
-    window.offerSkills = data.skills.toTeach.map(s => ({name: s.name, level: s.level}));
+    window.offerSkills = data.skills.toTeach.map(s => ({name: s.name, level: s.level, credits: s.credits}));
     renderTags('offer');
     if(window._updateCreditPreview) window._updateCreditPreview();
   }
@@ -615,18 +617,22 @@ function loadExistingProfile(data) {
 window.loadExistingProfile = loadExistingProfile;
 
 /* ── CREDIT MAP ── */
-const CREDIT_MAP={'rust':50,'c++':50,'cpp':50,'assembly':55,'haskell':50,'scala':45,'kotlin':40,'swift':40,'java':42,'c#':40,'go':42,'golang':42,'typescript':38,'r':38,'matlab':40,'c':44,'machine learning':50,'deep learning':55,'neural networks':55,'llm':55,'nlp':50,'computer vision':52,'pytorch':48,'tensorflow':48,'data science':45,'statistics':40,'ai':48,'docker':40,'kubernetes':48,'devops':46,'aws':44,'cloud':42,'gcp':44,'azure':44,'react':36,'vue':34,'angular':36,'node':32,'nodejs':32,'next.js':38,'nextjs':38,'django':35,'flask':32,'fastapi':36,'python':28,'javascript':30,'js':30,'html':18,'css':18,'html/css':20,'sql':28,'excel':20,'bash':30,'linux':32,'figma':28,'ui/ux':30,'graphic design':28,'photoshop':26,'illustrator':28,'after effects':35,'blender':40,'3d modeling':42,'video editing':32,'premiere pro':32,'japanese':48,'arabic':46,'mandarin':50,'chinese':50,'korean':44,'russian':44,'german':38,'french':32,'spanish':28,'hindi':22,'english':20,'violin':45,'piano':38,'guitar':28,'drums':32,'singing':28,'drawing':24,'painting':26,'math':32,'calculus':38,'physics':38,'chemistry':36,'biology':30,'public speaking':30,'writing':24,'yoga':22,'cooking':18};
-const LEVEL_MULT={beginner:.7,intermediate:1.0,expert:1.45};
-function getCredits(name,level){const k=name.toLowerCase().trim();if(CREDIT_MAP[k])return Math.round(CREDIT_MAP[k]*LEVEL_MULT[level]);for(const ck of Object.keys(CREDIT_MAP)){if(k.includes(ck)||ck.includes(k))return Math.round(CREDIT_MAP[ck]*LEVEL_MULT[level]);}return Math.round({beginner:20,intermediate:30,expert:44}[level]);}
+const pricing = window.SkillSwapPricing || {
+  getCredits: function(_name, level) { return ({ beginner: 15, intermediate: 25, expert: 33 })[String(level || '').toLowerCase()] || 25; },
+  getDifficultyBadge: function() { return { label: 'Foundational', color: '#34d399' }; }
+};
+function getCredits(name,level){return pricing.getCredits(name,level);}
 window._getCredits=getCredits;
 
 function getDiff(name){const k=name.toLowerCase().trim();let b=30;if(CREDIT_MAP[k])b=CREDIT_MAP[k];else for(const ck of Object.keys(CREDIT_MAP)){if(k.includes(ck)||ck.includes(k)){b=CREDIT_MAP[ck];break;}}if(b>=48)return{label:'Expert-tier 🔴',color:'#f97316'};if(b>=38)return{label:'Advanced 🟣',color:'#a78bfa'};if(b>=28)return{label:'Intermediate 🔵',color:'#60a5fa'};return{label:'Foundational 🟢',color:'#34d399'};}
+
+function getDiffBadge(name){return pricing.getDifficultyBadge(name);}
 
 function updateCreditPreview(){
   const preview=document.getElementById('creditPreview'),rows=document.getElementById('creditRows'),total=document.getElementById('totalCredits');
   if(!window.offerSkills||!window.offerSkills.length){preview.style.display='none';return;}
   preview.style.display='block';rows.innerHTML='';let sum=0;
-  window.offerSkills.forEach(s=>{const c=getCredits(s.name,s.level);sum+=c;const d=getDiff(s.name);const row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.05);';row.innerHTML=`<span style="flex:1;font-size:.88rem;">${s.name}</span><span style="font-size:.72rem;padding:2px 10px;border-radius:50px;background:rgba(255,255,255,.06);color:${d.color};border:1px solid ${d.color}44;">${d.label}</span><span style="font-size:.75rem;color:var(--muted);text-transform:capitalize;min-width:80px;text-align:center;">${s.level}</span><span style="font-family:'Syne',sans-serif;font-weight:800;color:#f59e0b;min-width:55px;text-align:right;">+${c} cr</span>`;rows.appendChild(row);});
+  window.offerSkills.forEach(s=>{const c=typeof s.credits==='number'?s.credits:getCredits(s.name,s.level);sum+=c;const d=getDiffBadge(s.name);const row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.05);';row.innerHTML=`<span style="flex:1;font-size:.88rem;">${s.name}</span><span style="font-size:.72rem;padding:2px 10px;border-radius:50px;background:rgba(255,255,255,.06);color:${d.color};border:1px solid ${d.color}44;">${d.label}</span><span style="font-size:.75rem;color:var(--muted);text-transform:capitalize;min-width:80px;text-align:center;">${s.level}</span><span style="font-family:'Syne',sans-serif;font-weight:800;color:#f59e0b;min-width:55px;text-align:right;">+${c} cr</span>`;rows.appendChild(row);});
   total.textContent='+'+Math.round(sum/window.offerSkills.length)+' credits avg';
 }
 window._updateCreditPreview=updateCreditPreview;
@@ -796,7 +802,7 @@ window.finish=async function(){
         meetingPreference:get('meetingPreference'),timeZone:get('timeZone')
       },
       creditBalance:50,
-      stats:{averageRating:0,totalRatings:0,sessionsTaught:0,sessionsCompleted:0,completionRate:0,ratingsBreakdown:{knowledge:0,teaching:0,communication:0}},
+      stats:{averageRating:0,totalRatings:0,teacherAverageRating:0,teacherTotalRatings:0,learnerAverageRating:0,learnerTotalRatings:0,sessionsTaught:0,sessionsCompleted:0,paidSessionsTaught:0,completionRate:0,ratingsBreakdown:{knowledge:0,teaching:0,communication:0}},
       profileCompleted:true,
       createdAt:serverTimestamp(),updatedAt:serverTimestamp()
     });

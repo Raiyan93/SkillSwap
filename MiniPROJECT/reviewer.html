@@ -715,6 +715,10 @@
           window.location.href = 'createprofile.html';
           return;
         }
+        if (profile.appRole === 'admin') {
+          window.location.href = 'admin.html';
+          return;
+        }
         if (profile.appRole !== 'reviewer') {
           window.location.href = profile.profileCompleted ? 'dashboard.html' : 'createprofile.html';
           return;

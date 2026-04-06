@@ -320,6 +320,18 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 .field-m input::placeholder,.field-m textarea::placeholder{color:var(--muted)}
 .field-m select option,.field-m textarea{background:var(--card2)}
 .field-m textarea{resize:vertical;min-height:80px}
+.ss-native-select{position:absolute !important;opacity:0 !important;pointer-events:none !important;inset:0 !important;width:100% !important;height:100% !important}
+.ss-select-wrap{position:relative}
+.ss-select-trigger{width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border2);color:var(--text);padding:11px 42px 11px 14px;border-radius:11px;font-size:.9rem;outline:none;font-family:'Plus Jakarta Sans',sans-serif;transition:all .2s;cursor:pointer;text-align:left;position:relative}
+.ss-select-trigger:hover,.ss-select-wrap.open .ss-select-trigger{border-color:var(--purple);box-shadow:0 0 0 3px rgba(124,92,252,0.15)}
+.ss-select-trigger.placeholder{color:var(--muted)}
+.ss-select-trigger::after{content:'⌄';position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:.9rem;color:var(--text2);pointer-events:none}
+.ss-select-wrap.open .ss-select-trigger::after{transform:translateY(-50%) rotate(180deg)}
+.ss-select-menu{position:absolute;left:0;right:0;top:calc(100% + 8px);background:var(--card2);border:1px solid rgba(124,92,252,0.24);border-radius:12px;box-shadow:0 20px 45px rgba(0,0,0,0.45);padding:8px;display:none;z-index:450;max-height:240px;overflow:auto}
+.ss-select-wrap.open .ss-select-menu{display:block}
+.ss-select-option{padding:10px 12px;border-radius:9px;color:var(--text);font-size:.86rem;cursor:pointer;transition:background .18s,color .18s}
+.ss-select-option:hover,.ss-select-option.active{background:rgba(124,92,252,0.18);color:#fff}
+.ss-select-option.disabled{color:var(--muted);cursor:default}
 .modal-btn{width:100%;padding:13px;border-radius:13px;border:none;font-weight:700;font-size:.92rem;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;transition:all .2s;margin-top:8px}
 .modal-btn.primary{background:linear-gradient(135deg,var(--purple),#5430d4);color:#fff;box-shadow:0 4px 16px rgba(124,92,252,0.4)}
 .modal-btn.primary:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(124,92,252,0.5)}
@@ -451,7 +463,16 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
       <span id="acceptedPartnerCount" style="font-size:.76rem;color:var(--muted)">0 partners</span>
     </div>
     <div class="request-list" id="acceptedPartnersList">
-      <div class="request-empty">Your accepted learning partners will appear here. Connect with teachers or students!</div>
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div>
+          <div style="font-size:.76rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Learning From</div>
+          <div id="acceptedLearningFromList" class="request-list"></div>
+        </div>
+        <div>
+          <div style="font-size:.76rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Teaching</div>
+          <div id="acceptedTeachingList" class="request-list"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -481,16 +502,6 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 10l4.553-2.531A1 1 0 0121 8.36v7.28a1 1 0 01-1.447.892L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>
         <span id="activeSwapMeetLabel">Open Schedule</span>
       </button>
-    </div>
-
-    <!-- Session Schedule mini -->
-    <div class="card anim-4">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
-        <div class="card-title" style="margin-bottom:0"><div class="dot" style="background:var(--green)"></div>Session Schedule</div>
-        <button onclick="openScheduleModal()" style="background:rgba(124,92,252,0.12);border:1px solid rgba(124,92,252,0.25);color:var(--purple2);padding:7px 16px;border-radius:9px;font-size:.75rem;font-weight:700;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif">+ Schedule</button>
-      </div>
-      <div class="calendar-strip" id="calStrip"></div>
-      <div class="sessions-list" id="sessionsList"></div>
     </div>
 
   </div>
@@ -592,6 +603,12 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
       style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 20px 12px 44px;color:var(--text);font-size:.92rem;outline:none;font-family:'Plus Jakarta Sans',sans-serif"
       onfocus="this.style.borderColor='var(--purple)'" onblur="this.style.borderColor=''"/>
   </div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;font-size:.78rem;color:var(--muted)">
+    <span style="padding:5px 10px;border:1px solid var(--border2);border-radius:999px;background:rgba(255,255,255,0.03)">Badge guide</span>
+    <span style="padding:5px 10px;border:1px solid rgba(205,127,50,0.28);border-radius:999px;background:rgba(205,127,50,0.08);color:#d6a26c;"> Bronze: 5 paid sessions</span>
+    <span style="padding:5px 10px;border:1px solid rgba(192,192,192,0.28);border-radius:999px;background:rgba(192,192,192,0.08);color:#d7d7e4;"> Silver: 10 paid sessions</span>
+    <span style="padding:5px 10px;border:1px solid rgba(245,158,11,0.28);border-radius:999px;background:rgba(245,158,11,0.08);color:#f6c977;"> Gold: 20 paid sessions</span>
+  </div>
   <div class="explore-grid" id="exploreGrid"></div>
 </div>
 
@@ -617,9 +634,9 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
       <div class="subgreeting">Chat with your swap partners</div>
     </div>
   </div>
-  <div style="display:grid;grid-template-columns:280px 1fr;gap:0;background:var(--card);border:1px solid var(--border2);border-radius:20px;overflow:hidden;min-height:560px">
+  <div id="messagesShell" style="display:grid;grid-template-columns:280px 1fr;gap:0;background:var(--card);border:1px solid var(--border2);border-radius:20px;overflow:hidden;min-height:560px">
     <div class="msg-sidebar" id="msgContactList"></div>
-    <div style="display:flex;flex-direction:column">
+    <div id="messagePanel" style="display:flex;flex-direction:column">
       <div id="msgHeader" style="padding:16px 20px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:12px">
         <div id="msgHeaderAvatar" style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--purple),var(--blue));display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0">👦</div>
         <div><div id="msgHeaderName" style="font-weight:700;font-size:.92rem">Aarav M.</div>
@@ -628,7 +645,7 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
       </div>
       <div class="msg-area">
         <div class="msg-bubble-wrap" id="msgBubbles"></div>
-        <div class="msg-input-row">
+        <div class="msg-input-row" id="msgComposer">
           <input class="msg-input" id="msgInput" placeholder="Type a message..." onkeydown="if(event.key==='Enter')sendMsg()"/>
           <button class="msg-send-btn" onclick="sendMsg()">➤</button>
         </div>
@@ -734,7 +751,7 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
     </div>
     <!-- Right column -->
     <div style="display:flex;flex-direction:column;gap:16px">
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+      <div id="profileStatsGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px">
         <div class="profile-stat"><div class="profile-stat-val" id="profileStatCredits">—</div><div class="profile-stat-label">Credits</div></div>
         <div class="profile-stat"><div class="profile-stat-val" id="profileStatSessions">—</div><div class="profile-stat-label">Total Sessions</div></div>
         <div class="profile-stat"><div class="profile-stat-val" id="profileStatTaught">—</div><div class="profile-stat-label">Taught</div></div>
@@ -750,7 +767,7 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
         <div class="card-title"><div class="dot"></div>Recent Activity</div>
         <div id="profileActivity"><span style="color:var(--muted);font-size:.82rem">No recent activity.</span></div>
       </div>
-      <div class="card">
+      <div class="card" id="profilePartnersCard">
         <div class="card-title"><div class="dot" style="background:var(--orange)"></div>Active Swap Partners</div>
         <div id="profilePartners"><span style="color:var(--muted);font-size:.82rem">No active partners yet.</span></div>
       </div>
@@ -869,7 +886,7 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
     <div class="modal-sub">Choose a skill to create a manual roadmap you can update as you learn.</div>
     <div class="field-m"><label>Skill Name</label><input type="text" id="newSkillInput" placeholder="e.g. React, Django, French..."/></div>
     <div class="field-m"><label>Your Level</label>
-      <select id="newSkillLevel"><option>Complete Beginner</option><option>Some Exposure</option><option>Intermediate</option></select>
+      <select id="newSkillLevel"><option>Beginner</option><option>Intermediate</option><option>Advanced</option></select>
     </div>
     <button class="modal-btn primary" onclick="addSkillToRoadmap()">🗺️ Create Roadmap</button>
     <button class="modal-btn secondary" onclick="closeModal('addSkillModal')">Cancel</button>
@@ -914,7 +931,7 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
         <span style="color:var(--red);font-weight:600">⚠️ Report an issue with this session</span>
       </label>
       <div id="issueReasonSection" style="display:none;margin-top:12px">
-        <select id="issueReason" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border2);color:var(--text);padding:10px 14px;border-radius:10px;font-size:.88rem">
+        <select id="issueReason" style="width:100%;background:rgb(0, 0, 0);border:1px solid var(--border2);color:var(--text);padding:10px 14px;border-radius:10px;font-size:.88rem">
           <option value="">Select reason...</option>
         </select>
       </div>
@@ -958,6 +975,7 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
   <button class="toast-close" onclick="hideToast()">✕</button>
 </div>
 
+<script src="skill-pricing.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════════════
 // STATE
@@ -1205,10 +1223,23 @@ function updateActiveSwapCard(profile, partner, session) {
     setText('activeSwapMeetLabel', 'Open Schedule to book');
     var btn2 = document.getElementById('activeSwapMeetBtn');
     if (btn2) btn2.setAttribute('onclick', 'openScheduleModal()');
+  } else {
+    setText('activeSwapPartnerName', 'No active partner');
+    setText('activeSwapPartnerSkill', 'Connect to start learning');
+    var avFallback = document.getElementById('activeSwapPartnerAvatar');
+    if (avFallback) avFallback.textContent = 'ðŸ‘¤';
+    var cdEmpty = document.getElementById('activeSwapCountdown');
+    if (cdEmpty) cdEmpty.innerHTML = 'No session scheduled';
+    setText('activeSwapTopic', 'Accept a connection to plan your first lesson');
+    setText('activeSwapDuration', 'Not scheduled yet');
+    setText('activeSwapMeetLabel', 'Open Schedule');
+    var btnEmpty = document.getElementById('activeSwapMeetBtn');
+    if (btnEmpty) btnEmpty.setAttribute('onclick', 'openScheduleModal()');
   }
 }
 
 function refreshConnectedUi() {
+  if (window.renderAcceptedPartners) window.renderAcceptedPartners(state.acceptedPartners || []);
   if (window.renderPartnerOptions) window.renderPartnerOptions(state.acceptedPartners || []);
   if (window.renderContactList) window.renderContactList();
   if (window.updateMessageHeaderAction) window.updateMessageHeaderAction();
@@ -1225,8 +1256,8 @@ function refreshConnectedUi() {
   }
   var nextSession = state.sessions && state.sessions.find(function(s){ return s.type === 'upcoming'; });
   var partner = nextSession && nextSession.partnerUid
-    ? (window.LIVE_MATCH_USERS || []).find(function(u){ return u.uid === nextSession.partnerUid; }) || (state.acceptedPartners || []).find(function(u){ return u.partnerUid === nextSession.partnerUid; })
-    : (state.acceptedPartners || [])[0] || (window.LIVE_MATCH_USERS || [])[0];
+    ? (state.acceptedPartners || []).find(function(u){ return u.partnerUid === nextSession.partnerUid; })
+    : (state.acceptedPartners || [])[0] || null;
   window.updateActiveSwapCard(state.profile || null, partner || null, nextSession || null);
 }
 
@@ -1280,6 +1311,44 @@ function renderIncomingRequests(items) {
         '</div>' +
       '</div></div>';
   }).join('');
+}
+
+function renderAcceptedPartners(items) {
+  var all = items || [];
+  var count = document.getElementById('acceptedPartnerCount');
+  var learningList = document.getElementById('acceptedLearningFromList');
+  var teachingList = document.getElementById('acceptedTeachingList');
+  if (count) count.textContent = all.length + ' partners';
+  if (!learningList || !teachingList) return;
+  var learningFrom = all.filter(function(item) { return item.role === 'teacher'; });
+  var teaching = all.filter(function(item) { return item.role === 'student'; });
+  function renderList(list, emptyText) {
+    if (!list.length) {
+      return '<div class="request-empty">' + escapeHtml(emptyText) + '</div>';
+    }
+    return list.map(function(item) {
+      var creditText = item.sessionType === 'demo'
+        ? 'Free demo session'
+        : String(getSafeCreditAmount(item)) + ' credits per session';
+      return '<div class="request-item">' +
+        '<div class="request-avatar">' + escapeHtml(item.partnerEmoji || 'ðŸ‘¤') + '</div>' +
+        '<div class="request-main">' +
+          '<div class="request-title">' + escapeHtml(item.partnerName || 'Partner') + '</div>' +
+          '<div class="request-meta">' + escapeHtml(item.skillRequested || 'General guidance') + ' Â· ' + escapeHtml(creditText) + '</div>' +
+          '<div class="pill-row">' +
+            '<span class="pill">' + escapeHtml(item.role === 'teacher' ? 'Teacher' : 'Learner') + '</span>' +
+            '<span class="pill info">' + escapeHtml(item.sessionType === 'demo' ? 'Demo' : 'Paid') + '</span>' +
+          '</div>' +
+          '<div class="request-actions">' +
+            '<button class="mini-btn success" onclick="switchTab(\'messages\',null); if(window.loadConversationById){ window.loadConversationById(\'accepted:' + escapeHtml(item.requestId) + '\'); }">Chat</button>' +
+            '<button class="mini-btn" style="background:rgba(124,92,252,0.12);color:var(--purple2);border:1px solid rgba(124,92,252,0.25)" onclick="openScheduleModal()">Schedule</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+  learningList.innerHTML = renderList(learningFrom, 'No accepted teachers yet. Connect with someone you want to learn from.');
+  teachingList.innerHTML = renderList(teaching, 'No accepted learners yet. Accept a lesson request to start teaching.');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1416,6 +1485,65 @@ function sendRequest(encoded) {
 // ═══════════════════════════════════════════════════════════════
 // EXPLORE TAB
 // ═══════════════════════════════════════════════════════════════
+openMatchModal = function(encoded) {
+  var u = typeof encoded === 'string' ? JSON.parse(decodeURIComponent(encoded)) : encoded;
+  var teacherProfile = state.userMap && u.uid ? (state.userMap[u.uid] || u) : u;
+  var defaultSkill = (u.teachSkills || [u.primaryTeach || 'General guidance'])[0] || 'General guidance';
+  var safeCreditsFrom = getSkillCredits(teacherProfile, defaultSkill);
+  u.creditsFrom = safeCreditsFrom;
+  var skillOpts = (u.teachSkills||[u.primaryTeach||'General guidance']).map(function(s){
+    return '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + '</option>';
+  }).join('');
+  document.getElementById('matchModalContent').innerHTML =
+    '<div style="text-align:center;margin-bottom:24px">' +
+      '<div style="width:70px;height:70px;border-radius:50%;background:linear-gradient(135deg,#7c5cfc,#4facfe);display:flex;align-items:center;justify-content:center;font-size:2rem;margin:0 auto 12px">' + escapeHtml(u.emoji||'ðŸ‘¤') + '</div>' +
+      '<div class="modal-title">' + escapeHtml(u.name) + '</div><div style="color:var(--muted);font-size:.82rem">' + escapeHtml(u.uni||'') + '</div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">' +
+      '<div style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);border-radius:12px;padding:12px;text-align:center"><div style="font-size:.7rem;color:var(--muted);margin-bottom:4px">Teaches</div><div style="font-weight:700;color:var(--green)">' + escapeHtml(u.teaches||u.primaryTeach||'â€”') + '</div></div>' +
+      '<div style="background:rgba(124,92,252,0.08);border:1px solid rgba(124,92,252,0.2);border-radius:12px;padding:12px;text-align:center"><div style="font-size:.7rem;color:var(--muted);margin-bottom:4px">Type</div><div style="font-weight:700;color:var(--purple2)">' + (u.demoOptIn?'Free demo available':safeCreditsFrom+' credits/session') + '</div></div>' +
+    '</div>' +
+    '<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border2);border-radius:12px;padding:14px;margin-bottom:16px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:.75rem;color:var(--muted)">Match Score</span><span style="font-weight:800;color:var(--green);font-size:1.1rem">' + (u.score||0) + '%</span></div>' +
+      '<div style="height:6px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden"><div style="height:100%;width:' + (u.score||0) + '%;background:linear-gradient(90deg,var(--purple),var(--cyan));border-radius:99px"></div></div>' +
+    '</div>' +
+    '<div class="field-m"><label>Request Skill</label><select id="requestSkill">' + skillOpts + '</select></div>' +
+    '<div class="field-m"><label>Session Type</label><select id="requestType">' +
+      (u.demoOptIn?'<option value="demo">Free demo session</option>':'') +
+      '<option value="credit">Credit lesson</option>' +
+    '</select></div>' +
+    '<div id="matchRequestPricing" style="background:rgba(124,92,252,0.08);border:1px solid rgba(124,92,252,0.22);border-radius:12px;padding:12px 14px;margin-bottom:14px">' +
+      '<div style="font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Pricing</div>' +
+      '<div id="matchRequestPricingText" style="font-size:.84rem;color:var(--text2);line-height:1.6">Checking pricing...</div>' +
+    '</div>' +
+    '<div class="field-m"><label>Message to Teacher</label><textarea id="requestNote" placeholder="Tell the teacher what you want to learn and your current level..."></textarea></div>' +
+    '<button class="modal-btn primary" onclick="sendRequest(\'' + encodeURIComponent(JSON.stringify(u)) + '\')">ðŸ“¨ Send Lesson Request</button>' +
+    '<button class="modal-btn secondary" onclick="closeModal(\'matchModal\')" style="margin-top:8px">Maybe Later</button>';
+  var requestSkillEl = document.getElementById('requestSkill');
+  var requestTypeEl = document.getElementById('requestType');
+  if (requestSkillEl) requestSkillEl.onchange = function() { updateMatchRequestPricing(u); };
+  if (requestTypeEl) requestTypeEl.onchange = function() { updateMatchRequestPricing(u); };
+  updateMatchRequestPricing(u);
+  document.getElementById('matchModal').classList.add('show');
+};
+
+sendRequest = function(encoded) {
+  var u = typeof encoded === 'string' ? JSON.parse(decodeURIComponent(encoded)) : encoded;
+  var teacherProfile = state.userMap && u.uid ? (state.userMap[u.uid] || u) : u;
+  var skill = (document.getElementById('requestSkill')||{}).value || u.primaryTeach || 'General guidance';
+  var type  = (document.getElementById('requestType')||{}).value || 'credit';
+  var note  = (document.getElementById('requestNote')||{}).value || '';
+  var safeCreditsFrom = type === 'demo' ? 0 : getSkillCredits(teacherProfile, skill);
+  closeModal('matchModal');
+  if (window.ssCreateLessonRequest && u.uid && !u.uid.startsWith('mock-') && !['aarav','priya','dev','ravi','arjun','kavya','ishaan','tanvi','neha'].includes(u.uid)) {
+    window.ssCreateLessonRequest(u, { skillRequested:skill, sessionType:type, studentMessage:note, creditsOffered:safeCreditsFrom })
+      .then(function(){ showToast('ðŸ¤','Request Sent!','Lesson request sent to ' + u.name + '.'); })
+      .catch(function(err){ showToast('âš ï¸','Request Failed', err&&err.message?err.message:'Could not send right now.'); });
+  } else {
+    showToast('ðŸ¤','Request Sent!','Lesson request sent to ' + u.name + '. They\'ll be notified when they accept.');
+  }
+};
+
 var exploreFilter = 'all';
 function filterExplore(btn, cat) {
   document.querySelectorAll('.explore-filter-btn').forEach(function(b){ b.classList.remove('active'); });
@@ -1424,7 +1552,10 @@ function filterExplore(btn, cat) {
 function renderExploreCards() {
   var q = ((document.getElementById('exploreSearch')||{}).value||'').toLowerCase();
   var grid = document.getElementById('exploreGrid'); if (!grid) return;
-  var users = getSearchUsers();
+  var users = getSearchUsers().filter(function(u) {
+    return !!(u.teachSkills && u.teachSkills.length)
+      && !(u.teachingProfile && u.teachingProfile.visibleAsTeacher === false);
+  });
   var filtered = users.filter(function(u) {
     var cat = u.cat || 'programming';
     var catMatch = exploreFilter === 'all' || cat === exploreFilter;
@@ -1438,14 +1569,14 @@ function renderExploreCards() {
       : escapeHtml(u.emoji||'👤');
     var badgeEmoji = u.badgeTier === 'gold' ? '🥇' : u.badgeTier === 'silver' ? '🥈' : '🥉';
     var badgeStr = (u.badgeTier && u.badgeTier !== 'none')
-      ? '<span class="badge-chip ' + escapeHtml(u.badgeTier) + '">' + badgeEmoji + ' ' + escapeHtml(getBadgeLabel(u.badgeTier)) + '</span>'
+      ? '<span class="badge-chip ' + escapeHtml(u.badgeTier) + '" title="' + escapeHtml(getBadgeLabel(u.badgeTier) + ' badge') + '" style="padding:4px 8px;min-width:auto">' + badgeEmoji + '</span>'
       : '';
     var ratingStr = u.averageRating ? Number(u.averageRating).toFixed(1) + '⭐' : 'New';
 
     return '<div class="explore-card" onclick="openMatchModal(\'' + encodeURIComponent(JSON.stringify(u)).replace(/'/g, '%27') + '\')">' +
       '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">' +
         '<div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,rgba(124,92,252,0.3),rgba(79,172,254,0.3));display:flex;align-items:center;justify-content:center;font-size:1.5rem;border:2px solid rgba(124,92,252,0.3);overflow:hidden">' + avatarHtml + '</div>' +
-        '<div><div style="font-weight:700;font-size:.92rem">' + escapeHtml(u.name) + badgeStr + '</div><div style="font-size:.72rem;color:var(--muted)">' + escapeHtml(u.uni||'') + '</div></div>' +
+        '<div><div style="font-weight:700;font-size:.92rem">' + escapeHtml(u.name) + badgeStr + '</div><div style="font-size:.72rem;color:var(--muted)">' + escapeHtml(u.uni||'') + '</div><div style="font-size:.72rem;color:var(--muted);margin-top:4px">' + escapeHtml((u.sessionsTaught || 0) + ' sessions taught') + '</div></div>' +
         '<div style="margin-left:auto;font-size:.82rem;font-weight:800;color:var(--green)">' + ratingStr + '</div>' +
       '</div>' +
       '<div style="display:flex;gap:8px;margin-bottom:10px">' +
@@ -1462,6 +1593,134 @@ function renderExploreCards() {
 window.filterExplore = filterExplore;
 window.openMatchModal = openMatchModal;
 window.sendRequest = sendRequest;
+
+var customSelectRegistry = {};
+
+function closeAllCustomSelects() {
+  Object.keys(customSelectRegistry).forEach(function(id) {
+    var entry = customSelectRegistry[id];
+    if (entry && entry.wrap) entry.wrap.classList.remove('open');
+  });
+}
+
+function syncCustomSelect(id) {
+  var entry = customSelectRegistry[id];
+  if (!entry || !entry.select || !entry.trigger || !entry.menu) return;
+  var select = entry.select;
+  var options = Array.from(select.options || []);
+  entry.menu.innerHTML = '';
+  options.forEach(function(option) {
+    var item = document.createElement('div');
+    item.className = 'ss-select-option';
+    if (option.disabled) item.classList.add('disabled');
+    if (option.value === select.value) item.classList.add('active');
+    item.textContent = option.textContent || '';
+    item.dataset.value = option.value;
+    if (!option.disabled) {
+      item.addEventListener('click', function() {
+        select.value = option.value;
+        syncCustomSelect(id);
+        entry.wrap.classList.remove('open');
+        select.dispatchEvent(new Event('change', { bubbles:true }));
+        select.dispatchEvent(new Event('input', { bubbles:true }));
+      });
+    }
+    entry.menu.appendChild(item);
+  });
+  var selectedOption = options.find(function(option) { return option.value === select.value; }) || options[0] || null;
+  entry.trigger.textContent = selectedOption ? selectedOption.textContent : 'Select option';
+  entry.trigger.classList.toggle('placeholder', !selectedOption || selectedOption.value === '');
+}
+
+function ensureCustomSelect(selectId) {
+  var select = document.getElementById(selectId);
+  if (!select) return;
+  var existing = customSelectRegistry[selectId];
+  if (existing && existing.select === select) {
+    syncCustomSelect(selectId);
+    return;
+  }
+  if (existing && existing.wrap && existing.wrap.parentNode) {
+    existing.wrap.parentNode.removeChild(existing.wrap);
+  }
+  select.classList.add('ss-native-select');
+  var wrap = document.createElement('div');
+  wrap.className = 'ss-select-wrap';
+  var trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'ss-select-trigger';
+  var menu = document.createElement('div');
+  menu.className = 'ss-select-menu';
+  wrap.appendChild(trigger);
+  wrap.appendChild(menu);
+  select.insertAdjacentElement('afterend', wrap);
+  trigger.addEventListener('click', function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var willOpen = !wrap.classList.contains('open');
+    closeAllCustomSelects();
+    if (willOpen) wrap.classList.add('open');
+  });
+  trigger.addEventListener('keydown', function(event) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      trigger.click();
+    } else if (event.key === 'Escape') {
+      wrap.classList.remove('open');
+    }
+  });
+  customSelectRegistry[selectId] = { select: select, wrap: wrap, trigger: trigger, menu: menu };
+  syncCustomSelect(selectId);
+}
+
+document.addEventListener('click', function(event) {
+  var inside = event.target && event.target.closest ? event.target.closest('.ss-select-wrap') : null;
+  if (!inside) closeAllCustomSelects();
+});
+
+window.syncCustomSelect = syncCustomSelect;
+window.ensureCustomSelect = ensureCustomSelect;
+
+function normalizeRoadmapLevel(level) {
+  var value = String(level || '').trim().toLowerCase();
+  if (value === 'complete beginner' || value === 'beginner' || value === 'foundational' || value === 'foundation') return 'Beginner';
+  if (value === 'intermediate' || value === 'inter') return 'Intermediate';
+  if (value === 'advanced' || value === 'adv') return 'Advanced';
+  return 'Beginner';
+}
+
+function getRoadmapLevelTag(level) {
+  var normalized = normalizeRoadmapLevel(level);
+  if (normalized === 'Advanced') return { label: 'Advanced', color: 'var(--orange)' };
+  if (normalized === 'Intermediate') return { label: 'Intermediate', color: 'var(--blue)' };
+  return { label: 'Beginner', color: 'var(--green)' };
+}
+
+function getRoadmapDisplayName(skillKey, data) {
+  var base = (data && data.skill) || skillKey || 'Skill';
+  return String(base).replace(/_/g, ' ').replace(/\b\w/g, function(ch) { return ch.toUpperCase(); });
+}
+
+function cloneRoadmap(data) {
+  return JSON.parse(JSON.stringify(data || {}));
+}
+
+function syncLocalRoadmap(skillKey, roadmap) {
+  window.ROADMAPS = window.ROADMAPS || {};
+  window.ROADMAPS[skillKey] = cloneRoadmap(roadmap);
+  if (state.profile) {
+    state.profile.roadmaps = Object.assign({}, state.profile.roadmaps || {}, window.ROADMAPS);
+  }
+}
+
+function removeLocalRoadmap(skillKey) {
+  if (window.ROADMAPS && window.ROADMAPS[skillKey]) delete window.ROADMAPS[skillKey];
+  if (state.profile && state.profile.roadmaps && state.profile.roadmaps[skillKey]) {
+    var next = Object.assign({}, state.profile.roadmaps);
+    delete next[skillKey];
+    state.profile.roadmaps = next;
+  }
+}
 
 function renderRoadmap(key) {
   var roadmaps = window.ROADMAPS || {};
@@ -1491,18 +1750,23 @@ function renderFullRoadmap() {
   var keys = Object.keys(roadmaps);
 
   if (keys.length === 0) {
-    cont.innerHTML = '<div class="card" style="text-align:center;padding:48px"><div style="font-size:3rem;margin-bottom:16px">🗺️</div><div style="font-size:1rem;font-weight:600;margin-bottom:8px">No Learning Roadmaps Yet</div><div style="color:var(--muted);font-size:.88rem;margin-bottom:20px">Add a skill to build a manual roadmap and track milestones as you learn.</div><button onclick="openAddSkillModal()" style="background:linear-gradient(135deg,var(--purple),#5430d4);border:none;color:#fff;padding:12px 24px;border-radius:12px;font-weight:700;cursor:pointer">+ Add Your First Skill</button></div>';
+    cont.innerHTML = '<div class="card" style="text-align:center;padding:48px"><div style="font-size:3rem;margin-bottom:16px">🗺️</div><div style="font-size:1rem;font-weight:600;margin-bottom:8px">No Learning Roadmaps Yet</div><div style="color:var(--muted);font-size:.88rem;margin-bottom:20px">Add a skill and level to generate a roadmap tailored to what you want to learn next.</div><button onclick="openAddSkillModal()" style="background:linear-gradient(135deg,var(--purple),#5430d4);border:none;color:#fff;padding:12px 24px;border-radius:12px;font-weight:700;cursor:pointer">+ Add Your First Skill</button></div>';
     return;
   }
 
   var html = '';
   keys.forEach(function(key) {
     var data = roadmaps[key];
-    var label = key==='python'?'🐍 Python':key==='java'?'☕ Java':'📚 '+key.charAt(0).toUpperCase()+key.slice(1);
+    var levelTag = getRoadmapLevelTag(data.level);
+    var label = '📚 ' + getRoadmapDisplayName(key, data);
+    var sourceLabel = data.source === 'ai' ? 'AI Generated' : 'Curated Fallback';
+    var sourceStyle = data.source === 'ai'
+      ? 'background:rgba(79,172,254,0.12);color:var(--blue);border:1px solid rgba(79,172,254,0.28)'
+      : 'background:rgba(52,211,153,0.12);color:var(--green);border:1px solid rgba(52,211,153,0.28)';
     html += '<div class="card" style="margin-bottom:20px">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">' +
-        '<div class="card-title" style="margin-bottom:0"><div class="dot" style="background:var(--blue)"></div>'+label+' Roadmap</div>' +
-        '<span style="font-size:.82rem;font-weight:700;color:var(--purple2)">'+data.pct+'% Complete</span>' +
+        '<div><div class="card-title" style="margin-bottom:6px"><div class="dot" style="background:var(--blue)"></div>'+label+' Roadmap</div><div style="display:flex;gap:8px;flex-wrap:wrap"><span style="font-size:.72rem;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,0.05);border:1px solid var(--border2);color:' + levelTag.color + '">' + escapeHtml(levelTag.label) + '</span><span style="font-size:.72rem;padding:4px 10px;border-radius:999px;' + sourceStyle + '">' + escapeHtml(sourceLabel) + '</span></div></div>' +
+        '<div style="display:flex;align-items:center;gap:10px"><span style="font-size:.82rem;font-weight:700;color:var(--purple2)">'+data.pct+'% Complete</span><button onclick="deleteRoadmapPrompt(\'' + escapeHtml(key) + '\')" style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.24);color:var(--red);padding:8px 12px;border-radius:10px;font-size:.72rem;font-weight:700;cursor:pointer">Delete</button></div>' +
       '</div>' +
       '<div style="display:flex;align-items:flex-start;overflow-x:auto;gap:0;padding-bottom:8px;scrollbar-width:thin">';
     data.weeks.forEach(function(w,i){
@@ -1523,69 +1787,96 @@ function openAddSkillModal() { document.getElementById('addSkillModal').classLis
 async function addSkillToRoadmap() {
   var skill = document.getElementById('newSkillInput').value.trim();
   if (!skill) { showToast('⚠️','Skill Required','Enter a skill name.'); return; }
-  var key = skill.toLowerCase().replace(/\s+/g,'_');
-  var newRoadmap = { pct:0, weeks:[{label:'Foundations',state:'active'},{label:'Core Concepts',state:'pending'},{label:'Practical Use',state:'pending'},{label:'Projects',state:'pending'},{label:'Advanced Topics',state:'pending'},{label:'Capstone',state:'pending'}], syllabus:[{done:false,text:'Introduction to '+skill},{done:false,text:'Core fundamentals'},{done:false,text:'First small project'}] };
-
-  // Save to Firebase if authenticated
-  if (window.saveRoadmapProgress) {
-    try {
-      await window.saveRoadmapProgress(key, newRoadmap);
-      window.ROADMAPS = window.ROADMAPS || {};
-      window.ROADMAPS[key] = newRoadmap;
-      showToast('🗺️','Roadmap Saved!','Your '+skill+' roadmap is ready to track manually.');
-    } catch(e) {
-      console.error('Save roadmap error:', e);
-      window.ROADMAPS = window.ROADMAPS || {};
-      window.ROADMAPS[key] = newRoadmap;
-      showToast('🗺️','Roadmap Created!','Your '+skill+' roadmap is ready (local only).');
-    }
-  } else {
-    window.ROADMAPS = window.ROADMAPS || {};
-    window.ROADMAPS[key] = newRoadmap;
-    showToast('🗺️','Roadmap Created!','Your '+skill+' roadmap is ready to track manually.');
+  var level = normalizeRoadmapLevel((document.getElementById('newSkillLevel') || {}).value || 'Beginner');
+  try {
+    var response = await window.generateRoadmapForSkill(skill, level);
+    syncLocalRoadmap(response.skillKey, response.roadmap);
+    closeModal('addSkillModal');
+    document.getElementById('newSkillInput').value = '';
+    document.getElementById('newSkillLevel').value = 'Beginner';
+    if (window.syncCustomSelect) window.syncCustomSelect('newSkillLevel');
+    renderFullRoadmap();
+    showToast('🗺️','Roadmap Ready','Your ' + skill + ' roadmap for ' + level + ' is ready.');
+  } catch(e) {
+    console.error('Generate roadmap error:', e);
+    showToast('⚠️','Roadmap Failed', e && e.message ? e.message : 'Could not generate that roadmap right now.');
   }
-
-  closeModal('addSkillModal');
-  document.getElementById('newSkillInput').value='';
-  renderFullRoadmap();
 }
 
 // Toggle week status (done -> active -> pending -> done)
 async function toggleWeekState(skillKey, weekIndex) {
   var roadmaps = window.ROADMAPS || {};
   var data = roadmaps[skillKey]; if (!data) return;
+  var nextRoadmap = cloneRoadmap(data);
+  if (!nextRoadmap.weeks || !nextRoadmap.weeks[weekIndex]) return;
 
-  var current = data.weeks[weekIndex].state;
+  var current = nextRoadmap.weeks[weekIndex].state;
   var nextState = current === 'done' ? 'active' : current === 'active' ? 'pending' : 'done';
-  data.weeks[weekIndex].state = nextState;
+  nextRoadmap.weeks[weekIndex].state = nextState;
 
-  // Recalculate percentage
-  var completed = data.weeks.filter(function(w){ return w.state === 'done'; }).length;
-  data.pct = Math.round((completed / data.weeks.length) * 100);
+  var completed = nextRoadmap.weeks.filter(function(w){ return w.state === 'done'; }).length;
+  nextRoadmap.pct = Math.round((completed / nextRoadmap.weeks.length) * 100);
+  if (Array.isArray(nextRoadmap.syllabus) && nextRoadmap.syllabus.length) {
+    var targetDoneCount = Math.round((completed / nextRoadmap.weeks.length) * nextRoadmap.syllabus.length);
+    nextRoadmap.syllabus = nextRoadmap.syllabus.map(function(item, index) {
+      return { done: index < targetDoneCount, text: item.text };
+    });
+  }
 
-  // Save to Firebase if authenticated
-  if (window.saveRoadmapProgress) {
-    try { await window.saveRoadmapProgress(skillKey, data); } catch(e) { console.error('Save progress error:', e); }
+  try {
+    var saveResult = await window.saveRoadmapProgress(skillKey, nextRoadmap);
+    syncLocalRoadmap(skillKey, saveResult.roadmap || nextRoadmap);
+  } catch(e) {
+    console.error('Save progress error:', e);
+    showToast('⚠️','Roadmap Save Failed', e && e.message ? e.message : 'Could not save roadmap progress.');
+    return;
   }
 
   renderRoadmap(skillKey);
   renderFullRoadmap();
-  showToast('📊','Progress Updated', data.weeks[weekIndex].label + ' marked as ' + nextState);
+  showToast('📊','Progress Updated', nextRoadmap.weeks[weekIndex].label + ' marked as ' + nextState);
 }
+async function deleteRoadmapPrompt(skillKey) {
+  var data = (window.ROADMAPS || {})[skillKey];
+  var name = getRoadmapDisplayName(skillKey, data);
+  if (!window.confirm('Delete the ' + name + ' roadmap? This will remove it from your account.')) return;
+  try {
+    await window.deleteRoadmap(skillKey);
+    removeLocalRoadmap(skillKey);
+    renderFullRoadmap();
+    showToast('🗑️','Roadmap Deleted', name + ' was removed from your dashboard.');
+  } catch (e) {
+    console.error('Delete roadmap error:', e);
+    showToast('⚠️','Delete Failed', e && e.message ? e.message : 'Could not delete that roadmap.');
+  }
+}
+window.deleteRoadmapPrompt = deleteRoadmapPrompt;
 
 // ═══════════════════════════════════════════════════════════════
 // MESSAGES
 // ═══════════════════════════════════════════════════════════════
+function setMessagesEmptyState(isEmpty) {
+  var header = document.getElementById('msgHeader');
+  var bubbles = document.getElementById('msgBubbles');
+  var composer = document.getElementById('msgComposer');
+  if (header) header.style.display = isEmpty ? 'none' : 'flex';
+  if (composer) composer.style.display = isEmpty ? 'none' : 'flex';
+  if (bubbles && isEmpty) {
+    bubbles.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;padding:40px;text-align:center;color:var(--muted);font-size:.9rem;line-height:1.7">Make a connection to start chatting.<br><br>Accept a lesson request or connect with a teacher first.</div>';
+  }
+}
+
 function initMessages() {
   var contacts = buildMessagingContacts();
   renderContactList();
-  if (window.updateMessageHeaderAction) window.updateMessageHeaderAction();
-  if (contacts && contacts.length) {
-    var preferredId = (window.state && window.state.activeConversation) ? window.state.activeConversation : contacts[0].id;
-    loadConversationById(preferredId);
-  } else {
-    loadConversation(APP.activeContact);
+  if (!contacts || !contacts.length) {
+    setMessagesEmptyState(true);
+    return;
   }
+  setMessagesEmptyState(false);
+  if (window.updateMessageHeaderAction) window.updateMessageHeaderAction();
+  var preferredId = (window.state && window.state.activeConversation) ? window.state.activeConversation : contacts[0].id;
+  loadConversationById(preferredId);
 }
 window.initMessages = initMessages;
 function buildMessagingContacts() {
@@ -1615,11 +1906,13 @@ function renderContactList() {
   var contacts = buildMessagingContacts();
 
   if (!contacts || contacts.length === 0) {
+    setMessagesEmptyState(true);
     list.innerHTML = '<div style="padding:14px 16px;border-bottom:1px solid var(--border2);font-family:\'Syne\',sans-serif;font-size:.88rem;font-weight:700">Messages</div>' +
       '<div style="padding:32px 16px;text-align:center;color:var(--muted);font-size:.85rem">No conversations yet.<br><br>Accept a lesson request to unlock chat. 💬</div>';
     return;
   }
 
+  setMessagesEmptyState(false);
   list.innerHTML = '<div style="padding:14px 16px;border-bottom:1px solid var(--border2);font-family:\'Syne\',sans-serif;font-size:.88rem;font-weight:700">Messages</div>' +
     contacts.map(function(c) {
       var id = c.id || c.otherUid;
@@ -1643,6 +1936,7 @@ async function loadConversationById(id) {
     : null;
 
   if (firebaseConvo) {
+    setMessagesEmptyState(false);
     if (window.state) window.state.activeConversation = id;
     setText('msgHeaderName', firebaseConvo.name);
     var av = document.getElementById('msgHeaderAvatar'); if (av) av.textContent = firebaseConvo.emoji || '👤';
@@ -1658,6 +1952,7 @@ async function loadConversationById(id) {
       renderMessageBubbles(messages);
     } catch(e) { console.error('Load messages error:', e); }
   } else if (acceptedFallback) {
+    setMessagesEmptyState(false);
     if (window.state) window.state.activeConversation = 'accepted:' + acceptedFallback.requestId;
     setText('msgHeaderName', acceptedFallback.partnerName);
     var avAccepted = document.getElementById('msgHeaderAvatar'); if (avAccepted) avAccepted.textContent = acceptedFallback.partnerEmoji || '👤';
@@ -1677,8 +1972,7 @@ async function loadConversationById(id) {
       renderMessageBubbles(acceptedMessages);
     } catch(e2) { console.error('Accepted contact conversation error:', e2); }
   } else {
-    // Fallback to mock
-    loadConversation(id);
+    setMessagesEmptyState(true);
   }
 }
 window.loadConversationById = loadConversationById;
@@ -1736,17 +2030,7 @@ async function sendMsg() {
       if(window.showToast) window.showToast('⚠️','Send Failed', err.message || 'Could not send message');
     }
   } else {
-    // Fallback to mock
-    var now = new Date(); var h=now.getHours(),m=now.getMinutes();
-    var time = (h%12||12)+':'+(m<10?'0'+m:m)+' '+(h>=12?'PM':'AM');
-    if (!APP.messages[APP.activeContact]) APP.messages[APP.activeContact]=[];
-    APP.messages[APP.activeContact].push({from:'me',text:text,time:time});
-    input.value=''; saveState(); loadConversation(APP.activeContact);
-    setTimeout(function() {
-      var replies=["Got it! 👍","Sounds good!","Sure, let me know!","Great idea!","I'll check that out!"];
-      APP.messages[APP.activeContact].push({from:'them',text:replies[Math.floor(Math.random()*replies.length)],time:time});
-      saveState(); loadConversation(APP.activeContact);
-    }, 1500);
+    if (window.showToast) window.showToast('⚠️','No Connection','Make a connection to start chatting.');
   }
 }
 
@@ -1754,15 +2038,48 @@ async function sendMsg() {
 // CALENDAR + SESSIONS
 // ═══════════════════════════════════════════════════════════════
 var calMonth=new Date().getMonth(), calYear=new Date().getFullYear(), selectedDay=new Date().getDate();
+var selectedScheduleDateKey = null;
+function getScheduleDayKey(date) {
+  if (!date) return '';
+  var safeDate = date instanceof Date ? date : new Date(date);
+  return safeDate.getFullYear() + '-' + String(safeDate.getMonth() + 1).padStart(2, '0') + '-' + String(safeDate.getDate()).padStart(2, '0');
+}
 function renderCalStrip(id) {
   var strip = document.getElementById(id||'calStrip'); if (!strip) return;
-  strip.innerHTML=''; var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat']; var now=new Date();
-  for (var i=-1;i<=6;i++) {
-    var d=new Date(now); d.setDate(now.getDate()+i);
-    var hasSess=[0,2,4].indexOf(i)!==-1;
+  strip.innerHTML='';
+  var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var base=new Date();
+  var src = window.SESSIONS && window.SESSIONS.length ? window.SESSIONS : APP.sessions;
+  if (!selectedScheduleDateKey) selectedScheduleDateKey = getScheduleDayKey(base);
+  if (id === 'calStripFull') {
+    var allEl=document.createElement('div');
+    var allSelected = selectedScheduleDateKey === 'all';
+    allEl.className='cal-day'+(allSelected?' selected':'');
+    allEl.innerHTML='<div class="cal-dow">All</div><div class="cal-date" style="font-size:.78rem">Sessions</div>';
+    allEl.style.cursor='pointer';
+    if (allSelected) {
+      allEl.style.borderColor = 'var(--purple)';
+      allEl.style.background = 'rgba(124,92,252,0.14)';
+    }
+    allEl.onclick=function(){ selectedScheduleDateKey = 'all'; renderScheduleTab(); };
+    strip.appendChild(allEl);
+  }
+  for (var i=-1;i<=10;i++) {
+    var d=new Date(base); d.setDate(base.getDate()+i);
+    var dayKey = getScheduleDayKey(d);
+    var hasSess = src.some(function(s){ return s.startDate && getScheduleDayKey(s.startDate) === dayKey; });
+    var isSelected = id === 'calStripFull' && selectedScheduleDateKey === dayKey;
     var el=document.createElement('div');
-    el.className='cal-day'+(i===0?' today':'')+(hasSess?' has-session':'');
+    el.className='cal-day'+(i===0?' today':'')+(hasSess?' has-session':'')+(isSelected?' selected':'');
     el.innerHTML='<div class="cal-dow">'+days[d.getDay()]+'</div><div class="cal-date">'+d.getDate()+'</div>'+(hasSess?'<div class="cal-dot"></div>':'');
+    if (id === 'calStripFull') {
+      (function(nextDayKey){ el.onclick=function(){ selectedScheduleDateKey = nextDayKey; renderScheduleTab(); }; })(dayKey);
+      el.style.cursor = 'pointer';
+      if (isSelected) {
+        el.style.borderColor = 'var(--purple)';
+        el.style.background = 'rgba(124,92,252,0.14)';
+      }
+    }
     strip.appendChild(el);
   }
 }
@@ -2051,18 +2368,33 @@ function renderProfile() {
   setHtml('profileVerifBadge', buildVerificationPills(profile));
 
   // Stats
-  setText('profileStatCredits',  String(profile.creditBalance || 0));
   var totalSessions = (profile.stats && profile.stats.sessionsCompleted) || 0;
   var sessionsTaught = (profile.stats && profile.stats.sessionsTaught) || 0;
   var sessionsLearned = totalSessions - sessionsTaught;
   if (sessionsLearned < 0) sessionsLearned = 0;
-  setText('profileStatSessions', String(totalSessions));
-  setText('profileStatTaught',   String(sessionsTaught));
-  setText('profileStatLearned',  String(sessionsLearned));
+  var paidSessionsTaught = (profile.stats && profile.stats.paidSessionsTaught) || 0;
   var score = profile.verification && profile.verification.score ? profile.verification.score + '%' : '—';
-  setText('profileStatScore',    score);
-  var rating = profile.stats && profile.stats.averageRating ? profile.stats.averageRating.toFixed(1) + '⭐' : '—';
-  setText('profileStatRating',   rating);
+  var teacherRatingValue = 0;
+  if (profile.stats && profile.stats.teacherAverageRating) teacherRatingValue = Number(profile.stats.teacherAverageRating || 0);
+  else if (profile.teacherReputation && profile.teacherReputation.averageRating) teacherRatingValue = Number(profile.teacherReputation.averageRating || 0);
+  var teacherRating = teacherRatingValue > 0 ? teacherRatingValue.toFixed(1) + '⭐' : '—';
+  var learnerRating = profile.stats && profile.stats.learnerAverageRating ? profile.stats.learnerAverageRating.toFixed(1) + '⭐' : '—';
+  var statsGrid = document.getElementById('profileStatsGrid');
+  if (statsGrid) {
+    var statCards = [
+      { label: 'Credits', value: String(profile.creditBalance || 0), color: 'var(--green)' },
+      { label: 'Total Sessions', value: String(totalSessions), color: 'var(--purple2)' },
+      { label: 'Sessions Taught', value: String(sessionsTaught), color: 'var(--blue)' },
+      { label: 'Sessions Learned', value: String(sessionsLearned), color: 'var(--orange)' },
+      { label: 'Paid Sessions Taught', value: String(paidSessionsTaught), color: 'var(--green)' },
+      { label: 'Verify Score', value: score, color: 'var(--purple2)' },
+      { label: 'Teacher Rating', value: teacherRating, color: 'var(--text)' },
+      { label: 'Learner Rating', value: learnerRating, color: 'var(--text)' }
+    ];
+    statsGrid.innerHTML = statCards.map(function(item) {
+      return '<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border2);border-radius:14px;padding:14px 12px"><div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">' + escapeHtml(item.label) + '</div><div style="font-family:\'Syne\',sans-serif;font-size:1.15rem;font-weight:800;color:' + escapeHtml(item.color) + '">' + escapeHtml(item.value) + '</div></div>';
+    }).join('');
+  }
 
   // Skills
   var teach = profile.skills && profile.skills.toTeach || [];
@@ -2150,13 +2482,18 @@ function renderProfile() {
   }
 
   // Partners
-  if (LIVE_MATCH_USERS.length) {
-    var topPartners = LIVE_MATCH_USERS.slice(0, 3);
-    setHtml('profilePartners', topPartners.map(function(u) {
+  var partnersCard = document.getElementById('profilePartnersCard');
+  var activePartners = (state.acceptedPartners || []).slice(0, 6);
+  if (partnersCard) partnersCard.style.display = activePartners.length ? 'block' : 'none';
+  if (activePartners.length) {
+    setHtml('profilePartners', activePartners.map(function(item) {
+      var partner = state.userMap[item.partnerUid] || {};
+      var partnerName = item.partnerName || partner.fullName || partner.firstName || 'Partner';
+      var context = item.role === 'teacher' ? 'Learning from' : 'Teaching';
       return '<div style="display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--border2)">' +
-        '<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,rgba(124,92,252,.3),rgba(79,172,254,.3));display:flex;align-items:center;justify-content:center;font-size:1.3rem;border:2px solid rgba(124,92,252,.3)">' + escapeHtml(u.emoji||'👤') + '</div>' +
-        '<div style="flex:1"><div style="font-weight:700;font-size:.88rem">'+escapeHtml(u.name)+'</div><div style="font-size:.75rem;color:var(--muted)">'+escapeHtml(u.teaches||'')+'</div></div>' +
-        '<button onclick="switchTab(\'messages\',null)" style="background:rgba(124,92,252,.12);border:1px solid rgba(124,92,252,.25);color:var(--purple2);padding:6px 14px;border-radius:8px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:\'Plus Jakarta Sans\',sans-serif">💬 Chat</button>' +
+        '<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,rgba(124,92,252,.3),rgba(79,172,254,.3));display:flex;align-items:center;justify-content:center;font-size:1.3rem;border:2px solid rgba(124,92,252,.3);overflow:hidden">' + (partner.photoURL ? '<img src="' + escapeHtml(partner.photoURL) + '" style="width:100%;height:100%;object-fit:cover">' : escapeHtml(partner.emoji || '👤')) + '</div>' +
+        '<div style="flex:1"><div style="font-weight:700;font-size:.88rem">' + escapeHtml(partnerName) + '</div><div style="font-size:.75rem;color:var(--muted)">' + escapeHtml(context + ' • ' + (item.skillRequested || 'SkillSwap')) + '</div></div>' +
+        '<button onclick="switchTab(\'messages\',null);loadConversationById(\'accepted:' + escapeHtml(item.requestId) + '\')" style="background:rgba(124,92,252,.12);border:1px solid rgba(124,92,252,.25);color:var(--purple2);padding:6px 14px;border-radius:8px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:\'Plus Jakarta Sans\',sans-serif">Chat</button>' +
       '</div>';
     }).join(''));
   }
@@ -2682,6 +3019,10 @@ window.state = state;
 let unsubscribers = []; // For real-time listeners cleanup
 let activeMessagesUnsub = null;
 const BACKEND_BASE_URL = 'http://localhost:5000';
+const sharedPricing = window.SkillSwapPricing || {
+  resolveSkillKey: function(skill) { return lower(skill); },
+  getCredits: function(_skill, level) { return ({ beginner: 15, intermediate: 25, expert: 33 })[String(level || '').toLowerCase()] || 25; }
+};
 
 async function getAuthToken() {
   if (!state.currentUser) throw new Error('Please sign in first.');
@@ -2703,6 +3044,14 @@ async function apiJson(path, options) {
   return data || {};
 }
 
+function normalizeBackendMismatchError(err, featureName) {
+  var message = String(err && err.message ? err.message : err || '');
+  if (/failed to fetch/i.test(message) || /\(404\)/.test(message) || /method delete is not allowed/i.test(message)) {
+    return new Error(featureName + ' is unavailable because the backend on port 5000 is not running the latest SkillSwap server code. Restart the backend, then try again.');
+  }
+  return err instanceof Error ? err : new Error(message || (featureName + ' failed.'));
+}
+
 // ── UTILS ──────────────────────────────────────────────────────
 const lower = v => (v||'').toString().trim().toLowerCase();
 const toJsDate = v => !v ? null : typeof v.toDate==='function' ? v.toDate() : v instanceof Date ? v : new Date(v);
@@ -2721,8 +3070,8 @@ function computeMatchScore(me, other) {
   const slotMatch  = overlapCount((me.availability&&me.availability.slots)||[], (other.availability&&other.availability.slots)||[]);
   const dayMatch   = overlapCount((me.availability&&me.availability.days)||[], (other.availability&&other.availability.days)||[]);
   const vScore     = other.verification && other.verification.score ? other.verification.score : 0;
-  const rating     = other.stats && other.stats.averageRating ? other.stats.averageRating : 0;
-  const ratings    = other.stats && other.stats.totalRatings ? other.stats.totalRatings : 0;
+  const rating     = other.stats && other.stats.teacherAverageRating ? other.stats.teacherAverageRating : 0;
+  const ratings    = other.stats && other.stats.teacherTotalRatings ? other.stats.teacherTotalRatings : 0;
   const human      = other.humanVerification && other.humanVerification.status==='verified' ? 10 : 0;
   const demo       = other.teachingProfile && other.teachingProfile.demoOptIn ? 6 : 0;
   return Math.max(45, Math.min(99, 40 + skillMatch*22 + slotMatch*6 + dayMatch*4 + Math.round(vScore*.12) + Math.round(rating*5) + Math.min(10,ratings) + human + demo));
@@ -2736,7 +3085,12 @@ function pickRequestedSkill(me, other) {
 
 function getSkillCredits(user, skill) {
   const entries = getTeachEntries(user);
-  const found = entries.find(s => lower(s.name)===lower(skill)) || entries[0];
+  const targetKey = sharedPricing.resolveSkillKey(skill || '');
+  const found = entries.find(function(entry) {
+    return sharedPricing.resolveSkillKey(entry && entry.name ? entry.name : '') === targetKey;
+  }) || entries.find(function(entry) {
+    return lower(entry && entry.name ? entry.name : '') === lower(skill);
+  }) || entries[0];
   return getSafeCreditAmount(found);
 }
 
@@ -2748,9 +3102,10 @@ function getSafeCreditAmount(entryOrValue) {
   var level = typeof entryOrValue === 'object' && entryOrValue !== null
     ? String(entryOrValue.level || '').toLowerCase()
     : '';
-  if (level === 'expert') return 44;
-  if (level === 'beginner') return 20;
-  return 30;
+  var name = typeof entryOrValue === 'object' && entryOrValue !== null
+    ? String(entryOrValue.name || '')
+    : '';
+  return sharedPricing.getCredits(name, level || 'intermediate');
 }
 window.getSafeCreditAmount = getSafeCreditAmount;
 
@@ -2787,7 +3142,7 @@ function collectAcceptedPartnersFromSnapshots(snapshotEntries, uid, userMap) {
   (snapshotEntries || []).forEach(function(entry) {
     var snap = entry && entry.snap ? entry.snap : entry;
     var source = entry && entry.source ? entry.source : '';
-    if (!snap) return;
+    if (!snap || typeof snap.forEach !== 'function') return;
     snap.forEach(function(item) {
       var d = { ...item.data(), id:item.id, _source:source };
       if (d.status !== 'accepted') return;
@@ -3140,6 +3495,121 @@ window.connectGoogleCalendar = connectGoogleCalendar;
 window.setupScheduleModalUi = setupScheduleModalUi;
 window.updateScheduleSubmitState = updateScheduleSubmitState;
 
+function renderSchedulePricingSummary() {
+  var summaryEl = document.getElementById('schedulePricingSummaryText');
+  if (!summaryEl) return;
+  var modalState = getScheduleModalState();
+  if (!modalState.acceptedPartner) {
+    summaryEl.textContent = 'Select an accepted partner to see the skill, level, and per-session credit amount.';
+    return;
+  }
+  var pricing = getAcceptedPartnerPricingDetails(modalState.acceptedPartner);
+  if (!pricing) {
+    summaryEl.textContent = 'Pricing is unavailable for this connection right now.';
+    return;
+  }
+  if (pricing.isDemo) {
+    summaryEl.textContent = pricing.skillName + ' · Demo session · No credits will be reserved.';
+    return;
+  }
+  var reserveText = modalState.isLearner
+    ? ('Ready to reserve ' + pricing.credits + ' credits once you finish the booking form.')
+    : ('The learner will reserve ' + pricing.credits + ' credits when this booking is submitted.');
+  summaryEl.textContent = pricing.skillName + ' · ' + pricing.levelLabel + ' · ' + pricing.credits + ' credits per session. ' + reserveText;
+}
+
+updateScheduleSubmitState = function() {
+  var submitBtn = document.getElementById('scheduleSubmitBtn');
+  if (!submitBtn) return;
+  var modalState = getScheduleModalState();
+  renderSchedulePricingSummary();
+  submitBtn.disabled = !modalState.canSubmit;
+  submitBtn.style.opacity = modalState.canSubmit ? '1' : '0.62';
+  submitBtn.style.cursor = modalState.canSubmit ? 'pointer' : 'not-allowed';
+  submitBtn.title = modalState.canSubmit ? 'Create a shared Google Meet invite for this session.' : modalState.blocker;
+  if (!modalState.canSubmit) {
+    setScheduleModalStatus(modalState.blocker, modalState.googleConnected ? 'default' : 'error');
+    return;
+  }
+  if (modalState.acceptedPartner && modalState.acceptedPartner.sessionType !== 'demo' && modalState.isLearner) {
+    setScheduleModalStatus('Ready to reserve ' + modalState.creditsNeeded + ' credits in escrow and create one shared Google Meet invite.', 'success');
+    return;
+  }
+  if (modalState.acceptedPartner && modalState.acceptedPartner.sessionType !== 'demo') {
+    setScheduleModalStatus('Ready to create one shared Google Meet invite and reserve credits from the learner at booking time.', 'success');
+    return;
+  }
+  setScheduleModalStatus('Ready to create one shared Google Meet invite for both users.', 'success');
+};
+window.updateScheduleSubmitState = updateScheduleSubmitState;
+
+setupScheduleModalUi = function() {
+  var modalSub = document.querySelector('#scheduleModal .modal-sub');
+  if (modalSub) modalSub.textContent = 'Pick a date and time. SkillSwap will create one shared Google Meet invite for both of you without opening the meeting right away.';
+
+  var primaryBtn = document.getElementById('scheduleSubmitBtn') || document.querySelector('#scheduleModal .modal-btn.primary');
+  if (primaryBtn) {
+    primaryBtn.id = 'scheduleSubmitBtn';
+    primaryBtn.textContent = 'Create Meet & Schedule';
+  }
+
+  if (!document.getElementById('schedulePricingSummaryText')) {
+    var partnerField = document.getElementById('sessionPartner');
+    if (partnerField && partnerField.parentElement) {
+      var pricingWrap = document.createElement('div');
+      pricingWrap.style.background = 'rgba(124,92,252,0.08)';
+      pricingWrap.style.border = '1px solid rgba(124,92,252,0.2)';
+      pricingWrap.style.borderRadius = '12px';
+      pricingWrap.style.padding = '14px';
+      pricingWrap.style.marginBottom = '14px';
+      pricingWrap.innerHTML =
+        '<div style="font-size:.82rem;font-weight:700;margin-bottom:4px">Session Pricing</div>' +
+        '<div id="schedulePricingSummaryText" style="font-size:.78rem;color:var(--text2);line-height:1.6">Select an accepted partner to see the pricing.</div>';
+      partnerField.parentElement.insertAdjacentElement('afterend', pricingWrap);
+    }
+  }
+
+  if (!document.getElementById('googleCalendarStatusText')) {
+    var topicField = document.getElementById('sessionTopic');
+    if (topicField && topicField.parentElement) {
+      var wrapper = document.createElement('div');
+      wrapper.style.background = 'rgba(255,255,255,0.03)';
+      wrapper.style.border = '1px solid var(--border2)';
+      wrapper.style.borderRadius = '12px';
+      wrapper.style.padding = '14px';
+      wrapper.style.marginBottom = '14px';
+      wrapper.innerHTML =
+        '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">' +
+          '<div>' +
+            '<div style="font-size:.82rem;font-weight:700;margin-bottom:4px">Google Calendar</div>' +
+            '<div id="googleCalendarStatusText" style="font-size:.78rem;color:var(--muted)">Checking your calendar connection...</div>' +
+          '</div>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+            '<button type="button" class="modal-btn secondary" id="googleCalendarRefreshBtn" style="margin:0;padding:10px 14px;width:auto">Refresh</button>' +
+            '<button type="button" class="modal-btn secondary" id="googleCalendarConnectBtn" style="margin:0;padding:10px 14px;width:auto">Connect Google Calendar</button>' +
+          '</div>' +
+        '</div>';
+      topicField.parentElement.insertAdjacentElement('afterend', wrapper);
+    }
+  }
+
+  var refreshBtn = document.getElementById('googleCalendarRefreshBtn');
+  if (refreshBtn) {
+    refreshBtn.removeAttribute('onclick');
+    refreshBtn.textContent = 'Refresh';
+  }
+
+  var connectBtn = document.getElementById('googleCalendarConnectBtn');
+  if (connectBtn) {
+    connectBtn.removeAttribute('onclick');
+    if (!connectBtn.disabled) connectBtn.textContent = 'Connect Google Calendar';
+  }
+
+  bindScheduleModalActions();
+  renderGoogleCalendarStatus();
+  updateScheduleSubmitState();
+};
+
 function buildAcceptedPartner(request, myUid, userMap) {
   const isTeacher = request.teacherUid === myUid;
   const canonicalRequestId = request.requestId || request.id;
@@ -3175,6 +3645,117 @@ function getAcceptedPartnerByRequestId(requestId) {
 }
 window.getAcceptedPartnerByRequestId = getAcceptedPartnerByRequestId;
 
+function getMatchedTeachSkillEntry(user, skill) {
+  var entries = getTeachEntries(user);
+  var targetKey = sharedPricing.resolveSkillKey(skill || '');
+  return entries.find(function(entry) {
+    return sharedPricing.resolveSkillKey(entry && entry.name ? entry.name : '') === targetKey;
+  }) || entries.find(function(entry) {
+    return lower(entry && entry.name ? entry.name : '') === lower(skill);
+  }) || null;
+}
+
+getSkillCredits = function(user, skill) {
+  var matched = getMatchedTeachSkillEntry(user, skill);
+  if (matched) {
+    return sharedPricing.getCredits(matched.name || skill || '', matched.level || 'intermediate');
+  }
+  return sharedPricing.getCredits(skill || '', 'intermediate');
+};
+
+getSafeCreditAmount = function(entryOrValue) {
+  if (typeof entryOrValue === 'object' && entryOrValue !== null) {
+    if (entryOrValue.name) {
+      return sharedPricing.getCredits(String(entryOrValue.name || ''), String(entryOrValue.level || 'intermediate'));
+    }
+    if (entryOrValue.skills && Array.isArray(entryOrValue.skills.toTeach) && entryOrValue.skills.toTeach.length) {
+      var firstTeachSkill = entryOrValue.skills.toTeach[0];
+      return sharedPricing.getCredits(String(firstTeachSkill.name || ''), String(firstTeachSkill.level || 'intermediate'));
+    }
+    var explicitValue = Number(entryOrValue.creditsOffered || entryOrValue.credits || 0);
+    if (explicitValue > 0 && explicitValue <= 100) return Math.round(explicitValue);
+    if (entryOrValue.skillRequested) {
+      return sharedPricing.getCredits(String(entryOrValue.skillRequested || ''), String(entryOrValue.level || 'intermediate'));
+    }
+  }
+  var raw = Number(entryOrValue || 0);
+  if (raw > 0 && raw <= 100) return Math.round(raw);
+  return sharedPricing.getFallbackCredits('intermediate');
+};
+window.getSafeCreditAmount = getSafeCreditAmount;
+
+getNormalizedAcceptedPartnerCredits = function(request, myUid, userMap) {
+  if (!request || request.sessionType === 'demo') return 0;
+  var teacherProfile = null;
+  if (request.teacherUid === myUid) teacherProfile = state.profile || null;
+  else if (userMap && request.teacherUid) teacherProfile = userMap[request.teacherUid] || null;
+  if (teacherProfile) return getSkillCredits(teacherProfile, request.skillRequested);
+  var raw = Number(request.creditsOffered || 0);
+  if (raw > 0 && raw <= 100) return Math.round(raw);
+  return sharedPricing.getCredits(request.skillRequested || '', 'intermediate');
+};
+
+getAcceptedPartnerScheduleCredits = function(acceptedPartner) {
+  if (!acceptedPartner || acceptedPartner.sessionType === 'demo') return 0;
+  var teacherProfile = null;
+  if (acceptedPartner.teacherUid === (state.currentUser && state.currentUser.uid)) teacherProfile = state.profile || null;
+  else if (acceptedPartner.teacherUid) teacherProfile = state.userMap[acceptedPartner.teacherUid] || null;
+  if (teacherProfile) return getSkillCredits(teacherProfile, acceptedPartner.skillRequested);
+  var explicit = Number(acceptedPartner.creditsOffered || 0);
+  if (explicit > 0 && explicit <= 100) return Math.round(explicit);
+  return sharedPricing.getCredits(acceptedPartner.skillRequested || '', 'intermediate');
+};
+
+renderSkillChips = function(skills, type) {
+  if (!skills || !skills.length) return '<span style="color:var(--muted);font-size:.82rem">None added yet.</span>';
+  return skills.map(function(skill) {
+    var label = typeof skill === 'string' ? skill : skill.name;
+    var credits = '';
+    if (type === 'teach' && skill && typeof skill === 'object' && skill.name) {
+      credits = ' · ' + sharedPricing.getCredits(skill.name, skill.level || 'intermediate') + ' cr';
+    }
+    var level = skill && skill.level ? ' · ' + skill.level : '';
+    return '<span class="skill-badge ' + type + '">' + escapeHtml(label + credits + level) + '</span>';
+  }).join('');
+};
+
+function getAcceptedPartnerPricingDetails(acceptedPartner) {
+  if (!acceptedPartner) return null;
+  var teacherProfile = null;
+  if (acceptedPartner.teacherUid === (state.currentUser && state.currentUser.uid)) teacherProfile = state.profile || null;
+  else if (acceptedPartner.teacherUid) teacherProfile = state.userMap[acceptedPartner.teacherUid] || null;
+  var matchedEntry = teacherProfile ? getMatchedTeachSkillEntry(teacherProfile, acceptedPartner.skillRequested) : null;
+  var skillName = matchedEntry && matchedEntry.name ? matchedEntry.name : (acceptedPartner.skillRequested || 'General guidance');
+  var levelKey = sharedPricing.normalizeLevel(matchedEntry && matchedEntry.level ? matchedEntry.level : 'intermediate');
+  var levelLabel = levelKey === 'expert' ? 'Expert' : (levelKey === 'beginner' ? 'Beginner' : 'Intermediate');
+  return {
+    skillName: skillName,
+    levelLabel: levelLabel,
+    credits: acceptedPartner.sessionType === 'demo' ? 0 : getAcceptedPartnerScheduleCredits(acceptedPartner),
+    isDemo: acceptedPartner.sessionType === 'demo',
+    teacherName: acceptedPartner.teacherUid === (state.currentUser && state.currentUser.uid)
+      ? 'You'
+      : (acceptedPartner.teacherName || acceptedPartner.partnerName || 'The teacher')
+  };
+}
+
+function updateMatchRequestPricing(matchUser) {
+  var textEl = document.getElementById('matchRequestPricingText');
+  if (!textEl) return;
+  var teacherProfile = state.userMap && matchUser && matchUser.uid ? (state.userMap[matchUser.uid] || matchUser) : matchUser;
+  var skill = (document.getElementById('requestSkill') || {}).value || matchUser.primaryTeach || 'General guidance';
+  var type = (document.getElementById('requestType') || {}).value || 'credit';
+  if (type === 'demo') {
+    textEl.textContent = 'Free demo session for ' + skill + '. No credits will be reserved.';
+    return;
+  }
+  var matchedEntry = getMatchedTeachSkillEntry(teacherProfile, skill);
+  var levelKey = sharedPricing.normalizeLevel(matchedEntry && matchedEntry.level ? matchedEntry.level : 'intermediate');
+  var levelLabel = levelKey === 'expert' ? 'Expert' : (levelKey === 'beginner' ? 'Beginner' : 'Intermediate');
+  var credits = getSkillCredits(teacherProfile, skill);
+  textEl.textContent = skill + ' · ' + levelLabel + ' · ' + credits + ' credits per session';
+}
+
 function buildUserTags(user) {
   const tags = [];
   const v = user.verification||{}, h = user.humanVerification||{};
@@ -3203,8 +3784,10 @@ function buildMatchUser(user, me) {
     teaches: teach.join(' + ')||'No teaching skills yet',
     primaryTeach: teach[0]||'a skill', requestedSkill,
     creditsFrom: getSkillCredits(user, requestedSkill),
-    averageRating: user.stats&&user.stats.averageRating ? user.stats.averageRating : 0,
-    totalRatings:  user.stats&&user.stats.totalRatings  ? user.stats.totalRatings  : 0,
+    averageRating: user.stats&&user.stats.teacherAverageRating ? user.stats.teacherAverageRating : 0,
+    totalRatings:  user.stats&&user.stats.teacherTotalRatings  ? user.stats.teacherTotalRatings  : 0,
+    sessionsTaught: user.stats&&user.stats.sessionsTaught ? user.stats.sessionsTaught : 0,
+    paidSessionsTaught: user.stats&&user.stats.paidSessionsTaught ? user.stats.paidSessionsTaught : 0,
     demoOptIn: !!(user.teachingProfile&&user.teachingProfile.demoOptIn),
     badgeTier: user.teacherReputation&&user.teacherReputation.badgeTier ? user.teacherReputation.badgeTier : 'none',
     verificationStatus: v.status||'unverified',
@@ -3314,9 +3897,11 @@ async function loadNotifications(uid) {
       icon: d.type==='lesson-request'?'🤝':d.type==='request-status'?'✅':d.type==='session'?'📅':d.type==='material-shared'?'📚':'🔔',
       title: d.title || 'Notification',
       message: d.message || '',
-      timeLabel: created ? created.toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : 'Just now'
+      timeLabel: created ? created.toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : 'Just now',
+      createdAtMs: created ? created.getTime() : 0
     });
   });
+  notes.sort(function(a, b) { return (b.createdAtMs || 0) - (a.createdAtMs || 0); });
   return notes;
 }
 async function loadIncomingRequests(uid, userMap) {
@@ -3535,9 +4120,14 @@ async function createAcceptedConnection(req) {
 // ── ROADMAP PROGRESS ───────────────────────────────────────────
 async function saveRoadmapProgress(skillKey, roadmapData) {
   if (!state.currentUser) throw new Error('Not authenticated');
-  await setDoc(doc(db,'users',state.currentUser.uid), {
-    roadmaps: { [skillKey]: { ...roadmapData, updatedAt: serverTimestamp() } }
-  }, { merge: true });
+  try {
+    return await apiJson('/api/roadmaps/' + encodeURIComponent(skillKey), {
+      method:'PATCH',
+      body: JSON.stringify({ roadmap: roadmapData })
+    });
+  } catch (err) {
+    throw normalizeBackendMismatchError(err, 'Roadmap saving');
+  }
 }
 
 async function updateWeekStatus(skillKey, weekIndex, newState) {
@@ -3553,6 +4143,27 @@ async function updateWeekStatus(skillKey, weekIndex, newState) {
   await saveRoadmapProgress(skillKey, roadmap);
   await refreshDashboard();
 }
+window.generateRoadmapForSkill = async function(skill, level) {
+  if (!state.currentUser) throw new Error('Not authenticated');
+  try {
+    return await apiJson('/api/roadmaps/generate', {
+      method:'POST',
+      body: JSON.stringify({ skill: skill, level: level })
+    });
+  } catch (err) {
+    throw normalizeBackendMismatchError(err, 'Roadmap generation');
+  }
+};
+window.deleteRoadmap = async function(skillKey) {
+  if (!state.currentUser) throw new Error('Not authenticated');
+  try {
+    return await apiJson('/api/roadmaps/' + encodeURIComponent(skillKey), {
+      method:'DELETE'
+    });
+  } catch (err) {
+    throw normalizeBackendMismatchError(err, 'Roadmap deletion');
+  }
+};
 window.updateWeekStatus = updateWeekStatus;
 window.saveRoadmapProgress = saveRoadmapProgress;
 
@@ -3682,6 +4293,51 @@ function getSessionPartnerResponseNotice(session) {
   return null;
 }
 
+function getSessionResponseSummaryLabel(response, roleLabel) {
+  if (!response || !response.outcome) return roleLabel + ': Waiting for response';
+  if (response.outcome === 'completed') return roleLabel + ': Marked completed';
+  if (response.outcome === 'issue') return roleLabel + ': Reported an issue';
+  if (response.outcome === 'teacher_no_show') return roleLabel + ': Reported teacher no-show';
+  if (response.outcome === 'student_no_show') return roleLabel + ': Reported learner no-show';
+  if (response.outcome === 'resolved') return roleLabel + ': Resolved by reviewer';
+  return roleLabel + ': ' + String(response.outcome).replace(/_/g, ' ');
+}
+
+function buildSessionSummaryText(session) {
+  if (!session) return '';
+  var lines = [];
+  var finalStatus = getSessionFinalStatus(session);
+  var myResponse = getSessionResponse(session, session.myRole);
+  var partnerRole = session.myRole === 'teacher' ? 'student' : 'teacher';
+  var partnerResponse = getSessionResponse(session, partnerRole);
+  lines.push('Status: ' + (finalStatus ? finalStatus.label : (session.settlementStatus === 'awaiting_counterparty' ? 'Waiting for partner' : 'Response recorded')));
+  lines.push(getSessionResponseSummaryLabel(myResponse, 'Your response'));
+  lines.push(getSessionResponseSummaryLabel(partnerResponse, 'Partner response'));
+  if (session.isPaid) {
+    if (session.settlementStatus === 'settled') {
+      if (session.releasedCredits > 0 && session.refundedCredits > 0) {
+        lines.push('Credits: ' + session.releasedCredits + ' released to the teacher, ' + session.refundedCredits + ' refunded to the learner.');
+      } else if (session.releasedCredits > 0) {
+        lines.push('Credits: ' + session.releasedCredits + ' released to the teacher.');
+      } else if (session.refundedCredits > 0) {
+        lines.push('Credits: ' + session.refundedCredits + ' refunded to the learner.');
+      } else {
+        lines.push('Credits: Settlement completed with no extra credit movement needed.');
+      }
+    } else if (session.settlementStatus === 'review_pending') {
+      lines.push('Credits: ' + (session.heldCredits || 0) + ' credits are frozen until the reviewer resolves this case.');
+    } else {
+      lines.push('Credits: ' + (session.heldCredits || 0) + ' credits are still being held until both sides respond.');
+    }
+  } else {
+    lines.push('Credits: Demo session, so no credits moved.');
+  }
+  if (session.creditReviewCaseId) {
+    lines.push('Review: This session is in the reviewer queue.');
+  }
+  return lines.join('\n');
+}
+
 function getIssueReasonOptions(session) {
   if (!session || session.myRole === 'teacher') {
     return [
@@ -3707,6 +4363,20 @@ function getSessionUiConfig(session) {
   var isPaid = !!session.isPaid;
   var isTeacher = session.myRole === 'teacher';
   var partnerNotice = getSessionPartnerResponseNotice(session);
+  if (session._forceSummaryView) {
+    return {
+      mode: 'summary',
+      title: session._summaryTitle || 'Session Summary',
+      sub: session._summarySub || 'Here is the latest saved outcome for this session.',
+      summary: buildSessionSummaryText(session),
+      banner: partnerNotice,
+      primary: 'Close',
+      ratingLabel: '',
+      feedbackLabel: '',
+      issueLabel: '',
+      showIssueSection: false
+    };
+  }
   if (session.settlementStatus === 'settled') {
     if (!session.myRatingSubmitted && session.rawStatus === 'completed') {
       return {
@@ -3726,7 +4396,7 @@ function getSessionUiConfig(session) {
         mode: 'summary',
         title: 'Session Summary',
         sub: 'This session has been fully settled and closed.',
-        summary: 'Final outcome: ' + (session.rawStatus || 'resolved'),
+        summary: buildSessionSummaryText(session),
         banner: partnerNotice,
         primary: 'Close',
         ratingLabel: '',
@@ -3794,6 +4464,7 @@ function updateCompleteModalText(session) {
   if (summaryEl) {
     summaryEl.textContent = config.summary;
     summaryEl.style.display = config.summary ? 'block' : 'none';
+    summaryEl.style.whiteSpace = 'pre-line';
   }
   if (ratingLabelEl) { ratingLabelEl.textContent = config.ratingLabel; ratingLabelEl.parentElement.style.display = config.mode === 'summary' ? 'none' : 'block'; }
   var feedbackInputEl = document.getElementById('sessionFeedback');
@@ -3810,11 +4481,14 @@ function updateCompleteModalText(session) {
     issueReasonEl.innerHTML = '<option value="">Select reason...</option>' + options.map(function(option) {
       return '<option value="' + escapeHtml(option.value) + '">' + escapeHtml(option.label) + '</option>';
     }).join('');
+    if (window.ensureCustomSelect) window.ensureCustomSelect('issueReason');
+    if (window.syncCustomSelect) window.syncCustomSelect('issueReason');
   }
   if (!config.showIssueSection) {
     if (issueCheckEl) issueCheckEl.checked = false;
     if (issueReasonEl) issueReasonEl.value = '';
     if (issueReasonSectionEl) issueReasonSectionEl.style.display = 'none';
+    if (window.syncCustomSelect) window.syncCustomSelect('issueReason');
   }
   if (primaryBtn) {
     primaryBtn.textContent = config.primary;
@@ -3832,15 +4506,29 @@ function updateCompleteModalText(session) {
 function syncCompleteModalIssueMode() {
   var modalEl = document.getElementById('completeModal');
   var reviewOnly = modalEl && modalEl.dataset.reviewOnly === '1';
+  var summaryMode = modalEl && document.getElementById('completeModalTitle') && document.querySelector('#completeModal .modal-btn.primary') && document.querySelector('#completeModal .modal-btn.primary').getAttribute('onclick') === "closeModal('completeModal')";
   var issueCheckEl = document.getElementById('reportIssueCheck');
   var issueReasonSectionEl = document.getElementById('issueReasonSection');
   var ratingFieldEl = document.getElementById('completeRatingField');
   var feedbackLabelEl = document.getElementById('completeFeedbackLabel');
   var feedbackInputEl = document.getElementById('sessionFeedback');
   var primaryBtn = document.querySelector('#completeModal .modal-btn.primary');
+  var feedbackFieldEl = document.getElementById('completeFeedbackField');
+  var secondaryBtn = document.querySelector('#completeModal .modal-btn.secondary');
+  var issueSectionEl = document.getElementById('reportIssueSection');
+  if (summaryMode) {
+    if (ratingFieldEl) ratingFieldEl.style.display = 'none';
+    if (feedbackFieldEl) feedbackFieldEl.style.display = 'none';
+    if (issueSectionEl) issueSectionEl.style.display = 'none';
+    if (issueReasonSectionEl) issueReasonSectionEl.style.display = 'none';
+    if (secondaryBtn) secondaryBtn.style.display = 'none';
+    return;
+  }
+  if (secondaryBtn) secondaryBtn.style.display = '';
   var reportIssue = !!(issueCheckEl && issueCheckEl.checked && !reviewOnly);
   if (issueReasonSectionEl) issueReasonSectionEl.style.display = reportIssue ? 'block' : 'none';
   if (ratingFieldEl) ratingFieldEl.style.display = reportIssue ? 'none' : '';
+  if (feedbackFieldEl) feedbackFieldEl.style.display = '';
   if (feedbackLabelEl) {
     feedbackLabelEl.textContent = reportIssue
       ? 'Issue details (optional)'
@@ -3979,8 +4667,16 @@ function renderScheduleSessionSections(src) {
   var reviewList = document.getElementById('sessionsUnderReviewList');
   var historyList = document.getElementById('sessionsListFull');
   if (!reviewList || !historyList) return;
-  var reviewSessions = src.filter(function(item) { return item.settlementStatus === 'review_pending'; });
-  var historySessions = src.filter(function(item) { return item.settlementStatus !== 'review_pending'; });
+  var filtered = (src || []).filter(function(item) {
+    if (!selectedScheduleDateKey || selectedScheduleDateKey === 'all') return true;
+    if (!item.startDate) return false;
+    return getScheduleDayKey(item.startDate) === selectedScheduleDateKey;
+  });
+  var reviewSessions = filtered.filter(function(item) { return item.settlementStatus === 'review_pending'; });
+  var historySessions = filtered.filter(function(item) { return item.settlementStatus !== 'review_pending'; });
+  var emptyMessage = selectedScheduleDateKey
+    ? '<div style="text-align:center;padding:32px;color:var(--muted);font-size:.88rem">No sessions scheduled for the selected day.</div>'
+    : getSessionsEmptyStateHtml();
 
   if (reviewCard) reviewCard.style.display = reviewSessions.length ? 'block' : 'none';
   reviewList.innerHTML = reviewSessions.length
@@ -3990,7 +4686,7 @@ function renderScheduleSessionSections(src) {
     ? renderSessionItemsHtml(historySessions)
     : (reviewSessions.length
       ? '<div style="text-align:center;padding:32px;color:var(--muted);font-size:.88rem">No settled or scheduled session history yet. Active review cases are shown above.</div>'
-      : getSessionsEmptyStateHtml());
+      : emptyMessage);
 }
 
 function renderSessionsV2(listId) {
@@ -4009,7 +4705,11 @@ function renderSessionsV2(listId) {
 }
 
 window.renderSessions = renderSessionsV2;
-window.renderScheduleTab = function() { renderCalStrip('calStripFull'); renderScheduleSessionSections(window.SESSIONS && window.SESSIONS.length ? window.SESSIONS : APP.sessions); };
+window.renderScheduleTab = function() {
+  if (!selectedScheduleDateKey) selectedScheduleDateKey = getScheduleDayKey(new Date());
+  renderCalStrip('calStripFull');
+  renderScheduleSessionSections(window.SESSIONS && window.SESSIONS.length ? window.SESSIONS : APP.sessions);
+};
 
 window.openCompleteModal = function(sessionId) {
   var session = getSessionById(sessionId);
@@ -4061,6 +4761,27 @@ window.openNoShowModal = function(sessionId) {
   document.getElementById('noShowModal').classList.add('show');
 };
 
+function showJustSubmittedSessionSummary(sessionId, title, sub) {
+  var latestSession = getSessionById(sessionId);
+  if (!latestSession) {
+    closeModal('completeModal');
+    return;
+  }
+  var summarySession = Object.assign({}, latestSession, {
+    _forceSummaryView: true,
+    _summaryTitle: title,
+    _summarySub: sub
+  });
+  document.getElementById('completeSessionId').value = sessionId;
+  document.getElementById('reportIssueCheck').checked = false;
+  document.getElementById('issueReason').value = '';
+  document.getElementById('issueReasonSection').style.display = 'none';
+  updateCompleteModalText(summarySession);
+  var primaryBtn = document.querySelector('#completeModal .modal-btn.primary');
+  if (primaryBtn) primaryBtn.disabled = false;
+  document.getElementById('completeModal').classList.add('show');
+}
+
 window.submitCompletion = async function() {
   var sessionId = document.getElementById('completeSessionId').value;
   var feedback = document.getElementById('sessionFeedback').value.trim();
@@ -4083,7 +4804,13 @@ window.submitCompletion = async function() {
   btn.textContent = 'Processing...';
   try {
     await window.completeSession(sessionId, currentRating, feedback, reportIssue, issueReason);
-    closeModal('completeModal');
+    showJustSubmittedSessionSummary(
+      sessionId,
+      reviewOnly ? 'Review Saved' : 'Session Response Saved',
+      reviewOnly
+        ? 'Your review is now attached to this session.'
+        : 'Your response has been recorded. Here is the latest session status.'
+    );
   } catch(err) {
     showToast('!', 'Error', err.message || 'Failed to submit the session outcome');
     btn.disabled = false;
@@ -4100,6 +4827,11 @@ window.reportNoShowAction = async function(whoNoShowed) {
   try {
     await window.reportNoShow(sessionId, whoNoShowed);
     closeModal('noShowModal');
+    showJustSubmittedSessionSummary(
+      sessionId,
+      'No-Show Response Saved',
+      'Your no-show response has been recorded. Here is the latest session status.'
+    );
   } catch(err) {
     showToast('!', 'Error', err.message || 'Failed to report the session issue');
   }
@@ -4245,13 +4977,7 @@ window.completeSession = async function(sessionId, rating, feedback, reportIssue
       body: JSON.stringify(payload)
     });
   } catch (err) {
-    var isNotFound = String(err && err.message ? err.message : '').indexOf('(404)') !== -1;
-    if (!isNotFound) throw err;
-    console.warn('role-specific completion route returned 404, retrying generic route for session', sessionId);
-    result = await apiJson('/api/sessions/' + encodeURIComponent(sessionId) + '/complete', {
-      method:'POST',
-      body: JSON.stringify(payload)
-    });
+    throw normalizeBackendMismatchError(err, 'Session response');
   }
   await refreshDashboard();
   if (window.showToast) {
@@ -4355,7 +5081,7 @@ function setupRealtimeListeners(uid) {
 
   // Real-time notifications
   const unsubNotifications = onSnapshot(
-    query(collection(db,'notifications'),where('uid','==',uid),orderBy('createdAt','desc'),limit(20)),
+    query(collection(db,'notifications'),where('uid','==',uid),limit(20)),
     (snap) => {
       const notes = [];
       snap.forEach(item => {
@@ -4365,9 +5091,11 @@ function setupRealtimeListeners(uid) {
           id: item.id, read: !!d.read,
           icon: d.type==='lesson-request'?'🤝':d.type==='request-status'?'✅':d.type==='session'?'📅':d.type==='session-completed'?'🎉':d.type==='material-shared'?'📚':'🔔',
           title: d.title || 'Notification', message: d.message || '',
-          timeLabel: created ? created.toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : 'Just now'
+          timeLabel: created ? created.toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : 'Just now',
+          createdAtMs: created ? created.getTime() : 0
         });
       });
+      notes.sort(function(a, b) { return (b.createdAtMs || 0) - (a.createdAtMs || 0); });
       state.notifications = notes;
       window.renderNotifications(notes);
       const unread = notes.filter(n => !n.read).length;
@@ -4641,6 +5369,12 @@ async function refreshDashboard() {
   window.updateDashboardProfile(state.profile);
   if (window.renderSavedMaterialsLibrary) window.renderSavedMaterialsLibrary(state.savedMaterials);
   setupScheduleModalUi();
+  if (window.ensureCustomSelect) {
+    window.ensureCustomSelect('newSkillLevel');
+    window.syncCustomSelect('newSkillLevel');
+    window.ensureCustomSelect('issueReason');
+    window.syncCustomSelect('issueReason');
+  }
   refreshConnectedUi();
 
   var activePage = document.querySelector('.tab-page.active');
