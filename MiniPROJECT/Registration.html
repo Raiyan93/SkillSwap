@@ -309,7 +309,9 @@
   async function smartRedirect(user) {
     try {
       const snap = await getDoc(doc(db, 'users', user.uid));
-      if (snap.exists() && snap.data().appRole === 'reviewer') {
+      if (snap.exists() && snap.data().appRole === 'admin') {
+        window.location.href = 'admin.html';
+      } else if (snap.exists() && snap.data().appRole === 'reviewer') {
         window.location.href = 'reviewer.html';
       } else if (snap.exists() && snap.data().profileCompleted === true) {
         window.location.href = 'dashboard.html';

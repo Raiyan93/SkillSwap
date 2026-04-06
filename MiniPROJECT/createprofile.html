@@ -532,7 +532,13 @@ onAuthStateChanged(auth,async(user)=>{
       if(isEditMode || isReverifyMode){
         loadExistingProfile(s.data());
       } else {
-        window.location.href='dashboard.html';
+        if (s.data().appRole === 'admin') {
+          window.location.href='admin.html';
+        } else if (s.data().appRole === 'reviewer') {
+          window.location.href='reviewer.html';
+        } else {
+          window.location.href='dashboard.html';
+        }
         return;
       }
     }

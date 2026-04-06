@@ -377,6 +377,22 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
 .badge-chip.bronze{background:linear-gradient(135deg,#92400e,#d97706);color:#fff;box-shadow:0 2px 6px rgba(217,119,6,.35)}
 .badge-chip.silver{background:linear-gradient(135deg,#374151,#9ca3af);color:#fff;box-shadow:0 2px 6px rgba(156,163,175,.35)}
 .badge-chip.gold{background:linear-gradient(135deg,#b45309,#fbbf24);color:#fff;box-shadow:0 2px 6px rgba(251,191,36,.35)}
+.moderation-banner,.moderation-lock-card{background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.24);border-radius:18px}
+.moderation-banner{display:none;padding:16px 18px;margin-bottom:18px}
+.moderation-banner.probation{display:block;background:rgba(245,158,11,0.1);border-color:rgba(245,158,11,0.28)}
+.moderation-banner strong{display:block;font-size:.92rem;margin-bottom:6px}
+.moderation-banner p{font-size:.82rem;color:var(--text2);line-height:1.65}
+.moderation-lock-card{padding:26px;max-width:880px}
+.moderation-lock-title{font-family:'Inter',sans-serif;font-size:1.5rem;font-weight:800;margin-bottom:10px}
+.moderation-lock-copy{color:var(--text2);font-size:.9rem;line-height:1.7;margin-bottom:16px}
+.moderation-lock-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:18px 0}
+.moderation-lock-item{background:rgba(255,255,255,0.03);border:1px solid var(--border2);border-radius:14px;padding:14px}
+.moderation-lock-item .label{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.moderation-lock-item .value{font-size:.88rem;color:var(--text);line-height:1.55}
+.nav-item.locked{opacity:.45;cursor:not-allowed}
+.nav-item.locked:hover{background:transparent;color:var(--muted)}
+.restriction-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.restriction-chip{padding:6px 10px;border-radius:999px;border:1px solid rgba(245,158,11,0.24);background:rgba(245,158,11,0.12);color:#ffd799;font-size:.74rem;font-weight:700}
 </style>
 </head>
 <body>
@@ -422,6 +438,9 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
       <div class="icon-btn" onclick="switchTab('profile',null)">👤</div>
     </div>
   </div>
+  <div id="moderationBanner" class="moderation-banner"></div>
+  <div id="dashboardModerationLock" style="display:none"></div>
+  <div id="dashboardNormalContent">
   <div class="stats-row anim-2">
     <div class="stat-card"><div class="stat-icon purple">⭐</div><div><div class="stat-val" id="statCredits">—</div><div class="stat-label">Total Credits</div></div></div>
     <div class="stat-card"><div class="stat-icon blue">🔄</div><div><div class="stat-val" id="statSessions">—</div><div class="stat-label">Sessions Done</div></div></div>
@@ -504,6 +523,7 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
       </button>
     </div>
 
+  </div>
   </div>
 </div>
 
@@ -968,6 +988,20 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
   </div>
 </div>
 
+<div class="modal-overlay" id="recoveryAppealModal">
+  <div class="modal" style="max-width:520px">
+    <button class="modal-close" onclick="closeModal('recoveryAppealModal')">✕</button>
+    <div class="modal-title">Contact Admin</div>
+    <div class="modal-sub">Explain what happened, acknowledge the issue, and describe what you will improve so the admin can review your account recovery request.</div>
+    <div class="field-m"><label>What happened?</label><textarea id="appealIncidentExplanation" placeholder="Explain the situation clearly." style="min-height:88px"></textarea></div>
+    <div class="field-m"><label>Why are you sorry?</label><textarea id="appealApologyText" placeholder="Take accountability and acknowledge the problem." style="min-height:88px"></textarea></div>
+    <div class="field-m"><label>What will you improve?</label><textarea id="appealCorrectiveActions" placeholder="Describe what will change if access is restored." style="min-height:88px"></textarea></div>
+    <div class="field-m"><label>Extra details (optional)</label><textarea id="appealSupportingNote" placeholder="Add any extra context, references, or proof." style="min-height:72px"></textarea></div>
+    <button class="modal-btn primary" onclick="submitRecoveryAppeal()">Submit Recovery Request</button>
+    <button class="modal-btn secondary" onclick="closeModal('recoveryAppealModal')">Cancel</button>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast">
   <div class="toast-icon" id="toastIcon">📅</div>
@@ -1068,6 +1102,10 @@ function getPostSessionUnlockDate(startDate, durationMinutes) {
 }
 
 function switchTab(tabName, navEl) {
+  if ((isSuspendedProfile(state.profile) || isTerminatedProfile(state.profile)) && tabName !== 'dashboard') {
+    if (window.showToast) window.showToast('!', 'Account Restricted', 'Your account is restricted right now. Only the first tab is available until admin review is complete.');
+    return;
+  }
   document.querySelectorAll('.tab-page').forEach(function(p){ p.classList.remove('active'); });
   var page = document.getElementById('tab-' + tabName);
   if (page) page.classList.add('active');
@@ -1280,7 +1318,9 @@ function renderPartnerOptions(users) {
   }
   select.innerHTML = users.map(function(u) {
     var roleLabel = u.role === 'teacher' ? 'Teacher' : 'Student';
-    return '<option value="' + escapeHtml(u.requestId) + '">' + escapeHtml(u.partnerName) + ' - ' + roleLabel + ' - ' + escapeHtml(u.skillRequested||'General guidance') + '</option>';
+    var partnerProfile = (state.userMap && u.partnerUid) ? state.userMap[u.partnerUid] : null;
+    var blocked = getPartnerFeatureBlock(partnerProfile, 'canSchedule', u.partnerName);
+    return '<option value="' + escapeHtml(u.requestId) + '">' + escapeHtml(u.partnerName) + ' - ' + roleLabel + ' - ' + escapeHtml(u.skillRequested||'General guidance') + (blocked ? ' - unavailable' : '') + '</option>';
   }).join('');
   if (users.length === 1) select.value = users[0].requestId;
   if (window.updateScheduleSubmitState) window.updateScheduleSubmitState();
@@ -1447,7 +1487,7 @@ function openMatchModal(encoded) {
       '<option value="credit">Credit lesson</option>' +
     '</select></div>' +
     '<div class="field-m"><label>Message to Teacher</label><textarea id="requestNote" placeholder="Tell the teacher what you want to learn and your current level..."></textarea></div>' +
-    '<button class="modal-btn primary" onclick="sendRequest(\'' + encodeURIComponent(JSON.stringify(u)) + '\')">📨 Send Lesson Request</button>' +
+    '<button class="modal-btn primary" onclick="sendRequest(\'' + encodeURIComponent(JSON.stringify(u)).replace(/'/g, '%27') + '\')">📨 Send Lesson Request</button>' +
     '<button class="modal-btn secondary" onclick="closeModal(\'matchModal\')" style="margin-top:8px">Maybe Later</button>';
   document.getElementById('matchModal').classList.add('show');
 }
@@ -1488,6 +1528,7 @@ function sendRequest(encoded) {
 openMatchModal = function(encoded) {
   var u = typeof encoded === 'string' ? JSON.parse(decodeURIComponent(encoded)) : encoded;
   var teacherProfile = state.userMap && u.uid ? (state.userMap[u.uid] || u) : u;
+  var requestBlockMessage = getPartnerFeatureBlock(teacherProfile, 'canReceiveRequests', u.name);
   var defaultSkill = (u.teachSkills || [u.primaryTeach || 'General guidance'])[0] || 'General guidance';
   var safeCreditsFrom = getSkillCredits(teacherProfile, defaultSkill);
   u.creditsFrom = safeCreditsFrom;
@@ -1517,13 +1558,25 @@ openMatchModal = function(encoded) {
       '<div id="matchRequestPricingText" style="font-size:.84rem;color:var(--text2);line-height:1.6">Checking pricing...</div>' +
     '</div>' +
     '<div class="field-m"><label>Message to Teacher</label><textarea id="requestNote" placeholder="Tell the teacher what you want to learn and your current level..."></textarea></div>' +
-    '<button class="modal-btn primary" onclick="sendRequest(\'' + encodeURIComponent(JSON.stringify(u)) + '\')">ðŸ“¨ Send Lesson Request</button>' +
+    '<button class="modal-btn primary" onclick="sendRequest(\'' + encodeURIComponent(JSON.stringify(u)).replace(/'/g, '%27') + '\')">ðŸ“¨ Send Lesson Request</button>' +
     '<button class="modal-btn secondary" onclick="closeModal(\'matchModal\')" style="margin-top:8px">Maybe Later</button>';
   var requestSkillEl = document.getElementById('requestSkill');
   var requestTypeEl = document.getElementById('requestType');
-  if (requestSkillEl) requestSkillEl.onchange = function() { updateMatchRequestPricing(u); };
-  if (requestTypeEl) requestTypeEl.onchange = function() { updateMatchRequestPricing(u); };
-  updateMatchRequestPricing(u);
+  if (requestSkillEl) requestSkillEl.onchange = function() { if (window.updateMatchRequestPricing) window.updateMatchRequestPricing(u); };
+  if (requestTypeEl) requestTypeEl.onchange = function() { if (window.updateMatchRequestPricing) window.updateMatchRequestPricing(u); };
+  if (window.updateMatchRequestPricing) window.updateMatchRequestPricing(u);
+  if (requestBlockMessage) {
+    var sendBtn = document.querySelector('#matchModalContent .modal-btn.primary');
+    var pricingText = document.getElementById('matchRequestPricingText');
+    if (pricingText) pricingText.textContent = requestBlockMessage;
+    if (sendBtn) {
+      sendBtn.disabled = true;
+      sendBtn.textContent = 'Requests Unavailable';
+      sendBtn.style.opacity = '0.62';
+      sendBtn.style.cursor = 'not-allowed';
+      sendBtn.title = requestBlockMessage;
+    }
+  }
   document.getElementById('matchModal').classList.add('show');
 };
 
@@ -2221,6 +2274,7 @@ async function reportNoShowAction(whoNoShowed) {
 
 function openScheduleModal() {
   if (window.openScheduleModal && window.openScheduleModal !== openScheduleModal) return window.openScheduleModal();
+  if (!ensureModerationPermission('canSchedule', 'Scheduling Blocked', 'Scheduling is temporarily disabled during probation.')) return;
   renderMiniCal();
   updateSelDateDisplay();
   renderPartnerOptions(state.acceptedPartners || []);
@@ -2255,6 +2309,7 @@ function scheduleSession() {
 function joinMeet(url) { if (!url) { openCurrentConversationMeeting(); return; } window.open(url,'_blank'); }
 
 window.openScheduleModal = function() {
+  if (!ensureModerationPermission('canSchedule', 'Scheduling Blocked', 'Scheduling is temporarily disabled during probation.')) return;
   renderMiniCal();
   updateSelDateDisplay();
   renderPartnerOptions(state.acceptedPartners || []);
@@ -2523,6 +2578,14 @@ function updateSettingName() {
 // MODAL UTILS
 // ═══════════════════════════════════════════════════════════════
 function closeModal(id) { var el=document.getElementById(id); if(el) el.classList.remove('show'); }
+function openRecoveryAppealModal() {
+  if (!isSuspendedProfile(state.profile)) {
+    if (window.showToast) window.showToast('!', 'Recovery Not Needed', 'Your account is not currently suspended.');
+    return;
+  }
+  document.getElementById('recoveryAppealModal').classList.add('show');
+}
+window.openRecoveryAppealModal = openRecoveryAppealModal;
 document.querySelectorAll('.modal-overlay').forEach(function(o){
   o.addEventListener('click', function(e){ if(e.target===o) closeModal(o.id); });
 });
@@ -3014,7 +3077,24 @@ const fbApp = initializeApp(firebaseConfig);
 const auth  = getAuth(fbApp);
 const db    = getFirestore(fbApp);
 
-const state = { currentUser:null, profile:null, users:[], userMap:{}, sessions:[], notifications:[], incomingRequests:[], transactions:[], conversations:[], savedMaterials:[], acceptedPartners:[], activeConversation:null, googleCalendarStatus:null, seenLiveSessionIds:new Set(), liveSessionsBootstrapped:false };
+const state = {
+  currentUser:null,
+  profile:null,
+  users:[],
+  userMap:{},
+  sessions:[],
+  notifications:[],
+  incomingRequests:[],
+  transactions:[],
+  conversations:[],
+  savedMaterials:[],
+  acceptedPartners:[],
+  activeConversation:null,
+  googleCalendarStatus:null,
+  seenLiveSessionIds:new Set(),
+  liveSessionsBootstrapped:false,
+  moderation:{ suspended:false, terminated:false, probation:false, probationRestrictions:null }
+};
 window.state = state;
 let unsubscribers = []; // For real-time listeners cleanup
 let activeMessagesUnsub = null;
@@ -3050,6 +3130,217 @@ function normalizeBackendMismatchError(err, featureName) {
     return new Error(featureName + ' is unavailable because the backend on port 5000 is not running the latest SkillSwap server code. Restart the backend, then try again.');
   }
   return err instanceof Error ? err : new Error(message || (featureName + ' failed.'));
+}
+
+window.submitRecoveryAppeal = async function() {
+  var incidentExplanation = (document.getElementById('appealIncidentExplanation') || {}).value || '';
+  var apologyText = (document.getElementById('appealApologyText') || {}).value || '';
+  var correctiveActions = (document.getElementById('appealCorrectiveActions') || {}).value || '';
+  var supportingNote = (document.getElementById('appealSupportingNote') || {}).value || '';
+  try {
+    await apiJson('/api/account-recovery-appeals', {
+      method:'POST',
+      body: JSON.stringify({
+        incidentExplanation: incidentExplanation.trim(),
+        apologyText: apologyText.trim(),
+        correctiveActions: correctiveActions.trim(),
+        supportingNote: supportingNote.trim()
+      })
+    });
+    closeModal('recoveryAppealModal');
+    if (window.showToast) window.showToast('OK', 'Recovery Request Sent', 'Your explanation was submitted to admin for account review.');
+  } catch (err) {
+    if (window.showToast) window.showToast('!', 'Recovery Request Failed', err && err.message ? err.message : 'Could not submit your appeal.');
+  }
+};
+
+function getAccountStatus(profile) {
+  return String(profile && profile.accountStatus || 'active').toLowerCase();
+}
+
+function getProbationRestrictions(profile) {
+  var restrictions = profile && profile.probation && profile.probation.restrictions ? profile.probation.restrictions : {};
+  return {
+    canTeach: restrictions.canTeach !== false,
+    canReceiveRequests: restrictions.canReceiveRequests !== false,
+    canSendRequests: restrictions.canSendRequests !== false,
+    canSchedule: restrictions.canSchedule !== false,
+    canSessionAct: restrictions.canSessionAct !== false,
+    canRequestVerification: restrictions.canRequestVerification !== false
+  };
+}
+
+function isSuspendedProfile(profile) {
+  return getAccountStatus(profile) === 'suspended';
+}
+
+function isTerminatedProfile(profile) {
+  return getAccountStatus(profile) === 'terminated';
+}
+
+function isProbationProfile(profile) {
+  return !!(profile && profile.probation && profile.probation.active);
+}
+
+function getModerationCategoryLabel(category) {
+  var normalized = lower(category).replace(/\s+/g,'_');
+  if (normalized === 'poor_teacher_behavior') return 'Poor teacher behavior';
+  if (normalized === 'poor_learner_behavior') return 'Poor learner behavior';
+  if (normalized === 'harassment') return 'Harassment';
+  if (normalized === 'spam_or_scam') return 'Spam or scam';
+  if (normalized === 'no_show_abuse') return 'No-show abuse';
+  return 'Other';
+}
+
+function getRestrictionLabels(restrictions) {
+  var labels = [];
+  if (!restrictions.canTeach) labels.push('Teaching disabled');
+  if (!restrictions.canReceiveRequests) labels.push('Receiving requests disabled');
+  if (!restrictions.canSendRequests) labels.push('Sending requests disabled');
+  if (!restrictions.canSchedule) labels.push('Scheduling disabled');
+  if (!restrictions.canSessionAct) labels.push('Session actions disabled');
+  if (!restrictions.canRequestVerification) labels.push('Verification requests disabled');
+  return labels;
+}
+
+function getFeatureRestrictionActionLabel(feature) {
+  if (feature === 'canReceiveRequests') return 'receive lesson requests right now';
+  if (feature === 'canSendRequests') return 'send lesson requests right now';
+  if (feature === 'canSchedule') return 'be scheduled for sessions right now';
+  if (feature === 'canSessionAct') return 'complete session actions right now';
+  return 'use this SkillSwap feature right now';
+}
+
+function getModerationReasonText(profile) {
+  if (!profile) return '';
+  if (profile.suspension) {
+    return profile.suspension.reason || profile.suspension.notes || profile.suspension.categoryLabel || '';
+  }
+  if (profile.termination) {
+    return profile.termination.reason || profile.termination.notes || profile.termination.categoryLabel || '';
+  }
+  if (profile.probation) {
+    return profile.probation.reason || '';
+  }
+  return '';
+}
+
+function getPartnerFeatureBlock(profile, feature, displayName) {
+  if (!profile) return '';
+  var name = displayName || profile.fullName || profile.firstName || profile.email || 'This user';
+  var reason = getModerationReasonText(profile);
+  if (isTerminatedProfile(profile)) {
+    return name + ' has a terminated account and cannot use SkillSwap right now.' + (reason ? ' Reason: ' + reason + '.' : '');
+  }
+  if (isSuspendedProfile(profile)) {
+    return name + ' is suspended and cannot use SkillSwap right now.' + (reason ? ' Reason: ' + reason + '.' : '');
+  }
+  if (isProbationProfile(profile) && feature) {
+    var restrictions = getProbationRestrictions(profile);
+    if (restrictions[feature] === false) {
+      return name + ' is currently restricted and cannot ' + getFeatureRestrictionActionLabel(feature) + '.' + (reason ? ' Reason: ' + reason + '.' : '');
+    }
+  }
+  return '';
+}
+
+function ensurePartnerFeatureAllowed(profile, feature, displayName, title) {
+  var message = getPartnerFeatureBlock(profile, feature, displayName);
+  if (!message) return true;
+  if (window.showToast) window.showToast('!', title || 'Unavailable', message);
+  return false;
+}
+
+function ensureModerationPermission(flag, title, message) {
+  var profile = state.profile || {};
+  if (isSuspendedProfile(profile)) {
+    if (window.showToast) window.showToast('!', title || 'Account Suspended', 'Your account is suspended. Use Contact Admin to request recovery.');
+    return false;
+  }
+  if (isTerminatedProfile(profile)) {
+    if (window.showToast) window.showToast('!', title || 'Account Terminated', 'This account is terminated and cannot use SkillSwap features.');
+    return false;
+  }
+  if (isProbationProfile(profile) && flag) {
+    var restrictions = getProbationRestrictions(profile);
+    if (restrictions[flag] === false) {
+      if (window.showToast) window.showToast('!', title || 'Restricted During Probation', message || 'This feature is temporarily blocked while your account is on probation.');
+      return false;
+    }
+  }
+  return true;
+}
+
+// Expose module-scoped moderation helpers to classic scripts and inline handlers.
+window.getAccountStatus = getAccountStatus;
+window.getProbationRestrictions = getProbationRestrictions;
+window.isSuspendedProfile = isSuspendedProfile;
+window.isTerminatedProfile = isTerminatedProfile;
+window.isProbationProfile = isProbationProfile;
+window.getPartnerFeatureBlock = getPartnerFeatureBlock;
+window.ensurePartnerFeatureAllowed = ensurePartnerFeatureAllowed;
+window.ensureModerationPermission = ensureModerationPermission;
+
+function updateSidebarModerationState(profile) {
+  var locked = isSuspendedProfile(profile) || isTerminatedProfile(profile);
+  document.querySelectorAll('.nav-item').forEach(function(el){
+    var text = lower(el.textContent || '');
+    var isDashboard = text.indexOf('dashboard') !== -1;
+    if (locked && !isDashboard) el.classList.add('locked');
+    else el.classList.remove('locked');
+  });
+}
+
+function renderModerationBanner(profile) {
+  var banner = document.getElementById('moderationBanner');
+  if (!banner) return;
+  if (!isProbationProfile(profile) || isSuspendedProfile(profile) || isTerminatedProfile(profile)) {
+    banner.className = 'moderation-banner';
+    banner.style.display = 'none';
+    banner.innerHTML = '';
+    return;
+  }
+  var restrictions = getProbationRestrictions(profile);
+  var labels = getRestrictionLabels(restrictions);
+  banner.className = 'moderation-banner probation';
+  banner.style.display = 'block';
+  banner.innerHTML = '<strong>Probation Active</strong><p>Your account is active, but some SkillSwap features are temporarily limited while admin probation is in effect.'
+    + (profile.probation && profile.probation.reason ? ' Reason: ' + escapeHtml(profile.probation.reason) + '.' : '')
+    + '</p>'
+    + (labels.length ? '<div class="restriction-list">' + labels.map(function(label){ return '<span class="restriction-chip">' + escapeHtml(label) + '</span>'; }).join('') + '</div>' : '');
+}
+
+function renderDashboardLockState(profile) {
+  var lockHost = document.getElementById('dashboardModerationLock');
+  var normalHost = document.getElementById('dashboardNormalContent');
+  if (!lockHost || !normalHost) return;
+  var suspended = isSuspendedProfile(profile);
+  var terminated = isTerminatedProfile(profile);
+  if (!suspended && !terminated) {
+    lockHost.style.display = 'none';
+    lockHost.innerHTML = '';
+    normalHost.style.display = '';
+    return;
+  }
+  var suspension = profile && profile.suspension ? profile.suspension : {};
+  var title = terminated ? 'Account Terminated' : 'Account Suspended';
+  var reasonLabel = getModerationCategoryLabel(suspension.category);
+  var canAppeal = !terminated;
+  normalHost.style.display = 'none';
+  lockHost.style.display = 'block';
+  lockHost.innerHTML = '<div class="moderation-lock-card">'
+    + '<div class="moderation-lock-title">' + title + '</div>'
+    + '<div class="moderation-lock-copy">Your dashboard is restricted while this account issue is active. You cannot move to other tabs or use SkillSwap features until admin review is complete.</div>'
+    + '<div class="moderation-lock-grid">'
+    + '<div class="moderation-lock-item"><div class="label">Reason Category</div><div class="value">' + escapeHtml(reasonLabel) + '</div></div>'
+    + '<div class="moderation-lock-item"><div class="label">Reason</div><div class="value">' + escapeHtml(suspension.reason || 'No reason saved yet.') + '</div></div>'
+    + '<div class="moderation-lock-item"><div class="label">Admin Notes</div><div class="value">' + escapeHtml(suspension.notes || 'No extra admin notes were attached.') + '</div></div>'
+    + '<div class="moderation-lock-item"><div class="label">Applied</div><div class="value">' + escapeHtml(suspension.createdAt ? new Date(suspension.createdAt).toLocaleString() : 'Recently') + '</div></div>'
+    + '</div>'
+    + (canAppeal
+      ? '<button class="search-btn" onclick="openRecoveryAppealModal()">Contact Admin</button>'
+      : '<div class="moderation-lock-copy" style="margin-top:8px">This termination is not appealable from the dashboard.</div>')
+    + '</div>';
 }
 
 // ── UTILS ──────────────────────────────────────────────────────
@@ -3242,6 +3533,8 @@ function getScheduleModalState() {
   var time = timeEl ? timeEl.value : '';
   var durationMinutes = parseInt((durationEl || {}).value || 60, 10);
   var googleConnected = !!(state.googleCalendarStatus && state.googleCalendarStatus.connected);
+  var partnerProfile = acceptedPartner && acceptedPartner.partnerUid ? state.userMap[acceptedPartner.partnerUid] : null;
+  var partnerScheduleBlock = acceptedPartner ? getPartnerFeatureBlock(partnerProfile, 'canSchedule', acceptedPartner.partnerName) : '';
   var availableCredits = Number((state.profile && state.profile.creditBalance) || 0);
   var currentUid = state.currentUser ? state.currentUser.uid : '';
   var creditsNeeded = acceptedPartner ? getAcceptedPartnerScheduleCredits(acceptedPartner) : 0;
@@ -3267,6 +3560,7 @@ function getScheduleModalState() {
   var blocker = '';
 
   if (!acceptedPartner) blocker = 'Choose an accepted partner before scheduling.';
+  else if (partnerScheduleBlock) blocker = partnerScheduleBlock;
   else if (!topic) blocker = 'Add a session topic to continue.';
   else if (!time) blocker = 'Pick a session start time to continue.';
   else if (lowCreditForPaid) blocker = isLearner
@@ -3285,6 +3579,7 @@ function getScheduleModalState() {
     learnerAvailableCredits: learnerAvailableCredits,
     creditsNeeded: creditsNeeded,
     isLearner: isLearner,
+    partnerScheduleBlock: partnerScheduleBlock,
     lowCreditForPaid: lowCreditForPaid,
     shortage: shortage,
     blocker: blocker,
@@ -3662,6 +3957,7 @@ getSkillCredits = function(user, skill) {
   }
   return sharedPricing.getCredits(skill || '', 'intermediate');
 };
+window.getSkillCredits = getSkillCredits;
 
 getSafeCreditAmount = function(entryOrValue) {
   if (typeof entryOrValue === 'object' && entryOrValue !== null) {
@@ -3756,6 +4052,8 @@ function updateMatchRequestPricing(matchUser) {
   textEl.textContent = skill + ' · ' + levelLabel + ' · ' + credits + ' credits per session';
 }
 
+window.updateMatchRequestPricing = updateMatchRequestPricing;
+
 function buildUserTags(user) {
   const tags = [];
   const v = user.verification||{}, h = user.humanVerification||{};
@@ -3792,6 +4090,10 @@ function buildMatchUser(user, me) {
     badgeTier: user.teacherReputation&&user.teacherReputation.badgeTier ? user.teacherReputation.badgeTier : 'none',
     verificationStatus: v.status||'unverified',
     humanVerificationStatus: user.humanVerification&&user.humanVerification.status ? user.humanVerification.status : 'not-requested',
+    accountStatus: user.accountStatus || 'active',
+    probation: user.probation || null,
+    suspension: user.suspension || null,
+    termination: user.termination || null,
     score: computeMatchScore(me, user),
     tags: buildUserTags(user), links: user.links||{},
     cat: detectCategory(teach[0]||''), fieldOfStudy: user.fieldOfStudy||'',
@@ -4839,6 +5141,7 @@ window.reportNoShowAction = async function(whoNoShowed) {
 
 window.cancelScheduledSession = async function(sessionId) {
   if (!state.currentUser || !state.profile) return;
+  if (!ensureModerationPermission('canSessionAct', 'Session Actions Blocked', 'Session actions are temporarily disabled during probation.')) return;
   var session = getSessionById(sessionId);
   if (!session) {
     if (window.showToast) window.showToast('!', 'Session missing', 'Could not find that session.');
@@ -4958,6 +5261,9 @@ window.__legacyReportNoShow = async function(sessionId, whoNoShowed) {
 
 window.completeSession = async function(sessionId, rating, feedback, reportIssue, issueReason) {
   if (!state.currentUser || !state.profile) throw new Error('Not authenticated');
+  if (!ensureModerationPermission('canSessionAct', 'Session Actions Blocked', 'Session outcome actions are temporarily disabled during probation.')) {
+    throw new Error('Session actions are blocked during probation.');
+  }
   var session = getSessionById(sessionId);
   if (!session) throw new Error('Session not found');
   var reviewOnly = canAddLateReview(session);
@@ -5009,6 +5315,9 @@ window.completeSession = async function(sessionId, rating, feedback, reportIssue
 
 window.reportNoShow = async function(sessionId, whoNoShowed) {
   if (!state.currentUser || !state.profile) throw new Error('Not authenticated');
+  if (!ensureModerationPermission('canSessionAct', 'Session Actions Blocked', 'Session outcome actions are temporarily disabled during probation.')) {
+    throw new Error('Session actions are blocked during probation.');
+  }
   var session = getSessionById(sessionId);
   if (!session) throw new Error('Session not found');
   var result = await apiJson('/api/sessions/' + encodeURIComponent(sessionId) + '/no-show', {
@@ -5296,12 +5605,32 @@ async function refreshDashboard() {
   if (!state.currentUser) return;
 
   state.profile = await loadProfile(state.currentUser.uid);
+  if (state.profile && state.profile.appRole === 'admin') {
+    window.location.href = 'admin.html';
+    return;
+  }
   if (state.profile && state.profile.appRole === 'reviewer') {
     window.location.href = 'reviewer.html';
     return;
   }
   if (!state.profile || !state.profile.profileCompleted) {
     window.location.href = 'createprofile.html';
+    return;
+  }
+
+  state.moderation = {
+    suspended: isSuspendedProfile(state.profile),
+    terminated: isTerminatedProfile(state.profile),
+    probation: isProbationProfile(state.profile),
+    probationRestrictions: getProbationRestrictions(state.profile)
+  };
+  updateSidebarModerationState(state.profile);
+  renderModerationBanner(state.profile);
+  renderDashboardLockState(state.profile);
+  if (state.moderation.suspended || state.moderation.terminated) {
+    switchTab('dashboard', document.querySelector('.nav-item'));
+    window.CURRENT_USER_PROFILE = state.profile;
+    window.updateDashboardProfile(state.profile);
     return;
   }
 
@@ -5391,8 +5720,22 @@ async function refreshDashboard() {
 // ── LESSON REQUESTS ────────────────────────────────────────────
 window.ssCreateLessonRequest = async function(matchUser, draft) {
   if (!state.currentUser || !state.profile) throw new Error('Please sign in first.');
+  if (!ensureModerationPermission('canSendRequests', 'Requests Blocked', 'You cannot send learner requests while your account is on probation.')) {
+    throw new Error('Sending learner requests is blocked during probation.');
+  }
+  var teacherProfile = (state.userMap && matchUser.uid && state.userMap[matchUser.uid]) || matchUser || {};
+  var partnerBlockMessage = getPartnerFeatureBlock(teacherProfile, 'canReceiveRequests', matchUser.name || teacherProfile.fullName || 'This teacher');
+  if (partnerBlockMessage) {
+    if (window.showToast) window.showToast('!', 'Requests Blocked', partnerBlockMessage);
+    throw new Error(partnerBlockMessage);
+  }
   var skillRequested = draft&&draft.skillRequested ? draft.skillRequested : (matchUser.requestedSkill||matchUser.primaryTeach||'General guidance');
   var skillKey = normalizeSkillKey(skillRequested);
+  var requestedCredits = (draft&&draft.sessionType === 'demo')
+    ? 0
+    : (draft && typeof draft.creditsOffered === 'number' && draft.creditsOffered > 0 && draft.creditsOffered <= 100
+        ? Math.round(draft.creditsOffered)
+        : getSkillCredits(teacherProfile, skillRequested));
   var existingResults = await Promise.allSettled([
     getDocs(query(collection(db,'lessonRequests'), where('teacherUid','==',matchUser.uid))),
     getDocs(query(collection(db,'lessonConnections'), where('teacherUid','==',matchUser.uid)))
@@ -5431,14 +5774,7 @@ window.ssCreateLessonRequest = async function(matchUser, draft) {
     skillRequested: skillRequested,
     sessionType: draft&&draft.sessionType ? draft.sessionType : 'credit',
     studentMessage: draft&&draft.studentMessage ? draft.studentMessage : '',
-    creditsOffered: (draft&&draft.sessionType === 'demo')
-      ? 0
-      : getSafeCreditAmount(
-          (state.userMap && matchUser.uid && state.userMap[matchUser.uid]) || {
-            credits: draft&&typeof draft.creditsOffered==='number' ? draft.creditsOffered : matchUser.creditsFrom,
-            level: matchUser.level || ''
-          }
-        ),
+    creditsOffered: requestedCredits,
     createdAt: serverTimestamp()
   });
   await addDoc(collection(db,'notifications'),{
@@ -5449,7 +5785,10 @@ window.ssCreateLessonRequest = async function(matchUser, draft) {
 };
 
 window.acceptLessonRequest = async function(requestId) {
+  if (!ensureModerationPermission('canReceiveRequests', 'Requests Blocked', 'You cannot receive or accept learner requests while your account is on probation.')) return;
   const req = state.incomingRequests.find(r=>r.id===requestId); if (!req) return;
+  var requesterProfile = (state.userMap && req.studentUid) ? state.userMap[req.studentUid] : null;
+  if (!ensurePartnerFeatureAllowed(requesterProfile, 'canSendRequests', req.studentName || 'This learner', 'Requests Blocked')) return;
   try {
     await createAcceptedConnection(req);
 
@@ -5516,11 +5855,16 @@ window.rejectLessonRequest = async function(requestId) {
 // ── SESSION SCHEDULING ─────────────────────────────────────────
 window.ssScheduleSession = async function(draft) {
   if (!state.currentUser || !state.profile) throw new Error('Please sign in first.');
+  if (!ensureModerationPermission('canSchedule', 'Scheduling Blocked', 'Scheduling is temporarily disabled during probation.')) {
+    throw new Error('Scheduling is blocked during probation.');
+  }
   const acceptedPartner = draft.requestId ? getAcceptedPartnerByRequestId(draft.requestId) : null;
   if (!acceptedPartner) throw new Error('Pick an accepted partner to schedule with.');
   if (!draft.partnerUid || draft.partnerUid !== acceptedPartner.partnerUid) throw new Error('Selected partner is not part of an accepted lesson request.');
   const partner = state.userMap[draft.partnerUid];
   if (!partner) throw new Error('Selected partner not found.');
+  var partnerBlockMessage = getPartnerFeatureBlock(partner, 'canSchedule', partner.fullName || partner.firstName || draft.partnerName || 'This partner');
+  if (partnerBlockMessage) throw new Error(partnerBlockMessage);
   const response = await apiJson('/api/sessions/schedule-google-meet', {
     method:'POST',
     body: JSON.stringify({
@@ -5560,6 +5904,7 @@ window.toggleTeacherVisibility = async function() {
 
 window.requestHumanVerification = async function() {
   if (!state.currentUser) return;
+  if (!ensureModerationPermission('canRequestVerification', 'Verification Blocked', 'Verification requests are temporarily disabled during probation.')) return;
   try {
     await apiJson('/api/human-verification/request', { method:'POST' });
     await refreshDashboard();

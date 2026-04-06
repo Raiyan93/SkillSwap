@@ -384,7 +384,13 @@
 
     function renderSkillChips(items, emptyText) {
       if (!items || !items.length) return `<div class="muted">${escapeHtml(emptyText)}</div>`;
-      return `<div class="chips">${items.map(item => renderChip(item, 'info')).join('')}</div>`;
+      const labels = items.map(function(item) {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object') return item.name || item.skill || item.title || '';
+        return String(item || '');
+      }).filter(Boolean);
+      if (!labels.length) return `<div class="muted">${escapeHtml(emptyText)}</div>`;
+      return `<div class="chips">${labels.map(item => renderChip(item, 'info')).join('')}</div>`;
     }
 
     function renderLinks(links) {
@@ -419,10 +425,10 @@
       $('statTotalUsers').textContent = formatCount(overview.totalUsers || 0);
       $('statActiveTeachers').textContent = formatCount(overview.activeTeachers || 0);
       $('statTotalSessions').textContent = formatCount(overview.totalSessions || 0);
-      $('statHeldCredits').textContent = formatCredits(overview.totalHeldCredits || 0);
-      $('statPendingReviews').textContent = formatCount(overview.pendingHumanReviews || 0);
-      $('statCreditCases').textContent = formatCount(overview.pendingCreditCases || 0);
-      $('statRecoveryAppeals').textContent = formatCount(overview.pendingRecoveryAppeals || 0);
+      $('statHeldCredits').textContent = formatCredits(overview.totalHeldCredits || overview.heldCredits || 0);
+      $('statPendingReviews').textContent = formatCount(overview.pendingHumanReviews || overview.pendingReviews || 0);
+      $('statCreditCases').textContent = formatCount(overview.pendingCreditCases || overview.creditCases || 0);
+      $('statRecoveryAppeals').textContent = formatCount(overview.pendingRecoveryAppeals || overview.recoveryAppeals || 0);
       $('directorySubtitle').textContent = formatCount(state.users.length) + ' users loaded. Relationships stay nested inside each user view.';
       $('appealSubtitle').textContent = formatCount(state.recoveryAppeals.filter(function(item) { return (item.status || 'pending') === 'pending'; }).length) + ' pending reactivation requests in the queue.';
       $('adminSubtitle').textContent = state.profile
@@ -431,8 +437,8 @@
     }
 
     function getVerificationFilterValue(user) {
-      const human = String(user?.humanVerificationStatus || '').toLowerCase();
-      const ai = String(user?.verificationStatus || '').toLowerCase();
+      const human = String(user?.humanVerificationStatus || user?.humanVerification?.status || '').toLowerCase();
+      const ai = String(user?.verificationStatus || user?.verification?.status || '').toLowerCase();
       if (human === 'verified') return 'human_verified';
       if (human === 'pending') return 'pending_review';
       if (ai === 'verified') return 'ai_verified';
@@ -457,8 +463,8 @@
           user.uid,
           user.fullName,
           user.email,
-          (user.teachSkills || []).join(' '),
-          (user.learnSkills || []).join(' ')
+          (user.teachSkills || []).map(function(item) { return typeof item === 'string' ? item : (item && (item.name || item.skill || item.title)) || ''; }).join(' '),
+          (user.learnSkills || []).map(function(item) { return typeof item === 'string' ? item : (item && (item.name || item.skill || item.title)) || ''; }).join(' ')
         ].join(' ').toLowerCase();
         return haystack.includes(state.filters.search);
       });
@@ -532,11 +538,246 @@
       }).join('');
     }
 
+    function getKnownUserByUid(uid) {
+      return (state.users || []).find(function(user) { return user.uid === uid; }) || null;
+    }
+
+    function getRelationshipPartnerUid(detailUid, item) {
+      if (!item) return '';
+      if (item.teacherUid === detailUid && item.studentUid) return item.studentUid;
+      if (item.studentUid === detailUid && item.teacherUid) return item.teacherUid;
+      if (Array.isArray(item.participants)) {
+        var other = item.participants.find(function(uid) { return uid && uid !== detailUid; });
+        if (other) return other;
+      }
+      if (item.partnerUid && item.partnerUid !== detailUid) return item.partnerUid;
+      if (item.relatedUserId && item.relatedUserId !== detailUid) return item.relatedUserId;
+      return '';
+    }
+
+    function getRelationshipRole(detailUid, item) {
+      if (!item) return '';
+      if (item.teacherUid === detailUid) return 'teacher';
+      if (item.studentUid === detailUid) return 'learner';
+      return item.role || '';
+    }
+
+    function getRelationshipTimestamp(item) {
+      return item && (item.lastMessageAt || item.startAt || item.updatedAt || item.createdAt) || null;
+    }
+
+    function getRelationshipPartnerMeta(partnerUid, item) {
+      var summary = getKnownUserByUid(partnerUid);
+      if (summary) {
+        return {
+          uid: partnerUid,
+          fullName: summary.fullName || summary.email || partnerUid,
+          email: summary.email || '',
+          accountStatus: summary.accountStatus || 'active',
+          photoURL: summary.photoURL || ''
+        };
+      }
+      var isTeacher = item && item.teacherUid === partnerUid;
+      var isStudent = item && item.studentUid === partnerUid;
+      var fullName = isTeacher ? (item.teacherName || '') : (isStudent ? (item.studentName || '') : '');
+      var email = isTeacher ? (item.teacherEmail || '') : (isStudent ? (item.studentEmail || '') : '');
+      fullName = fullName || (item && (item.partnerName || item.displayName || item.fullName || item.email)) || email || partnerUid;
+      return {
+        uid: partnerUid,
+        fullName: fullName || partnerUid,
+        email: email || '',
+        accountStatus: (item && item.partnerAccountStatus) || 'unknown'
+      };
+    }
+
+    function normalizeBackendRelationshipGroups(detail) {
+      return (Array.isArray(detail && detail.relationshipGroups) ? detail.relationshipGroups : []).map(function(group) {
+        var partnerUid = group.partnerUid || (group.partner && group.partner.uid) || '';
+        return {
+          partnerUid: partnerUid,
+          partner: group.partner || getRelationshipPartnerMeta(partnerUid, null),
+          roles: Array.isArray(group.roles) ? group.roles.slice() : [],
+          taughtSessions: Number(group.taughtSessions || 0),
+          learnedSessions: Number(group.learnedSessions || 0),
+          requestCount: Number(group.requestCount || 0),
+          connectionCount: Number(group.connectionCount || 0),
+          conversationCount: Number(group.conversationCount || 0),
+          sessions: Array.isArray(group.sessions) ? group.sessions.slice() : [],
+          requests: Array.isArray(group.requests) ? group.requests.slice() : [],
+          connections: Array.isArray(group.connections) ? group.connections.slice() : [],
+          latestInteractionAt: group.latestInteractionAt || null
+        };
+      }).filter(function(group) { return !!group.partnerUid; });
+    }
+
+    function synthesizeRelationshipGroups(detail) {
+      var detailUid = detail && detail.user && detail.user.uid ? detail.user.uid : '';
+      if (!detailUid) return [];
+      var groups = new Map();
+
+      function ensureGroup(partnerUid, seedItem) {
+        if (!partnerUid) return null;
+        if (!groups.has(partnerUid)) {
+          groups.set(partnerUid, {
+            partnerUid: partnerUid,
+            partner: getRelationshipPartnerMeta(partnerUid, seedItem),
+            roles: new Set(),
+            taughtSessions: 0,
+            learnedSessions: 0,
+            requestCount: 0,
+            connectionCount: 0,
+            conversationCount: 0,
+            sessions: [],
+            requests: [],
+            connections: [],
+            latestInteractionAt: null,
+            _seenSessionIds: new Set(),
+            _seenRequestIds: new Set(),
+            _seenConnectionIds: new Set()
+          });
+        }
+        return groups.get(partnerUid);
+      }
+
+      function updateLatest(group, value) {
+        if (!value) return;
+        if (!group.latestInteractionAt || ((toDate(value) || new Date(0)).getTime() > (toDate(group.latestInteractionAt) || new Date(0)).getTime())) {
+          group.latestInteractionAt = value;
+        }
+      }
+
+      (detail.sessions || []).forEach(function(item) {
+        var partnerUid = getRelationshipPartnerUid(detailUid, item);
+        var group = ensureGroup(partnerUid, item);
+        if (!group) return;
+        var role = getRelationshipRole(detailUid, item);
+        if (role) group.roles.add(role);
+        if (role === 'teacher') group.taughtSessions += 1;
+        if (role === 'learner') group.learnedSessions += 1;
+        if (!group._seenSessionIds.has(item.id || '')) {
+          group._seenSessionIds.add(item.id || '');
+          group.sessions.push({
+            id: item.id,
+            topic: item.topic || item.skillRequested || 'Session',
+            skillRequested: item.skillRequested || '',
+            role: role,
+            status: item.status || item.settlementStatus || 'scheduled',
+            startAt: item.startAt || null,
+            updatedAt: item.updatedAt || null
+          });
+        }
+        updateLatest(group, getRelationshipTimestamp(item));
+      });
+
+      (detail.lessonRequests || []).forEach(function(item) {
+        var partnerUid = getRelationshipPartnerUid(detailUid, item);
+        var group = ensureGroup(partnerUid, item);
+        if (!group) return;
+        var role = getRelationshipRole(detailUid, item);
+        if (role) group.roles.add(role);
+        group.requestCount += 1;
+        if (!group._seenRequestIds.has(item.id || '')) {
+          group._seenRequestIds.add(item.id || '');
+          group.requests.push({
+            id: item.id,
+            skillRequested: item.skillRequested || 'Lesson request',
+            topic: item.topic || '',
+            role: role,
+            sessionType: item.sessionType || '',
+            status: item.status || 'pending',
+            createdAt: item.createdAt || null,
+            updatedAt: item.updatedAt || null
+          });
+        }
+        updateLatest(group, getRelationshipTimestamp(item));
+      });
+
+      (detail.lessonConnections || []).forEach(function(item) {
+        var partnerUid = getRelationshipPartnerUid(detailUid, item);
+        var group = ensureGroup(partnerUid, item);
+        if (!group) return;
+        var role = getRelationshipRole(detailUid, item);
+        if (role) group.roles.add(role);
+        group.connectionCount += 1;
+        if (!group._seenConnectionIds.has(item.id || '')) {
+          group._seenConnectionIds.add(item.id || '');
+          group.connections.push({
+            id: item.id,
+            skillRequested: item.skillRequested || item.topic || 'Connection',
+            topic: item.topic || '',
+            role: role,
+            sessionType: item.sessionType || '',
+            status: item.status || 'accepted',
+            createdAt: item.createdAt || null,
+            updatedAt: item.updatedAt || null
+          });
+        }
+        updateLatest(group, getRelationshipTimestamp(item));
+      });
+
+      (detail.conversations || []).forEach(function(item) {
+        var partnerUid = getRelationshipPartnerUid(detailUid, item);
+        var group = ensureGroup(partnerUid, item);
+        if (!group) return;
+        group.conversationCount += 1;
+        updateLatest(group, getRelationshipTimestamp(item));
+      });
+
+      return Array.from(groups.values()).map(function(group) {
+        return {
+          partnerUid: group.partnerUid,
+          partner: group.partner,
+          roles: Array.from(group.roles),
+          taughtSessions: group.taughtSessions,
+          learnedSessions: group.learnedSessions,
+          requestCount: group.requestCount,
+          connectionCount: group.connectionCount,
+          conversationCount: group.conversationCount,
+          sessions: group.sessions.sort(function(a, b) { return (toDate(b.updatedAt || b.startAt) || new Date(0)).getTime() - (toDate(a.updatedAt || a.startAt) || new Date(0)).getTime(); }),
+          requests: group.requests.sort(function(a, b) { return (toDate(b.updatedAt || b.createdAt) || new Date(0)).getTime() - (toDate(a.updatedAt || a.createdAt) || new Date(0)).getTime(); }),
+          connections: group.connections.sort(function(a, b) { return (toDate(b.updatedAt || b.createdAt) || new Date(0)).getTime() - (toDate(a.updatedAt || a.createdAt) || new Date(0)).getTime(); }),
+          latestInteractionAt: group.latestInteractionAt
+        };
+      }).sort(function(a, b) {
+        return (toDate(b.latestInteractionAt) || new Date(0)).getTime() - (toDate(a.latestInteractionAt) || new Date(0)).getTime();
+      });
+    }
+
+    function getNormalizedRelationshipGroups(detail) {
+      var derived = synthesizeRelationshipGroups(detail);
+      if (derived.length) {
+        var backendMap = new Map();
+        normalizeBackendRelationshipGroups(detail).forEach(function(group) {
+          backendMap.set(group.partnerUid, group);
+        });
+        return derived.map(function(group) {
+          var backend = backendMap.get(group.partnerUid);
+          if (!backend) return group;
+          return {
+            partnerUid: group.partnerUid,
+            partner: (group.partner && group.partner.fullName && group.partner.fullName !== group.partnerUid) ? group.partner : backend.partner,
+            roles: group.roles && group.roles.length ? group.roles : backend.roles,
+            taughtSessions: group.taughtSessions,
+            learnedSessions: group.learnedSessions,
+            requestCount: group.requestCount,
+            connectionCount: group.connectionCount,
+            conversationCount: group.conversationCount,
+            sessions: group.sessions,
+            requests: group.requests,
+            connections: group.connections,
+            latestInteractionAt: group.latestInteractionAt || backend.latestInteractionAt
+          };
+        });
+      }
+      return normalizeBackendRelationshipGroups(detail);
+    }
+
     function renderSummaryCards(detail) {
       const user = detail.user || {};
       const summary = detail.summary || {};
       const teacherRating = getPreferredRoleRatingSummary(user, detail.sessions || [], 'teacher');
       const learnerRating = getPreferredRoleRatingSummary(user, detail.sessions || [], 'learner');
+      const relationshipCount = getNormalizedRelationshipGroups(detail).length;
       return `
         <div class="summary-grid">
           <div class="summary-card"><div class="stat-label">Available Credits</div><div class="summary-value">${formatCredits(user.creditBalance || 0)}</div></div>
@@ -545,7 +786,7 @@
           <div class="summary-card"><div class="stat-label">Learner Rating</div><div class="summary-value">${formatRoleRatingValue(learnerRating)}</div></div>
           <div class="summary-card"><div class="stat-label">Sessions Taught</div><div class="summary-value">${formatCount(user.sessionsTaught || summary.taughtSessions || 0)}</div></div>
           <div class="summary-card"><div class="stat-label">Sessions Completed</div><div class="summary-value">${formatCount(user.sessionsCompleted || summary.sessionCount || 0)}</div></div>
-          <div class="summary-card"><div class="stat-label">Relationships</div><div class="summary-value">${formatCount(summary.relationshipCount || 0)}</div></div>
+          <div class="summary-card"><div class="stat-label">Relationships</div><div class="summary-value">${formatCount(summary.relationshipCount || relationshipCount || 0)}</div></div>
         </div>
       `;
     }
@@ -641,7 +882,7 @@
     }
 
     function renderRelationshipsTab(detail) {
-      const groups = detail.relationshipGroups || [];
+      const groups = getNormalizedRelationshipGroups(detail);
       if (!groups.length) return renderEmpty('No Relationships Yet', 'This account has no recorded partner relationships.');
       return groups.map(function(group) {
         const partner = group.partner || {};
@@ -654,7 +895,7 @@
                   <div class="mini-title">${escapeHtml(partner.fullName || partner.email || group.partnerUid)}</div>
                   <div class="tiny">${escapeHtml(partner.email || group.partnerUid)}</div>
                   <div class="chips" style="margin-top:10px;">
-                    ${(group.roles || []).map(role => renderChip(role === 'teacher' ? 'acted as teacher' : 'acted as learner', 'blue')).join('')}
+                    ${(group.roles || []).filter(Boolean).map(role => renderChip(role === 'teacher' ? 'acted as teacher' : 'acted as learner', 'blue')).join('')}
                     ${renderChip(partner.accountStatus || 'active')}
                   </div>
                 </div>
@@ -901,6 +1142,17 @@
             <div class="section-title">Account Controls</div>
             <div class="helper">Suspension keeps the user signed in with restricted access. Termination disables login through Firebase Auth. History stays preserved for auditability.</div>
             <div class="field" style="margin-top:16px;">
+              <label class="field-label" for="adminActionCategory">Category</label>
+              <select class="input" id="adminActionCategory">
+                <option value="poor_teacher_behavior">Poor teacher behavior</option>
+                <option value="poor_learner_behavior">Poor learner behavior</option>
+                <option value="harassment">Harassment</option>
+                <option value="spam_or_scam">Spam or scam</option>
+                <option value="no_show_abuse">No-show abuse</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="field" style="margin-top:16px;">
               <label class="field-label" for="adminActionReason">Reason</label>
               <input class="input" id="adminActionReason" type="text" maxlength="160" placeholder="Reason required for suspension or termination" />
             </div>
@@ -909,10 +1161,19 @@
               <textarea class="textarea" id="adminActionNotes" maxlength="500" placeholder="Add internal admin notes, ticket references, or context."></textarea>
             </div>
             <div class="actions-grid" style="margin-top:16px;">
+              <button class="btn ghost" type="button" data-admin-action="warn" ${user.uid === state.currentUser?.uid ? 'disabled' : ''}>Send Warning</button>
               <button class="btn warn" type="button" data-admin-action="suspend" ${user.uid === state.currentUser?.uid ? 'disabled' : ''}>Suspend User</button>
               <button class="btn good" type="button" data-admin-action="reactivate">Reactivate User</button>
               <button class="btn danger" type="button" data-admin-action="terminate" ${user.uid === state.currentUser?.uid ? 'disabled' : ''}>Terminate User</button>
             </div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-label">Warnings</div>
+            <div class="section-title">Warning History</div>
+            ${renderRows(user.accountWarnings || [], function(item) {
+              return `<div class="audit-row"><div><div class="mini-title">${escapeHtml((item.category || 'warning').replace(/_/g, ' '))}</div><div class="tiny">${escapeHtml(item.reason || 'No reason')}</div><div class="tiny">${escapeHtml(item.notes || 'No notes')}</div></div><div class="mini-stack" style="align-items:flex-end;"><div>${renderChip('warning', 'warn')}</div><div class="tiny">${formatDate(item.createdAt)}</div></div></div>`;
+            }, 'No warnings have been sent to this user yet.')}
           </div>
 
           <div class="section-card">
@@ -1056,17 +1317,18 @@
     async function runAdminAction(action) {
       if (!state.selectedDetail?.user?.uid) return;
       const targetUid = state.selectedDetail.user.uid;
+      const category = $('adminActionCategory')?.value?.trim() || 'other';
       const reason = $('adminActionReason')?.value?.trim() || '';
       const notes = $('adminActionNotes')?.value?.trim() || '';
-      const route = action === 'suspend' ? 'suspend' : action === 'reactivate' ? 'reactivate' : 'terminate';
+      const route = action === 'warn' ? 'warn' : action === 'suspend' ? 'suspend' : action === 'reactivate' ? 'reactivate' : 'terminate';
       const btn = document.querySelector('[data-admin-action="' + action + '"]');
       if (btn) btn.disabled = true;
       try {
         await apiJson('/api/admin/users/' + encodeURIComponent(targetUid) + '/' + route, {
           method: 'POST',
-          body: JSON.stringify({ reason, notes })
+          body: JSON.stringify({ category, reason, notes })
         });
-        showToast('Admin action saved', capitalize(action) + ' completed for ' + (state.selectedDetail.user.fullName || targetUid) + '.');
+        showToast(action === 'warn' ? 'Warning sent' : 'Admin action saved', capitalize(action) + ' completed for ' + (state.selectedDetail.user.fullName || targetUid) + '.');
         await Promise.all([loadOverview(), loadUsers(), refreshSelectedUser()]);
       } catch (err) {
         showToast('Action failed', err.message || 'Could not update that account.');

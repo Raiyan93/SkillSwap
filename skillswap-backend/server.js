@@ -387,6 +387,212 @@ async function requireReviewer(req, res, next) {
     }
 }
 
+async function requireAdmin(req, res, next) {
+    try {
+        const profile = await getUserProfileOrThrow(req.user.uid);
+        if (profile.appRole !== 'admin') {
+            return res.status(403).json({ error: 'Admin access required.' });
+        }
+        req.adminProfile = profile;
+        next();
+    } catch (err) {
+        console.error('[admin-auth]', err.message);
+        res.status(err.statusCode || 500).json({ error: err.message || 'Could not verify admin access.' });
+    }
+}
+
+const MODERATION_CATEGORIES = new Set([
+    'poor_teacher_behavior',
+    'poor_learner_behavior',
+    'harassment',
+    'spam_or_scam',
+    'no_show_abuse',
+    'other'
+]);
+
+const DEFAULT_PROBATION_RESTRICTIONS = {
+    canTeach: true,
+    canReceiveRequests: true,
+    canSendRequests: true,
+    canSchedule: true,
+    canSessionAct: true,
+    canRequestVerification: true
+};
+
+function sanitizePlainText(value, maxLen = 500) {
+    return typeof value === 'string' ? value.trim().slice(0, maxLen) : '';
+}
+
+function sanitizeModerationCategory(value) {
+    const normalized = sanitizePlainText(value, 60).toLowerCase().replace(/\s+/g, '_');
+    return MODERATION_CATEGORIES.has(normalized) ? normalized : 'other';
+}
+
+function getModerationCategoryLabel(category) {
+    const normalized = sanitizeModerationCategory(category);
+    if (normalized === 'poor_teacher_behavior') return 'Poor teacher behavior';
+    if (normalized === 'poor_learner_behavior') return 'Poor learner behavior';
+    if (normalized === 'harassment') return 'Harassment';
+    if (normalized === 'spam_or_scam') return 'Spam or scam';
+    if (normalized === 'no_show_abuse') return 'No-show abuse';
+    return 'Other';
+}
+
+function sanitizeProbationRestrictions(payload) {
+    const incoming = payload || {};
+    return {
+        canTeach: incoming.canTeach !== false,
+        canReceiveRequests: incoming.canReceiveRequests !== false,
+        canSendRequests: incoming.canSendRequests !== false,
+        canSchedule: incoming.canSchedule !== false,
+        canSessionAct: incoming.canSessionAct !== false,
+        canRequestVerification: incoming.canRequestVerification !== false
+    };
+}
+
+function buildModerationReasonText(category, reason) {
+    const base = getModerationCategoryLabel(category);
+    const safeReason = sanitizePlainText(reason, 240);
+    return safeReason ? `${base}: ${safeReason}` : base;
+}
+
+async function createNotificationDirect(payload) {
+    await getAdminDb().collection('notifications').add({
+        uid: payload.uid,
+        type: payload.type || 'admin',
+        title: payload.title || 'Account update',
+        message: payload.message || '',
+        read: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        metadata: payload.metadata || {}
+    });
+}
+
+async function appendAdminAuditLog(targetUid, payload) {
+    const db = getAdminDb();
+    const ref = db.collection('users').doc(targetUid);
+    const snap = await ref.get();
+    if (!snap.exists) {
+        const err = new Error('User profile not found.');
+        err.statusCode = 404;
+        throw err;
+    }
+    const data = snap.data() || {};
+    const current = Array.isArray(data.adminAuditLogs) ? data.adminAuditLogs.slice(-49) : [];
+    current.push({
+        id: crypto.randomUUID(),
+        action: payload.action || 'admin_action',
+        category: sanitizeModerationCategory(payload.category),
+        reason: sanitizePlainText(payload.reason, 240),
+        notes: sanitizePlainText(payload.notes, 500),
+        previousStatus: payload.previousStatus || data.accountStatus || 'active',
+        nextStatus: payload.nextStatus || data.accountStatus || 'active',
+        actorUid: payload.actorUid || '',
+        actorName: payload.actorName || '',
+        targetUid,
+        targetName: payload.targetName || getDisplayName(data, data.email || targetUid),
+        createdAt: new Date().toISOString(),
+        metadata: payload.metadata || {}
+    });
+    await ref.set({
+        adminAuditLogs: current,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    return current[current.length - 1];
+}
+
+async function appendAccountWarning(targetUid, warning) {
+    const db = getAdminDb();
+    const ref = db.collection('users').doc(targetUid);
+    const snap = await ref.get();
+    if (!snap.exists) {
+        const err = new Error('User profile not found.');
+        err.statusCode = 404;
+        throw err;
+    }
+    const data = snap.data() || {};
+    const warnings = Array.isArray(data.accountWarnings) ? data.accountWarnings.slice(-19) : [];
+    warnings.push({
+        id: crypto.randomUUID(),
+        category: sanitizeModerationCategory(warning.category),
+        reason: sanitizePlainText(warning.reason, 240),
+        notes: sanitizePlainText(warning.notes, 500),
+        createdAt: new Date().toISOString(),
+        actorUid: warning.actorUid || '',
+        actorName: warning.actorName || ''
+    });
+    await ref.set({
+        accountWarnings: warnings,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    return warnings[warnings.length - 1];
+}
+
+async function setUserModerationState(targetUid, patch) {
+    const db = getAdminDb();
+    const ref = db.collection('users').doc(targetUid);
+    await ref.set({
+        ...patch,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+}
+
+function getModerationRestrictionSummary(probation) {
+    const restrictions = probation?.restrictions || DEFAULT_PROBATION_RESTRICTIONS;
+    return {
+        canTeach: restrictions.canTeach !== false,
+        canReceiveRequests: restrictions.canReceiveRequests !== false,
+        canSendRequests: restrictions.canSendRequests !== false,
+        canSchedule: restrictions.canSchedule !== false,
+        canSessionAct: restrictions.canSessionAct !== false,
+        canRequestVerification: restrictions.canRequestVerification !== false
+    };
+}
+
+function getFeatureRestrictionActionLabel(feature) {
+    if (feature === 'canReceiveRequests') return 'receive lesson requests right now';
+    if (feature === 'canSendRequests') return 'send lesson requests right now';
+    if (feature === 'canSchedule') return 'be scheduled right now';
+    if (feature === 'canSessionAct') return 'complete session actions right now';
+    return 'use this SkillSwap feature right now';
+}
+
+function getModerationReasonText(profile) {
+    return profile?.suspension?.reason
+        || profile?.suspension?.notes
+        || profile?.suspension?.categoryLabel
+        || profile?.termination?.reason
+        || profile?.termination?.notes
+        || profile?.termination?.categoryLabel
+        || profile?.probation?.reason
+        || '';
+}
+
+async function assertUserFeatureAccess(uid, feature, actorLabel = 'This account') {
+    const profile = await getUserProfileOrThrow(uid);
+    const accountStatus = String(profile.accountStatus || 'active').toLowerCase();
+    const reason = getModerationReasonText(profile);
+    if (accountStatus === 'terminated') {
+        const err = new Error(`${actorLabel} has been terminated and cannot use SkillSwap right now.${reason ? ` Reason: ${reason}.` : ''}`);
+        err.statusCode = 403;
+        throw err;
+    }
+    if (accountStatus === 'suspended') {
+        const err = new Error(`${actorLabel} is suspended and cannot use SkillSwap right now.${reason ? ` Reason: ${reason}.` : ''}`);
+        err.statusCode = 403;
+        throw err;
+    }
+    if (profile.probation?.active) {
+        const restrictions = getModerationRestrictionSummary(profile.probation);
+        if (feature && restrictions[feature] === false) {
+            const err = new Error(`${actorLabel} is currently restricted and cannot ${getFeatureRestrictionActionLabel(feature)}.${reason ? ` Reason: ${reason}.` : ''}`);
+            err.statusCode = 403;
+            throw err;
+        }
+    }
+    return profile;
+}
+
 function toMillis(value) {
     if (!value) return 0;
     if (typeof value.toMillis === 'function') return value.toMillis();
@@ -591,9 +797,11 @@ function getSkillCreditFromProfile(profile, skillRequested) {
 
 function normalizeAcceptedConnectionCredits(connection, teacherProfile) {
     if (connection?.sessionType === 'demo') return 0;
+    const derivedCredits = Number(getSkillCreditFromProfile(teacherProfile, connection?.skillRequested) || 0);
+    if (derivedCredits > 0 && derivedCredits <= 100) return Math.round(derivedCredits);
     const rawCredits = Number(connection?.creditsOffered || 0);
     if (rawCredits > 0 && rawCredits <= 100) return Math.round(rawCredits);
-    return getSkillCreditFromProfile(teacherProfile, connection?.skillRequested);
+    return skillPricing.getCredits(connection?.skillRequested || '', 'intermediate');
 }
 
 const ROADMAP_LEVEL_LABELS = {
@@ -3829,12 +4037,17 @@ app.get('/api/google-calendar/status', requireAuth, async (req, res) => {
 
 app.post('/api/sessions/schedule-google-meet', requireAuth, async (req, res) => {
     try {
+        await assertUserFeatureAccess(req.user.uid, 'canSchedule');
         const { requestId, connectionId, topic, durationMinutes, startAt, partnerName, appUrl } = req.body || {};
         if (!requestId) return res.status(400).json({ error: 'Missing accepted request id.' });
         if (!topic || typeof topic !== 'string') return res.status(400).json({ error: 'Topic is required.' });
         if (!startAt) return res.status(400).json({ error: 'Start date is required.' });
 
         const acceptedConnection = await getAcceptedConnectionOrThrow({ requestId, connectionId, callerUid: req.user.uid });
+        const partnerUid = acceptedConnection.teacherUid === req.user.uid
+            ? acceptedConnection.studentUid
+            : acceptedConnection.teacherUid;
+        await assertUserFeatureAccess(partnerUid, 'canSchedule', 'The selected partner');
         const result = await createCalendarBackedSession({
             organizerUid: req.user.uid,
             acceptedConnection,
@@ -3885,6 +4098,7 @@ app.post('/api/sessions/reconcile', requireAuth, async (req, res) => {
 
 app.post('/api/sessions/:id/cancel', requireAuth, async (req, res) => {
     try {
+        await assertUserFeatureAccess(req.user.uid, 'canSessionAct');
         const result = await cancelSkillSwapSession(req.params.id, req.user.uid);
         res.json(result);
     } catch (err) {
@@ -3895,6 +4109,7 @@ app.post('/api/sessions/:id/cancel', requireAuth, async (req, res) => {
 
 app.post('/api/sessions/:id/teacher-complete', requireAuth, async (req, res) => {
     try {
+        await assertUserFeatureAccess(req.user.uid, 'canSessionAct');
         const reportIssue = !!req.body?.reportIssue;
         const rating = Number(req.body?.rating || 0);
         const allowMissingRating = !!req.body?.allowMissingRating;
@@ -3911,6 +4126,7 @@ app.post('/api/sessions/:id/teacher-complete', requireAuth, async (req, res) => 
 
 app.post('/api/sessions/:id/learner-complete', requireAuth, async (req, res) => {
     try {
+        await assertUserFeatureAccess(req.user.uid, 'canSessionAct');
         const reportIssue = !!req.body?.reportIssue;
         const rating = Number(req.body?.rating || 0);
         const allowMissingRating = !!req.body?.allowMissingRating;
@@ -3927,6 +4143,7 @@ app.post('/api/sessions/:id/learner-complete', requireAuth, async (req, res) => 
 
 app.post('/api/sessions/:id/complete', requireAuth, async (req, res) => {
     try {
+        await assertUserFeatureAccess(req.user.uid, 'canSessionAct');
         const reportIssue = !!req.body?.reportIssue;
         const rating = Number(req.body?.rating || 0);
         const allowMissingRating = !!req.body?.allowMissingRating;
@@ -3943,6 +4160,7 @@ app.post('/api/sessions/:id/complete', requireAuth, async (req, res) => {
 
 app.post('/api/sessions/:id/no-show', requireAuth, async (req, res) => {
     try {
+        await assertUserFeatureAccess(req.user.uid, 'canSessionAct');
         const whoNoShowed = req.body?.whoNoShowed;
         if (!['teacher', 'student'].includes(whoNoShowed)) {
             return res.status(400).json({ error: 'whoNoShowed must be "teacher" or "student".' });
@@ -3957,6 +4175,7 @@ app.post('/api/sessions/:id/no-show', requireAuth, async (req, res) => {
 
 app.post('/api/human-verification/request', requireAuth, async (req, res) => {
     try {
+        await assertUserFeatureAccess(req.user.uid, 'canRequestVerification');
         const requester = await getUserProfileOrThrow(req.user.uid);
         if (requester.appRole === 'reviewer') {
             return res.status(400).json({ error: 'Reviewer accounts cannot request teacher verification.' });
@@ -4420,6 +4639,900 @@ app.post('/api/reviewer/credits/top-up', requireAuth, requireReviewer, async (re
     }
 });
 
+function normalizeAdminSkillList(items) {
+    if (!Array.isArray(items)) return [];
+    return items
+        .map((item) => {
+        if (!item) return '';
+        if (typeof item === 'string') return item.trim();
+        if (typeof item === 'object') {
+            return String(item.name || item.skill || item.title || '').trim();
+        }
+        return String(item).trim();
+    })
+        .filter(Boolean);
+}
+
+function getRelatedUserIds(item) {
+    const ids = new Set();
+    if (item?.teacherUid) ids.add(item.teacherUid);
+    if (item?.studentUid) ids.add(item.studentUid);
+    if (Array.isArray(item?.participants)) {
+        item.participants.forEach((uid) => {
+            if (uid) ids.add(uid);
+        });
+    }
+    return Array.from(ids);
+}
+
+function trackRelationshipSummary(summaryMap, firstUid, secondUid) {
+    if (!firstUid || !secondUid || firstUid === secondUid) return;
+    if (!summaryMap.has(firstUid)) summaryMap.set(firstUid, { sessionCount: 0, partners: new Set() });
+    summaryMap.get(firstUid).partners.add(secondUid);
+}
+
+function loadAdminUserSummary(docSnap, derivedCounts = {}) {
+    const data = docSnap.data() || {};
+    const stats = data.stats || {};
+    return {
+        uid: docSnap.id,
+        fullName: data.fullName || [data.firstName, data.lastName].filter(Boolean).join(' ') || '',
+        firstName: data.firstName || '',
+        email: data.email || '',
+        appRole: data.appRole || 'user',
+        accountStatus: data.accountStatus || 'active',
+        probation: data.probation || null,
+        verification: data.verification || {},
+        humanVerification: data.humanVerification || {},
+        verificationStatus: data.verification?.status || 'unverified',
+        humanVerificationStatus: data.humanVerification?.status || 'not-requested',
+        authDisabled: !!data.authDisabled,
+        teachSkills: normalizeAdminSkillList(data.skills?.toTeach),
+        learnSkills: normalizeAdminSkillList(data.skills?.toLearn),
+        teacherReputation: data.teacherReputation || {},
+        stats,
+        creditBalance: Number(data.creditBalance || 0),
+        heldCreditBalance: Number(data.heldCreditBalance || 0),
+        relationshipCount: Number(derivedCounts.relationshipCount || 0),
+        sessionCount: Number(derivedCounts.sessionCount || stats.sessionsCompleted || stats.sessionsTaught || 0),
+        createdAt: data.createdAt || null,
+        updatedAt: data.updatedAt || null
+    };
+}
+
+async function listAdminUsers() {
+    const db = getAdminDb();
+    const [usersSnap, sessionsSnap, requestsSnap, connectionsSnap, conversationsSnap] = await Promise.all([
+        db.collection('users').get(),
+        db.collection('sessions').get(),
+        db.collection('lessonRequests').get(),
+        db.collection('lessonConnections').get(),
+        db.collection('conversations').get()
+    ]);
+    const summaryMap = new Map();
+    const ensureSummary = (uid) => {
+        if (!uid) return null;
+        if (!summaryMap.has(uid)) summaryMap.set(uid, { sessionCount: 0, partners: new Set() });
+        return summaryMap.get(uid);
+    };
+    sessionsSnap.forEach((docSnap) => {
+        const data = docSnap.data() || {};
+        [data.teacherUid, data.studentUid].forEach((uid) => {
+            const entry = ensureSummary(uid);
+            if (entry) entry.sessionCount += 1;
+        });
+        trackRelationshipSummary(summaryMap, data.teacherUid, data.studentUid);
+        trackRelationshipSummary(summaryMap, data.studentUid, data.teacherUid);
+    });
+    [requestsSnap, connectionsSnap].forEach((snap) => {
+        snap.forEach((docSnap) => {
+            const data = docSnap.data() || {};
+            trackRelationshipSummary(summaryMap, data.teacherUid, data.studentUid);
+            trackRelationshipSummary(summaryMap, data.studentUid, data.teacherUid);
+        });
+    });
+    conversationsSnap.forEach((docSnap) => {
+        const ids = getRelatedUserIds(docSnap.data() || {});
+        ids.forEach((uid) => ensureSummary(uid));
+        ids.forEach((uid) => {
+            ids.forEach((otherUid) => trackRelationshipSummary(summaryMap, uid, otherUid));
+        });
+    });
+    const users = [];
+    usersSnap.forEach((docSnap) => {
+        const counts = summaryMap.get(docSnap.id) || { sessionCount: 0, partners: new Set() };
+        users.push(loadAdminUserSummary(docSnap, {
+            sessionCount: counts.sessionCount,
+            relationshipCount: counts.partners.size
+        }));
+    });
+    return users;
+}
+
+async function buildAdminOverview() {
+    const db = getAdminDb();
+    const [usersSnap, sessionsSnap, creditCasesSnap, appealsSnap] = await Promise.all([
+        db.collection('users').get(),
+        db.collection('sessions').get(),
+        db.collection('creditReviewCases').get(),
+        db.collection('accountRecoveryAppeals').get()
+    ]);
+    let totalUsers = 0;
+    let activeTeachers = 0;
+    let heldCredits = 0;
+    usersSnap.forEach((docSnap) => {
+        const data = docSnap.data() || {};
+        totalUsers += 1;
+        heldCredits += Number(data.heldCreditBalance || 0);
+        if ((data.accountStatus || 'active') === 'active' && Array.isArray(data.skills?.toTeach) && data.skills.toTeach.length) {
+            activeTeachers += 1;
+        }
+    });
+    let pendingReviews = 0;
+    creditCasesSnap.forEach((docSnap) => {
+        const data = docSnap.data() || {};
+        if ((data.status || 'pending') === 'pending') pendingReviews += 1;
+    });
+    let recoveryAppeals = 0;
+    appealsSnap.forEach((docSnap) => {
+        const data = docSnap.data() || {};
+        if ((data.status || 'pending') === 'pending') recoveryAppeals += 1;
+    });
+    return {
+        totalUsers,
+        activeTeachers,
+        totalSessions: sessionsSnap.size,
+        heldCredits,
+        pendingReviews,
+        creditCases: creditCasesSnap.size,
+        recoveryAppeals
+    };
+}
+
+async function buildUserRelationshipGroups(uid, detail = {}) {
+    const profileCache = new Map();
+    const groups = new Map();
+    function resolvePartnerUid(item) {
+        if (!item) return '';
+        if (item.teacherUid === uid && item.studentUid) return item.studentUid;
+        if (item.studentUid === uid && item.teacherUid) return item.teacherUid;
+        if (Array.isArray(item.participants)) {
+            const other = item.participants.find((participantUid) => participantUid && participantUid !== uid);
+            if (other) return other;
+        }
+        if (item.partnerUid && item.partnerUid !== uid) return item.partnerUid;
+        if (item.relatedUserId && item.relatedUserId !== uid) return item.relatedUserId;
+        return '';
+    }
+    function resolvePartnerFallback(partnerUid, item) {
+        const isTeacher = item && item.teacherUid === partnerUid;
+        const isStudent = item && item.studentUid === partnerUid;
+        const email = isTeacher ? (item.teacherEmail || '') : (isStudent ? (item.studentEmail || '') : (item.partnerEmail || ''));
+        const fullName = (isTeacher ? item.teacherName : (isStudent ? item.studentName : ''))
+            || item.partnerName
+            || item.displayName
+            || email
+            || partnerUid;
+        return {
+            uid: partnerUid,
+            fullName: fullName || partnerUid,
+            email: email || '',
+            accountStatus: item.partnerAccountStatus || 'unknown'
+        };
+    }
+    function resolveActorRole(item) {
+        if (!item) return '';
+        if (item.teacherUid === uid) return 'teacher';
+        if (item.studentUid === uid) return 'learner';
+        return item.role || '';
+    }
+    async function getPartnerProfile(partnerUid) {
+        if (!partnerUid) return null;
+        if (profileCache.has(partnerUid)) return profileCache.get(partnerUid);
+        let partner = null;
+        try {
+            partner = await getUserProfileOrThrow(partnerUid);
+        } catch (_err) {
+            partner = null;
+        }
+        profileCache.set(partnerUid, partner);
+        return partner;
+    }
+    async function ensureGroup(partnerUid, sourceItem = null) {
+        if (!partnerUid) return null;
+        if (!groups.has(partnerUid)) {
+            const partner = await getPartnerProfile(partnerUid);
+            groups.set(partnerUid, {
+                partnerUid,
+                partner: partner ? {
+                    uid: partner.uid,
+                    fullName: getDisplayName(partner, partner.email || partner.uid),
+                    email: partner.email || '',
+                    accountStatus: partner.accountStatus || 'active'
+                } : resolvePartnerFallback(partnerUid, sourceItem || {}),
+                roles: new Set(),
+                taughtSessions: 0,
+                learnedSessions: 0,
+                requestCount: 0,
+                connectionCount: 0,
+                conversationCount: 0,
+                sessions: [],
+                requests: [],
+                connections: [],
+                latestInteractionAt: null
+            });
+        } else if (sourceItem) {
+            const existing = groups.get(partnerUid);
+            const fallback = resolvePartnerFallback(partnerUid, sourceItem);
+            if (existing && (!existing.partner.fullName || existing.partner.fullName === partnerUid) && fallback.fullName && fallback.fullName !== partnerUid) {
+                existing.partner.fullName = fallback.fullName;
+            }
+            if (existing && !existing.partner.email && fallback.email) {
+                existing.partner.email = fallback.email;
+            }
+        }
+        return groups.get(partnerUid);
+    }
+    function updateLatest(group, value) {
+        if (!value) return;
+        if (!group.latestInteractionAt || toMillis(value) > toMillis(group.latestInteractionAt)) {
+            group.latestInteractionAt = value;
+        }
+    }
+    for (const item of detail.sessions || []) {
+        const partnerUid = resolvePartnerUid(item);
+        const group = await ensureGroup(partnerUid, item);
+        if (!group) continue;
+        const role = resolveActorRole(item);
+        if (role) group.roles.add(role);
+        if (role === 'teacher') group.taughtSessions += 1;
+        else if (role === 'learner') group.learnedSessions += 1;
+        group.sessions.push({
+            id: item.id,
+            topic: item.topic || item.skillRequested || '',
+            skillRequested: item.skillRequested || '',
+            role,
+            status: item.status || item.settlementStatus || 'scheduled',
+            startAt: item.startAt || null,
+            updatedAt: item.updatedAt || null
+        });
+        updateLatest(group, item.updatedAt || item.startAt);
+    }
+    for (const item of detail.lessonRequests || []) {
+        const partnerUid = resolvePartnerUid(item);
+        const group = await ensureGroup(partnerUid, item);
+        if (!group) continue;
+        group.requestCount += 1;
+        group.requests.push({
+            id: item.id,
+            skillRequested: item.skillRequested || '',
+            topic: item.topic || '',
+            role: resolveActorRole(item),
+            sessionType: item.sessionType || '',
+            status: item.status || 'pending',
+            createdAt: item.createdAt || null,
+            updatedAt: item.updatedAt || null
+        });
+        updateLatest(group, item.updatedAt || item.createdAt);
+    }
+    for (const item of detail.lessonConnections || []) {
+        const partnerUid = resolvePartnerUid(item);
+        const group = await ensureGroup(partnerUid, item);
+        if (!group) continue;
+        group.connectionCount += 1;
+        group.connections.push({
+            id: item.id,
+            skillRequested: item.skillRequested || '',
+            topic: item.topic || '',
+            role: resolveActorRole(item),
+            sessionType: item.sessionType || '',
+            status: item.status || 'accepted',
+            createdAt: item.createdAt || null,
+            updatedAt: item.updatedAt || null
+        });
+        updateLatest(group, item.updatedAt || item.createdAt);
+    }
+    for (const item of detail.conversations || []) {
+        const partnerUid = resolvePartnerUid(item);
+        const group = await ensureGroup(partnerUid, item);
+        if (!group) continue;
+        group.conversationCount += 1;
+        updateLatest(group, item.lastMessageAt || item.updatedAt || item.createdAt);
+    }
+    return Array.from(groups.values())
+        .map((group) => ({
+        ...group,
+        roles: Array.from(group.roles),
+        sessions: group.sessions.sort((a, b) => toMillis(b.updatedAt || b.startAt) - toMillis(a.updatedAt || a.startAt)),
+        requests: group.requests.sort((a, b) => toMillis(b.updatedAt || b.createdAt) - toMillis(a.updatedAt || a.createdAt)),
+        connections: group.connections.sort((a, b) => toMillis(b.updatedAt || b.createdAt) - toMillis(a.updatedAt || a.createdAt))
+    }))
+        .sort((a, b) => toMillis(b.latestInteractionAt) - toMillis(a.latestInteractionAt));
+}
+
+async function buildAdminUserDetail(uid) {
+    const db = getAdminDb();
+    const user = await getUserProfileOrThrow(uid);
+    const [
+        stats,
+        sessionsTeacherSnap,
+        sessionsLearnerSnap,
+        lessonRequestsTeacherSnap,
+        lessonRequestsStudentSnap,
+        lessonConnectionsTeacherSnap,
+        lessonConnectionsStudentSnap,
+        transactionsSnap,
+        notificationsSnap,
+        conversationsSnap,
+        savedMaterialsSnap,
+        humanVerificationRequestsSnap,
+        googleCalendarSnap,
+        creditReviewCasesOpenedSnap,
+        creditReviewCasesTeacherSnap,
+        creditReviewCasesStudentSnap,
+        appealsSnap
+    ] = await Promise.all([
+        buildUserStatsSnapshot(uid, user),
+        db.collection('sessions').where('teacherUid', '==', uid).get(),
+        db.collection('sessions').where('studentUid', '==', uid).get(),
+        db.collection('lessonRequests').where('teacherUid', '==', uid).get(),
+        db.collection('lessonRequests').where('studentUid', '==', uid).get(),
+        db.collection('lessonConnections').where('teacherUid', '==', uid).get(),
+        db.collection('lessonConnections').where('studentUid', '==', uid).get(),
+        db.collection('transactions').where('uid', '==', uid).get(),
+        db.collection('notifications').where('uid', '==', uid).get(),
+        db.collection('conversations').where('participants', 'array-contains', uid).get(),
+        db.collection('savedMaterials').where('uid', '==', uid).get(),
+        db.collection('humanVerificationRequests').where('uid', '==', uid).get(),
+        db.collection('googleCalendarConnections').doc(uid).get(),
+        db.collection('creditReviewCases').where('openedByUid', '==', uid).get(),
+        db.collection('creditReviewCases').where('teacherUid', '==', uid).get(),
+        db.collection('creditReviewCases').where('studentUid', '==', uid).get(),
+        db.collection('accountRecoveryAppeals').where('uid', '==', uid).get()
+    ]);
+    const sessionsMap = new Map();
+    [sessionsTeacherSnap, sessionsLearnerSnap].forEach((snap) => {
+        snap.forEach((docSnap) => {
+            sessionsMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+        });
+    });
+    const lessonRequestMap = new Map();
+    [lessonRequestsTeacherSnap, lessonRequestsStudentSnap].forEach((snap) => {
+        snap.forEach((docSnap) => lessonRequestMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() }));
+    });
+    const lessonConnectionMap = new Map();
+    [lessonConnectionsTeacherSnap, lessonConnectionsStudentSnap].forEach((snap) => {
+        snap.forEach((docSnap) => lessonConnectionMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() }));
+    });
+    const creditCaseMap = new Map();
+    [creditReviewCasesOpenedSnap, creditReviewCasesTeacherSnap, creditReviewCasesStudentSnap].forEach((snap) => {
+        snap.forEach((docSnap) => creditCaseMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() }));
+    });
+    const transactions = [];
+    transactionsSnap.forEach((docSnap) => transactions.push({ id: docSnap.id, ...docSnap.data() }));
+    const notifications = [];
+    notificationsSnap.forEach((docSnap) => notifications.push({ id: docSnap.id, ...docSnap.data() }));
+    const conversations = [];
+    conversationsSnap.forEach((docSnap) => conversations.push({ id: docSnap.id, ...docSnap.data() }));
+    const savedMaterials = [];
+    savedMaterialsSnap.forEach((docSnap) => savedMaterials.push({ id: docSnap.id, ...docSnap.data() }));
+    const humanVerificationRequests = [];
+    humanVerificationRequestsSnap.forEach((docSnap) => humanVerificationRequests.push({ id: docSnap.id, ...docSnap.data() }));
+    const accountRecoveryAppeals = [];
+    appealsSnap.forEach((docSnap) => accountRecoveryAppeals.push({ id: docSnap.id, ...docSnap.data() }));
+    const sessions = Array.from(sessionsMap.values()).sort((a, b) => toMillis(b.updatedAt || b.startAt) - toMillis(a.updatedAt || a.startAt));
+    const lessonRequests = Array.from(lessonRequestMap.values()).sort((a, b) => toMillis(b.updatedAt || b.createdAt) - toMillis(a.updatedAt || a.createdAt));
+    const lessonConnections = Array.from(lessonConnectionMap.values()).sort((a, b) => toMillis(b.updatedAt || b.createdAt) - toMillis(a.updatedAt || a.createdAt));
+    const creditReviewCases = Array.from(creditCaseMap.values()).sort((a, b) => toMillis(b.updatedAt || b.openedAt) - toMillis(a.updatedAt || a.openedAt));
+    const relationshipGroups = await buildUserRelationshipGroups(uid, {
+        sessions,
+        lessonRequests,
+        lessonConnections,
+        conversations
+    });
+    const latestActivityAt = [
+        ...sessions.map((item) => item.updatedAt || item.startAt),
+        ...notifications.map((item) => item.createdAt || item.updatedAt),
+        ...transactions.map((item) => item.createdAt || item.updatedAt)
+    ].sort((a, b) => toMillis(b) - toMillis(a))[0] || null;
+    const summary = {
+        relationshipCount: relationshipGroups.length,
+        sessionCount: sessions.length,
+        taughtSessions: Number(stats.sessionsTaught || user.sessionsTaught || 0),
+        conversationCount: conversations.length,
+        notificationCount: notifications.length,
+        latestActivityAt,
+        pendingCreditCases: creditReviewCases.filter((item) => (item.status || 'pending') === 'pending').length
+    };
+    return {
+        user: {
+            uid,
+            ...user,
+            accountStatus: user.accountStatus || 'active',
+            probation: user.probation || { active: false, restrictions: { ...DEFAULT_PROBATION_RESTRICTIONS } },
+            accountWarnings: Array.isArray(user.accountWarnings) ? user.accountWarnings : [],
+            adminAuditLogs: Array.isArray(user.adminAuditLogs) ? user.adminAuditLogs : [],
+            authDisabled: !!user.authDisabled,
+            teachSkills: normalizeAdminSkillList(user.skills?.toTeach),
+            learnSkills: normalizeAdminSkillList(user.skills?.toLearn),
+            stats: { ...stats, ...(user.stats || {}) },
+            sessionsCompleted: Number(stats.sessionsCompleted || user.sessionsCompleted || 0),
+            sessionsTaught: Number(stats.sessionsTaught || user.sessionsTaught || 0)
+        },
+        summary,
+        sessions,
+        lessonRequests,
+        lessonConnections,
+        relationshipGroups,
+        transactions: transactions.sort((a, b) => toMillis(b.createdAt || b.updatedAt) - toMillis(a.createdAt || a.updatedAt)),
+        notifications: notifications.sort((a, b) => toMillis(b.createdAt || b.updatedAt) - toMillis(a.createdAt || a.updatedAt)),
+        conversations: conversations.sort((a, b) => toMillis(b.lastMessageAt || b.updatedAt) - toMillis(a.lastMessageAt || a.updatedAt)),
+        savedMaterials: savedMaterials.sort((a, b) => toMillis(b.createdAt || b.updatedAt) - toMillis(a.createdAt || a.updatedAt)),
+        creditReviewCases,
+        humanVerificationRequests: humanVerificationRequests.sort((a, b) => toMillis(b.requestedAt || b.updatedAt) - toMillis(a.requestedAt || a.updatedAt)),
+        accountRecoveryAppeals: accountRecoveryAppeals.sort((a, b) => toMillis(b.updatedAt || b.submittedAt) - toMillis(a.updatedAt || a.submittedAt)),
+        adminAuditLogs: Array.isArray(user.adminAuditLogs) ? user.adminAuditLogs.slice().sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt)) : [],
+        googleCalendarConnection: googleCalendarSnap.exists ? { id: googleCalendarSnap.id, ...googleCalendarSnap.data() } : null
+    };
+}
+
+async function performAdminUserAction(targetUid, adminProfile, action, options = {}) {
+    const db = getAdminDb();
+    const user = await getUserProfileOrThrow(targetUid);
+    const reason = sanitizePlainText(options.reason, 240);
+    const notes = sanitizePlainText(options.notes, 500);
+    const category = sanitizeModerationCategory(options.category);
+    const actorName = getDisplayName(adminProfile, 'Admin');
+    const targetName = getDisplayName(user, user.email || targetUid);
+    if (action === 'warn') {
+        const warning = await appendAccountWarning(targetUid, {
+            category,
+            reason,
+            notes,
+            actorUid: adminProfile.uid,
+            actorName
+        });
+        await appendAdminAuditLog(targetUid, {
+            action: 'warning_issued',
+            category,
+            reason,
+            notes,
+            previousStatus: user.accountStatus || 'active',
+            nextStatus: user.accountStatus || 'active',
+            actorUid: adminProfile.uid,
+            actorName,
+            targetName
+        });
+        await createNotificationDirect({
+            uid: targetUid,
+            type: 'account-warning',
+            title: 'Account Warning',
+            message: `Admin warning: ${buildModerationReasonText(category, reason)}.${notes ? ` ${notes}` : ''}`
+        });
+        return { ok: true, warning };
+    }
+
+    const currentStatus = user.accountStatus || 'active';
+    if (action === 'suspend') {
+        if (!reason) {
+            const err = new Error('Reason is required when suspending a user.');
+            err.statusCode = 400;
+            throw err;
+        }
+        const suspension = {
+            category,
+            categoryLabel: getModerationCategoryLabel(category),
+            reason,
+            notes,
+            actorUid: adminProfile.uid,
+            actorName,
+            createdAt: new Date().toISOString(),
+            appealable: true
+        };
+        await setUserModerationState(targetUid, {
+            accountStatus: 'suspended',
+            suspension,
+            probation: user.probation?.active ? user.probation : {
+                active: false,
+                reason: '',
+                restrictions: { ...DEFAULT_PROBATION_RESTRICTIONS },
+                startedAt: null,
+                clearedAt: null,
+                actorUid: '',
+                actorName: ''
+            },
+            authDisabled: false
+        });
+        await admin.auth().updateUser(targetUid, { disabled: false }).catch(() => {});
+        await appendAdminAuditLog(targetUid, {
+            action: 'user_suspended',
+            category,
+            reason,
+            notes,
+            previousStatus: currentStatus,
+            nextStatus: 'suspended',
+            actorUid: adminProfile.uid,
+            actorName,
+            targetName
+        });
+        await createNotificationDirect({
+            uid: targetUid,
+            type: 'account-suspension',
+            title: 'Account Suspended',
+            message: `Your account has been suspended. Reason: ${buildModerationReasonText(category, reason)}.${notes ? ` ${notes}` : ''}`
+        });
+        return { ok: true, accountStatus: 'suspended', suspension };
+    }
+
+    if (action === 'reactivate') {
+        await setUserModerationState(targetUid, {
+            accountStatus: 'active',
+            authDisabled: false
+        });
+        await admin.auth().updateUser(targetUid, { disabled: false }).catch(() => {});
+        await appendAdminAuditLog(targetUid, {
+            action: 'user_reactivated',
+            category,
+            reason,
+            notes,
+            previousStatus: currentStatus,
+            nextStatus: 'active',
+            actorUid: adminProfile.uid,
+            actorName,
+            targetName
+        });
+        await createNotificationDirect({
+            uid: targetUid,
+            type: 'account-reactivated',
+            title: 'Account Reactivated',
+            message: notes || 'Your SkillSwap account is active again.'
+        });
+        return { ok: true, accountStatus: 'active' };
+    }
+
+    if (action === 'terminate') {
+        if (!reason) {
+            const err = new Error('Reason is required when terminating a user.');
+            err.statusCode = 400;
+            throw err;
+        }
+        await setUserModerationState(targetUid, {
+            accountStatus: 'terminated',
+            authDisabled: true,
+            termination: {
+                category,
+                categoryLabel: getModerationCategoryLabel(category),
+                reason,
+                notes,
+                actorUid: adminProfile.uid,
+                actorName,
+                createdAt: new Date().toISOString()
+            }
+        });
+        await admin.auth().updateUser(targetUid, { disabled: true }).catch(() => {});
+        await appendAdminAuditLog(targetUid, {
+            action: 'user_terminated',
+            category,
+            reason,
+            notes,
+            previousStatus: currentStatus,
+            nextStatus: 'terminated',
+            actorUid: adminProfile.uid,
+            actorName,
+            targetName
+        });
+        return { ok: true, accountStatus: 'terminated' };
+    }
+
+    const err = new Error('Unsupported admin action.');
+    err.statusCode = 400;
+    throw err;
+}
+
+app.get('/api/admin/overview', requireAuth, requireAdmin, async (_req, res) => {
+    try {
+        const overview = await buildAdminOverview();
+        res.json({ ok: true, overview });
+    } catch (err) {
+        console.error('[admin-overview]', err.message);
+        res.status(err.statusCode || 500).json({ error: err.message || 'Could not load the admin overview.' });
+    }
+});
+
+app.get('/api/admin/users', requireAuth, requireAdmin, async (_req, res) => {
+    try {
+        const users = await listAdminUsers();
+        res.json({ ok: true, users });
+    } catch (err) {
+        console.error('[admin-users]', err.message);
+        res.status(err.statusCode || 500).json({ error: err.message || 'Could not load users.' });
+    }
+});
+
+app.get('/api/admin/users/:uid', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const detail = await buildAdminUserDetail(req.params.uid);
+        res.json({ ok: true, detail });
+    } catch (err) {
+        console.error('[admin-user-detail]', err.message);
+        res.status(err.statusCode || 500).json({ error: err.message || 'Could not load that user.' });
+    }
+});
+
+app.post('/api/admin/users/:uid/warn', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const result = await performAdminUserAction(req.params.uid, req.adminProfile, 'warn', req.body || {});
+        res.json(result);
+    } catch (err) {
+        console.error('[admin-warn]', err.message);
+        res.status(err.statusCode || 500).json({ error: err.message || 'Could not warn that user.' });
+    }
+});
+
+app.post('/api/admin/users/:uid/suspend', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const result = await performAdminUserAction(req.params.uid, req.adminProfile, 'suspend', req.body || {});
+        res.json(result);
+    } catch (err) {
+        console.error('[admin-suspend]', err.message);
+        res.status(err.statusCode || 500).json({ error: err.message || 'Could not suspend that user.' });
+    }
+});
+
+app.post('/api/admin/users/:uid/reactivate', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const result = await performAdminUserAction(req.params.uid, req.adminProfile, 'reactivate', req.body || {});
+        res.json(result);
+    } catch (err) {
+        console.error('[admin-reactivate]', err.message);
+        res.status(err.statusCode || 500).json({ error: err.message || 'Could not reactivate that user.' });
+    }
+});
+
+app.post('/api/admin/users/:uid/terminate', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const result = await performAdminUserAction(req.params.uid, req.adminProfile, 'terminate', req.body || {});
+        res.json(result);
+    } catch (err) {
+        console.error('[admin-terminate]', err.message);
+        res.status(err.statusCode || 500).json({ error: err.message || 'Could not terminate that user.' });
+    }
+});
+
+app.post('/api/account-recovery-appeals', requireAuth, async (req, res) => {
+    try {
+        const profile = await getUserProfileOrThrow(req.user.uid);
+        if ((profile.accountStatus || 'active') !== 'suspended') {
+            return res.status(400).json({ error: 'Only suspended accounts can submit a recovery appeal.' });
+        }
+        const incidentExplanation = sanitizePlainText(req.body?.incidentExplanation, 1200);
+        const apologyText = sanitizePlainText(req.body?.apologyText, 1200);
+        const correctiveActions = sanitizePlainText(req.body?.correctiveActions, 1200);
+        const supportingNote = sanitizePlainText(req.body?.supportingNote, 1200);
+        const evidenceUrl = sanitizePlainText(req.body?.evidenceUrl, 500);
+        if (!incidentExplanation || !apologyText || !correctiveActions) {
+            return res.status(400).json({ error: 'Explain what happened, acknowledge it, and describe what you will improve.' });
+        }
+        const db = getAdminDb();
+        const existing = await db.collection('accountRecoveryAppeals')
+            .where('uid', '==', req.user.uid)
+            .where('status', '==', 'pending')
+            .get();
+        if (!existing.empty) {
+            return res.status(409).json({ error: 'You already have a recovery appeal pending review.' });
+        }
+        const ref = db.collection('accountRecoveryAppeals').doc();
+        const now = admin.firestore.FieldValue.serverTimestamp();
+        await ref.set({
+            uid: req.user.uid,
+            status: 'pending',
+            submittedAt: now,
+            updatedAt: now,
+            suspensionReasonSnapshot: buildModerationReasonText(profile.suspension?.category, profile.suspension?.reason || ''),
+            incidentExplanation,
+            apologyText,
+            correctiveActions,
+            supportingNote,
+            evidenceUrl,
+            messageSummary: [incidentExplanation, apologyText, correctiveActions].filter(Boolean).join(' | ')
+        });
+        await appendAdminAuditLog(req.user.uid, {
+            action: 'recovery_appeal_submitted',
+            category: sanitizeModerationCategory(profile.suspension?.category),
+            reason: profile.suspension?.reason || '',
+            notes: 'User submitted a recovery appeal.',
+            previousStatus: profile.accountStatus || 'suspended',
+            nextStatus: profile.accountStatus || 'suspended',
+            actorUid: req.user.uid,
+            actorName: getDisplayName(profile, profile.email || req.user.uid),
+            targetName: getDisplayName(profile, profile.email || req.user.uid)
+        });
+        res.json({ ok: true, appealId: ref.id });
+    } catch (err) {
+        console.error('[account-recovery-appeal-submit]', err.message);
+        res.status(err.statusCode || 500).json({ error: err.message || 'Could not submit that recovery appeal.' });
+    }
+});
+
+app.get('/api/admin/account-recovery-appeals', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const statusFilter = sanitizePlainText(req.query?.status, 40).toLowerCase() || 'pending';
+        const snap = await getAdminDb().collection('accountRecoveryAppeals').get();
+        const appeals = [];
+        snap.forEach((docSnap) => {
+            const data = { id: docSnap.id, ...docSnap.data() };
+            if (statusFilter !== 'all' && (data.status || 'pending') !== statusFilter) return;
+            appeals.push(data);
+        });
+        appeals.sort((a, b) => toMillis(b.updatedAt || b.submittedAt) - toMillis(a.updatedAt || a.submittedAt));
+        res.json({ ok: true, appeals });
+    } catch (err) {
+        console.error('[admin-appeals]', err.message);
+        res.status(err.statusCode || 500).json({ error: err.message || 'Could not load recovery appeals.' });
+    }
+});
+
+async function resolveRecoveryAppeal(appealId, adminProfile, action, body = {}) {
+    const db = getAdminDb();
+    const appealRef = db.collection('accountRecoveryAppeals').doc(appealId);
+    const appealSnap = await appealRef.get();
+    if (!appealSnap.exists) {
+        const err = new Error('Recovery appeal not found.');
+        err.statusCode = 404;
+        throw err;
+    }
+    const appeal = appealSnap.data() || {};
+    if ((appeal.status || 'pending') !== 'pending') {
+        const err = new Error('This recovery appeal has already been reviewed.');
+        err.statusCode = 409;
+        throw err;
+    }
+    const user = await getUserProfileOrThrow(appeal.uid);
+    const actorName = getDisplayName(adminProfile, 'Admin');
+    const decisionReason = sanitizePlainText(body.decisionReason, 240);
+    const reviewNotes = sanitizePlainText(body.reviewNotes, 500);
+    if (action === 'approve') {
+        const restrictions = sanitizeProbationRestrictions(body.restrictions);
+        const probation = {
+            active: true,
+            reason: decisionReason || 'Account restored under probation after suspension appeal approval.',
+            restrictions,
+            startedAt: new Date().toISOString(),
+            clearedAt: null,
+            actorUid: adminProfile.uid,
+            actorName
+        };
+        await setUserModerationState(appeal.uid, {
+            accountStatus: 'active',
+            probation,
+            authDisabled: false
+        });
+        await admin.auth().updateUser(appeal.uid, { disabled: false }).catch(() => {});
+        await appealRef.set({
+            status: 'approved',
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+            reviewedBy: adminProfile.uid,
+            reviewedByName: actorName,
+            reviewNotes,
+            decisionReason
+        }, { merge: true });
+        await appendAdminAuditLog(appeal.uid, {
+            action: 'recovery_appeal_approved',
+            category: sanitizeModerationCategory(user.suspension?.category),
+            reason: decisionReason || user.suspension?.reason || '',
+            notes: reviewNotes,
+            previousStatus: user.accountStatus || 'suspended',
+            nextStatus: 'active',
+            actorUid: adminProfile.uid,
+            actorName,
+            targetName: getDisplayName(user, user.email || appeal.uid),
+            metadata: { probation }
+        });
+        await createNotificationDirect({
+            uid: appeal.uid,
+            type: 'account-reactivated',
+            title: 'Appeal Approved',
+            message: `Your account is active again under probation.${decisionReason ? ` ${decisionReason}` : ''}`
+        });
+        return { ok: true, status: 'approved', probation };
+    }
+
+    if (action === 'reject') {
+        await appealRef.set({
+            status: 'rejected',
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+            reviewedBy: adminProfile.uid,
+            reviewedByName: actorName,
+            reviewNotes,
+            decisionReason
+        }, { merge: true });
+        await appendAdminAuditLog(appeal.uid, {
+            action: 'recovery_appeal_rejected',
+            category: sanitizeModerationCategory(user.suspension?.category),
+            reason: decisionReason || user.suspension?.reason || '',
+            notes: reviewNotes,
+            previousStatus: user.accountStatus || 'suspended',
+            nextStatus: user.accountStatus || 'suspended',
+            actorUid: adminProfile.uid,
+            actorName,
+            targetName: getDisplayName(user, user.email || appeal.uid)
+        });
+        await createNotificationDirect({
+            uid: appeal.uid,
+            type: 'appeal-rejected',
+            title: 'Appeal Rejected',
+            message: decisionReason || 'Your recovery appeal was reviewed and rejected. The suspension remains in place.'
+        });
+        return { ok: true, status: 'rejected' };
+    }
+
+    const err = new Error('Unsupported recovery appeal action.');
+    err.statusCode = 400;
+    throw err;
+}
+
+app.post('/api/admin/account-recovery-appeals/:id/approve', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const result = await resolveRecoveryAppeal(req.params.id, req.adminProfile, 'approve', req.body || {});
+        res.json(result);
+    } catch (err) {
+        console.error('[admin-appeal-approve]', err.message);
+        res.status(err.statusCode || 500).json({ error: err.message || 'Could not approve that recovery appeal.' });
+    }
+});
+
+app.post('/api/admin/account-recovery-appeals/:id/reject', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const result = await resolveRecoveryAppeal(req.params.id, req.adminProfile, 'reject', req.body || {});
+        res.json(result);
+    } catch (err) {
+        console.error('[admin-appeal-reject]', err.message);
+        res.status(err.statusCode || 500).json({ error: err.message || 'Could not reject that recovery appeal.' });
+    }
+});
+
+app.post('/api/admin/users/:uid/clear-probation', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const user = await getUserProfileOrThrow(req.params.uid);
+        const decisionReason = sanitizePlainText(req.body?.decisionReason, 240);
+        const reviewNotes = sanitizePlainText(req.body?.reviewNotes, 500);
+        await setUserModerationState(req.params.uid, {
+            probation: {
+                active: false,
+                reason: '',
+                restrictions: { ...DEFAULT_PROBATION_RESTRICTIONS },
+                startedAt: user.probation?.startedAt || null,
+                clearedAt: new Date().toISOString(),
+                actorUid: req.adminProfile.uid,
+                actorName: getDisplayName(req.adminProfile, 'Admin')
+            }
+        });
+        await appendAdminAuditLog(req.params.uid, {
+            action: 'probation_cleared',
+            category: sanitizeModerationCategory(user.suspension?.category),
+            reason: decisionReason,
+            notes: reviewNotes,
+            previousStatus: user.accountStatus || 'active',
+            nextStatus: user.accountStatus || 'active',
+            actorUid: req.adminProfile.uid,
+            actorName: getDisplayName(req.adminProfile, 'Admin'),
+            targetName: getDisplayName(user, user.email || req.params.uid)
+        });
+        await createNotificationDirect({
+            uid: req.params.uid,
+            type: 'probation-cleared',
+            title: 'Probation Cleared',
+            message: decisionReason || 'Your probation period has ended and full SkillSwap access is restored.'
+        });
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('[admin-clear-probation]', err.message);
+        res.status(err.statusCode || 500).json({ error: err.message || 'Could not clear probation.' });
+    }
+});
+
 app.get('/api/health', (_req, res) => res.json({
     status: 'ok',
     ownershipCode: OWNERSHIP_CODE,
@@ -4427,6 +5540,8 @@ app.get('/api/health', (_req, res) => res.json({
     firebaseAdminConfigured: !!getFirebaseServiceAccount(),
     ai: { verification: 'gemini', studyMaterials: 'groq' }
 }));
+
+global.__skillswapServerStarted = true;
 
 app.listen(5000, () => {
     console.log('🚀 SkillSwap Verification Server — port 5000');
@@ -4528,9 +5643,12 @@ Return ONLY a JSON object with this exact structure:
 });
 
 const PORT = 5000;
-app.listen(PORT, () => {
-    console.log(`[SkillSwap backend] Server is running on port ${PORT}`);
-    if(!process.env.GROQ_API_KEY) {
-        console.warn(`[WARNING] GROQ_API_KEY is not defined in the environment. AI features will not work.`);
-    }
-});
+if (!global.__skillswapServerStarted) {
+    global.__skillswapServerStarted = true;
+    app.listen(PORT, () => {
+        console.log(`SkillSwap backend is running on port ${PORT}`);
+        if(!process.env.GROQ_API_KEY) {
+            console.warn(`[WARNING] GROQ_API_KEY is not defined in the environment. AI features will not work.`);
+        }
+    });
+}
