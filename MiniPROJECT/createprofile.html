@@ -355,7 +355,8 @@ main{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:110px 24p
           <div id="certVerifyPreview" style="color:var(--muted);">No certificates uploaded yet. Use the upload area above to add your certificates first.</div>
         </div>
         <p style="font-size:.78rem;color:var(--muted);margin-bottom:8px;">⚠️ Submitting fake, edited, or someone else's certificates is a permanent ban offence.</p>
-        <p style="font-size:.78rem;color:var(--muted);margin-bottom:16px;">📌 Only PNG/JPG images can be analyzed. PDFs stored above are for your profile record only — please also upload a JPG/PNG screenshot of your certificate for AI verification.</p>
+        <p style="font-size:.78rem;color:var(--muted);margin-bottom:8px;">📌 Only PNG/JPG images can be analyzed. PDFs stored above are for your profile record only — please also upload a JPG/PNG screenshot of your certificate for AI verification.</p>
+        <p style="font-size:.78rem;color:var(--warn);margin-bottom:16px;">📏 Certificate image verification is also capped at <strong>80/100</strong>. Intro or foundation certificates can support beginner claims strongly, intermediate claims partially, and should not strongly verify expert claims unless the certificate itself clearly shows advanced-level evidence.</p>
       </div>
 
       <!-- ══ NEW: Certificate Link Input ══ -->
@@ -401,7 +402,7 @@ main{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:110px 24p
 
         <div class="notice" style="background:rgba(251,191,36,.06);border-color:rgba(251,191,36,.2);">
           <span class="icon">⚠️</span>
-          <span style="color:var(--warn);">The certificate page must be <strong>publicly accessible</strong> without login. Some platforms block bots — in that case the AI will still evaluate the URL pattern for platform trust. Score is capped at <strong>80/100</strong> for this method (use GitHub for higher scores). Submitting someone else's certificate link is a permanent ban offence.</span>
+          <span style="color:var(--warn);">The certificate page must be <strong>publicly accessible</strong> without login, and Gemini must be available to verify it. Score is capped at <strong>80/100</strong> for this method, and certificate level is judged from the certificate’s own title or subject rather than generic platform text (use GitHub for higher scores). Submitting someone else's certificate link is a permanent ban offence.</span>
         </div>
       </div>
 
@@ -410,7 +411,6 @@ main{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:110px 24p
       <button class="btn-verify" id="verifyBtn" onclick="verifyWithAI()">
         🤖 Verify My Skills with AI
       </button>
-      <div id="rateRemainingNote" style="font-size:.74rem;color:var(--muted);margin-top:6px;"></div>
 
       <!-- AI Result -->
       <div class="ai-result-box" id="aiResultBox">
@@ -516,7 +516,11 @@ const app=initializeApp(firebaseConfig);
 const auth=getAuth(app);
 const db=getFirestore(app);
 const CL_NAME='dugf4o5wl',CL_PHOTOS='skillswap_photos',CL_CERTS='skillswap_certs';
-let currentUser=null,profilePhotoFile=null,certificateFiles=[];
+const verificationState=window.__verificationState||(window.__verificationState={certificateFiles:[],currentVerifyCertUploads:{}});
+let currentUser=null,profilePhotoFile=null;
+const getStoredCertificateFiles=()=>verificationState.certificateFiles;
+const setStoredCertificateFiles=next=>(verificationState.certificateFiles=next);
+const getCurrentVerifyUploads=()=>verificationState.currentVerifyCertUploads;
 let isEditMode = new URLSearchParams(window.location.search).get('mode') === 'edit';
 let isReverifyMode = new URLSearchParams(window.location.search).get('mode') === 'reverify';
 
@@ -669,7 +673,29 @@ document.getElementById('photoInput').addEventListener('change',function(e){
 document.getElementById('bio').addEventListener('input',function(){document.getElementById('bioCount').textContent=this.value.length+' / 200';});
 
 /* ── CERTIFICATES ── */
-document.getElementById('certInput').addEventListener('change',function(e){Array.from(e.target.files).forEach(addCert);});
+function getCertFileKey(file){
+  return [file.name||'',file.size||0,file.lastModified||0].join('__');
+}
+function isCertImageFile(file){
+  const ext=String(file?.name||'').split('.').pop().toLowerCase();
+  return ['jpg','jpeg','png','gif','webp'].includes(ext);
+}
+function getCurrentCertificateEntries(){
+  const seen={};
+  return getStoredCertificateFiles().filter(entry=>{
+    const key=getCertFileKey(entry.file);
+    if(seen[key])return false;
+    seen[key]=true;
+    return true;
+  });
+}
+window.getCertFileKey=getCertFileKey;
+window.isCertImageFile=isCertImageFile;
+window.getCurrentCertificateEntries=getCurrentCertificateEntries;
+document.getElementById('certInput').addEventListener('change',function(e){
+  Array.from(e.target.files).forEach(addCert);
+  e.target.value='';
+});
 const cdz=document.getElementById('certDropZone');
 cdz.addEventListener('dragover',e=>{e.preventDefault();cdz.style.borderColor='var(--purple)';});
 cdz.addEventListener('dragleave',()=>{cdz.style.borderColor='';});
@@ -677,34 +703,34 @@ cdz.addEventListener('drop',e=>{e.preventDefault();cdz.style.borderColor='';Arra
 
 function addCert(file){
   if(file.size>10*1024*1024){showError(`"${file.name}" is over 10MB.`);return;}
+  const fileKey=getCertFileKey(file);
+  if(getStoredCertificateFiles().some(entry=>entry.key===fileKey)){_updateCertVerifyPreview&&_updateCertVerifyPreview();return;}
   const ext=file.name.split('.').pop().toLowerCase();
   const isPdf=ext==='pdf';
   const list=document.getElementById('certList');
   const item=document.createElement('div');item.className='cert-item';
   item.innerHTML=`<span class="cert-icon">${isPdf?'📄':'🖼️'}</span><span class="cert-name">${file.name}</span><span class="cert-size">${(file.size/1024).toFixed(0)} KB</span><span class="cert-status ${isPdf?'uploading':''}">${isPdf?'📄 PDF (profile only — add JPG/PNG for AI verify)':'⏳ Queued'}</span><span class="cert-remove">✕</span>`;
-  item.querySelector('.cert-remove').addEventListener('click',()=>{certificateFiles=certificateFiles.filter(f=>f.file.name!==file.name);item.remove();_updateCertVerifyPreview&&_updateCertVerifyPreview();});
-  list.appendChild(item);certificateFiles.push({file,itemEl:item});
+  item.querySelector('.cert-remove').addEventListener('click',()=>{
+    setStoredCertificateFiles(getStoredCertificateFiles().filter(entry=>entry.key!==fileKey));
+    delete getCurrentVerifyUploads()[fileKey];
+    item.remove();
+    _updateCertVerifyPreview&&_updateCertVerifyPreview();
+  });
+  list.appendChild(item);getStoredCertificateFiles().push({key:fileKey,file,itemEl:item});
   _updateCertVerifyPreview&&_updateCertVerifyPreview();
 }
 
 function _updateCertVerifyPreview(){
   const preview=document.getElementById('certVerifyPreview');
   if(!preview)return;
-  const imgFiles=certificateFiles.filter(f=>{
-    const ext=f.file.name.split('.').pop().toLowerCase();
-    return ['jpg','jpeg','png','gif','webp'].includes(ext);
-  });
+  const imgFiles=(window.getCurrentCertificateEntries?window.getCurrentCertificateEntries():getStoredCertificateFiles())
+    .filter(entry=>(window.isCertImageFile||isCertImageFile)(entry.file));
   if(imgFiles.length===0){
-    const already=(window._uploadedCertUrls||[]).filter(u=>!u.toLowerCase().endsWith('.pdf'));
-    if(already.length>0){
-      preview.innerHTML=`<span style="color:var(--success);">✅ ${already.length} image(s) ready for verification (previously uploaded)</span>`;
-    } else {
-      preview.innerHTML='<span style="color:var(--muted);">No image certificates uploaded yet. Add PNG or JPG certificates above. PDFs are saved to your profile but cannot be AI-verified.</span>';
-    }
+    preview.innerHTML='<span style="color:var(--muted);">No image certificates queued for the current verification. Add PNG or JPG certificates above. PDFs are saved to your profile but cannot be AI-verified.</span>';
     return;
   }
   preview.innerHTML=`<span style="color:var(--success);">✅ ${imgFiles.length} image certificate(s) ready for AI verification:</span><div style="margin-top:6px;display:flex;flex-direction:column;gap:3px;">`+
-    imgFiles.map(f=>`<span style="color:var(--text);">🖼️ ${f.file.name}</span>`).join('')+'</div>';
+    imgFiles.map(entry=>`<span style="color:var(--text);">🖼️ ${entry.file.name}</span>`).join('')+'</div>';
 }
 
 /* ── ERRORS ── */
@@ -739,11 +765,12 @@ window.finish=async function(){
     }
 
     const certificateURLs=[];
-    if(certificateFiles.length>0){
-      for(let i=0;i<certificateFiles.length;i++){
-        const{file,itemEl}=certificateFiles[i],stEl=itemEl.querySelector('.cert-status');
+    const storedCertificateFiles=getStoredCertificateFiles();
+    if(storedCertificateFiles.length>0){
+      for(let i=0;i<storedCertificateFiles.length;i++){
+        const{file,itemEl}=storedCertificateFiles[i],stEl=itemEl.querySelector('.cert-status');
         stEl.textContent='⬆️ Uploading...';stEl.className='cert-status uploading';
-        btn.innerHTML=`<span class="spinner"></span>Uploading cert ${i+1}/${certificateFiles.length}...`;
+        btn.innerHTML=`<span class="spinner"></span>Uploading cert ${i+1}/${storedCertificateFiles.length}...`;
         try{const url=await uploadToCloudinary(file,(pct)=>{stEl.textContent='⬆️ '+pct+'%';},CL_CERTS);certificateURLs.push({name:file.name,url,size:file.size});stEl.textContent='✅ Uploaded';stEl.className='cert-status done';}
         catch(e){stEl.textContent='❌ Failed';stEl.className='cert-status error';}
       }
@@ -831,9 +858,30 @@ window.aiVerificationStatus='skipped';window.aiConfidenceScore=0;
 window._lastAIResult=null;
 let _currentVerifyType='technical';
 let _profileFirstName='',_profileLastName='';
+function getVerificationState(){
+  return window.__verificationState||(window.__verificationState={certificateFiles:[],currentVerifyCertUploads:{}});
+}
+
+function resetVerificationUI(){
+  window._lastAIResult=null;
+  window.aiVerificationStatus='skipped';
+  window.aiConfidenceScore=0;
+  const box=document.getElementById('aiResultBox');
+  if(box){box.className='ai-result-box';box.style.display='none';}
+  const icon=document.getElementById('aiResultIcon');if(icon)icon.textContent='';
+  const score=document.getElementById('aiResultScore');if(score){score.textContent='';score.className='ai-result-score';}
+  ['ownershipWarningBox','cloneWarningBox','breakdownBox','imageResultsBox','certLinkDetailsBox'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.remove();
+  });
+  const verdictRow=document.getElementById('skillVerdictRow');if(verdictRow)verdictRow.innerHTML='';
+  const reason=document.getElementById('aiResultReasoning');if(reason)reason.textContent='';
+  const limit=document.getElementById('aiLimitationNote');if(limit){limit.style.display='none';limit.textContent='';}
+  const tamper=document.getElementById('aiTamperBox');if(tamper){tamper.style.display='none';tamper.textContent='';}
+}
 
 /* ── VERIFICATION TYPE SWITCH — now handles 4 tabs ── */
 window.switchVerifyType=function(type){
+  resetVerificationUI();
   _currentVerifyType=type;
   ['technical','creative','certlink'].forEach(t=>{
     document.getElementById('tab-'+t).classList.toggle('active',t===type);
@@ -847,11 +895,14 @@ window.addSkill=function(type){
   const input=document.getElementById(type==='offer'?'offerInput':'wantInput');
   const level=document.getElementById(type==='offer'?'offerLevel':'wantLevel').value;
   const val=input.value.trim();if(!val)return;
+  resetVerificationUI();
   (type==='offer'?window.offerSkills:window.wantSkills).push({name:val,level});
   input.value='';renderTags(type);
   if(type==='offer'&&window._updateCreditPreview)window._updateCreditPreview();
 };
 ['offerInput','wantInput'].forEach(id=>{document.getElementById(id).addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();addSkill(id.includes('offer')?'offer':'want');}});});
+['offerLevel','wantLevel','githubURL','certLinkURL'].forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('input',resetVerificationUI);});
+if(document.getElementById('certInput'))document.getElementById('certInput').addEventListener('change',resetVerificationUI);
 
 function renderTags(type){
   const arr=type==='offer'?window.offerSkills:window.wantSkills;
@@ -866,7 +917,7 @@ function renderTags(type){
     container.appendChild(tag);
   });
 }
-window.removeSkill=function(type,i){(type==='offer'?window.offerSkills:window.wantSkills).splice(i,1);renderTags(type);if(type==='offer'&&window._updateCreditPreview)window._updateCreditPreview();};
+window.removeSkill=function(type,i){resetVerificationUI();(type==='offer'?window.offerSkills:window.wantSkills).splice(i,1);renderTags(type);if(type==='offer'&&window._updateCreditPreview)window._updateCreditPreview();};
 window.toggleDay=function(btn){btn.classList.toggle('selected');};
 window.toggleSlot=function(btn){btn.classList.toggle('selected');};
 
@@ -898,19 +949,13 @@ window.goToStep=function(step){
    AI VERIFICATION (calls localhost:5000)
 ══════════════════════════════════════════════════════════════ */
 window.verifyWithAI=async function(){
+  hideError();
+  resetVerificationUI();
   if(!window.offerSkills||!window.offerSkills.length){
     if(window.showError)window.showError('Please add skills to teach in Step 2 first.');return;
   }
 
   const btn=document.getElementById('verifyBtn');
-  const resultBox=document.getElementById('aiResultBox');
-  resultBox.className='ai-result-box';
-  resultBox.style.display='none';
-
-  ['ownershipWarningBox','cloneWarningBox','breakdownBox','imageResultsBox','channelOwnershipBox','certLinkDetailsBox'].forEach(id=>{
-    const el=document.getElementById(id);if(el)el.remove();
-  });
-
   btn.innerHTML='<span class="spinner"></span> Analyzing...';
   btn.disabled=true;
 
@@ -935,24 +980,42 @@ window.verifyWithAI=async function(){
       payload.githubUrl=ghInput;
 
     }else if(_currentVerifyType==='creative'){
-      const certInput=document.getElementById('certInput');
-      const certFiles=certInput?Array.from(certInput.files).filter(f=>!f.name.toLowerCase().endsWith('.pdf')):[];
-      const alreadyUploaded=(window._uploadedCertUrls||[]).filter(u=>!u.toLowerCase().endsWith('.pdf'));
+      const certEntries=(window.getCurrentCertificateEntries?window.getCurrentCertificateEntries():getVerificationState().certificateFiles)
+        .filter(entry=>(window.isCertImageFile||isCertImageFile)(entry.file));
 
-      if(certFiles.length===0&&alreadyUploaded.length===0){
+      if(certEntries.length===0){
         btn.disabled=false;btn.innerHTML='🤖 Verify My Skills with AI';
         window.showError&&window.showError('Please upload at least one PNG or JPG certificate image using the "Upload Certificates" area above.');
         return;
       }
 
-      const uploadedUrls=[...alreadyUploaded];
-      for(let i=0;i<certFiles.length;i++){
-        btn.innerHTML=`<span class="spinner"></span> Uploading image ${i+1}/${certFiles.length}...`;
+      const uploadedUrls=[];
+      const seenUrls={};
+      const verifyUploads=getVerificationState().currentVerifyCertUploads;
+      for(let i=0;i<certEntries.length;i++){
+        const entry=certEntries[i];
+        const key=entry.key||(window.getCertFileKey||getCertFileKey)(entry.file);
+        const stEl=entry.itemEl?entry.itemEl.querySelector('.cert-status'):null;
+
+        if(verifyUploads[key]){
+          if(stEl){stEl.textContent='✅ Ready';stEl.className='cert-status done';}
+          if(!seenUrls[verifyUploads[key]]){
+            uploadedUrls.push(verifyUploads[key]);
+            seenUrls[verifyUploads[key]]=true;
+          }
+          continue;
+        }
+
+        btn.innerHTML=`<span class="spinner"></span> Uploading image ${i+1}/${certEntries.length}...`;
         try{
-          const url=await window._uploadToCloudinary(certFiles[i],null,window._CL_CERTS);
-          uploadedUrls.push(url);
-          if(!window._uploadedCertUrls)window._uploadedCertUrls=[];
-          if(!window._uploadedCertUrls.includes(url))window._uploadedCertUrls.push(url);
+          if(stEl){stEl.textContent='⬆️ Uploading...';stEl.className='cert-status uploading';}
+          const url=await window._uploadToCloudinary(entry.file,null,window._CL_CERTS);
+          verifyUploads[key]=url;
+          if(!seenUrls[url]){
+            uploadedUrls.push(url);
+            seenUrls[url]=true;
+          }
+          if(stEl){stEl.textContent='✅ Ready';stEl.className='cert-status done';}
         }catch(e){console.error('Image upload failed:',e);}
       }
       if(uploadedUrls.length===0){btn.disabled=false;btn.innerHTML='🤖 Verify My Skills with AI';window.showError&&window.showError('Image upload failed. Check your connection.');return;}
@@ -992,16 +1055,6 @@ window.verifyWithAI=async function(){
     if(data.pdfError){
       renderResultBox({status:'error',score:0,reasoning:'PDF files cannot be analyzed by vision AI. Please export your certificate as a PNG or JPG image and re-upload.'});
       return;
-    }
-
-    if(data.usage){
-      const rem=document.getElementById('rateRemainingNote');
-      if(rem){
-        const{count,max}=data.usage;
-        const pct=Math.round((count/max)*100);
-        const color=pct>=90?'var(--warn)':pct>=70?'#f59e0b':'var(--muted)';
-        rem.innerHTML=`<span style="color:${color};">📊 ${count} of ${max} verifications used today</span>`;
-      }
     }
 
     window.aiConfidenceScore=data.confidenceScore||0;
@@ -1057,7 +1110,7 @@ function renderResultBox({status,score,reasoning,data}){
 
   const content=box.querySelector('.ai-result-content');
 
-  ['ownershipWarningBox','cloneWarningBox','breakdownBox','imageResultsBox','channelOwnershipBox','certLinkDetailsBox'].forEach(id=>{
+  ['ownershipWarningBox','cloneWarningBox','breakdownBox','imageResultsBox','certLinkDetailsBox'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.remove();
   });
 
@@ -1098,7 +1151,7 @@ function renderResultBox({status,score,reasoning,data}){
       <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 16px;color:var(--muted);">
         ${data.certSubject?`<span>📜 Subject</span><span style="color:var(--text);font-weight:500;">${data.certSubject}</span>`:''}
         ${data.issuer?`<span>🏛️ Issuer</span><span style="color:${data.issuerCredible?'var(--success)':'var(--warn)'};">${data.issuer} ${data.issuerCredible?'✓':'⚠️'}</span>`:''}
-        ${data.recipientName&&data.recipientName!=='not shown'?`<span>👤 Name on cert</span><span style="color:${data.nameMismatch?'#fca5a5':'var(--success)'};">${data.recipientName} ${data.nameMismatch?'❌ MISMATCH':'✓'}</span>`:''}
+        ${data.recipientName&&data.recipientName!=='not shown'&&data.recipientName!=='not checked'?`<span>👤 Name on cert</span><span style="color:${data.nameMismatch?'#fca5a5':'var(--success)'};">${data.recipientName} ${data.nameMismatch?'❌ MISMATCH':'✓'}</span>`:''}
         ${data.credentialId&&data.credentialId!=='not shown'?`<span>🔑 Credential ID</span><span style="color:var(--text);">${data.credentialId}</span>`:''}
         ${data.completionDate&&data.completionDate!=='not shown'?`<span>📅 Completed</span><span style="color:var(--text);">${data.completionDate}</span>`:''}
         ${data.skillMatch?`<span>🎯 Skill Match</span><span style="color:${data.skillMatch==='direct'?'var(--success)':data.skillMatch==='partial'?'var(--warn)':'#fca5a5'};">${data.skillMatch}</span>`:''}
@@ -1116,25 +1169,42 @@ function renderResultBox({status,score,reasoning,data}){
     `;
     content.appendChild(cl);
 
-    // Name mismatch warning
-    if(data.nameMismatch){
+    if(data.missingProfileName){
       tamperBox.style.display='block';
-      tamperBox.style.background='rgba(239,68,68,.12)';tamperBox.style.borderColor='rgba(239,68,68,.3)';
+      tamperBox.style.background='rgba(239,68,68,.12)';
+      tamperBox.style.borderColor='rgba(239,68,68,.3)';
+      tamperBox.innerHTML=`<strong>Name check failed.</strong> Add your first and last name to your profile before using certificate-link verification.`;
+    }else if(data.missingRecipientName){
+      tamperBox.style.display='block';
+      tamperBox.style.background='rgba(239,68,68,.12)';
+      tamperBox.style.borderColor='rgba(239,68,68,.3)';
+      tamperBox.innerHTML=`<strong>Name check failed.</strong> The certificate page does not show a recipient name, so ownership cannot be verified.`;
+    }else if(data.nameMismatch){
+      tamperBox.style.display='block';
+      tamperBox.style.background='rgba(239,68,68,.12)';
+      tamperBox.style.borderColor='rgba(239,68,68,.3)';
       const profName=(_profileFirstName+' '+_profileLastName).trim()||'your name';
-      tamperBox.innerHTML=`🚫 <strong>Name mismatch.</strong> Certificate is issued to "${data.recipientName||'unknown'}" but your profile name is "${profName}". This certificate does not belong to you.`;
+      tamperBox.innerHTML=`<strong>Name mismatch.</strong> Certificate is issued to "${data.recipientName||'unknown'}" but your profile name is "${profName}". This certificate does not belong to you.`;
+    }else if(data.completionDateFuture){
+      tamperBox.style.display='block';
+      tamperBox.style.background='rgba(239,68,68,.12)';
+      tamperBox.style.borderColor='rgba(239,68,68,.3)';
+      tamperBox.innerHTML=`Future completion date detected. The certificate shows "${data.completionDate}", so this result stays capped until that displayed date is no longer in the future.`;
     }
 
     // Limitation note
-    if(data.limitation){limitNote.style.display='block';limitNote.textContent=data.limitation;}
+    const certLimitText=(data.limitation||'').trim();
+    const suppressFutureLimit=!data.completionDateFuture&&/future completion|future date|date is in the future|future authenticity/i.test(certLimitText);
+    if(certLimitText&&!suppressFutureLimit){limitNote.style.display='block';limitNote.textContent=certLimitText;}
   }
 
   // ── GITHUB: SCORE BREAKDOWN ──
-  if(data.scoreBreakdown){
+  if(data.scoreBreakdown&&Object.keys(data.scoreBreakdown).length){
     const bd=document.createElement('div');bd.id='breakdownBox';
     bd.style.cssText='margin-top:14px;padding:14px 16px;background:rgba(0,0,0,.2);border-radius:10px;font-size:.78rem;line-height:2;';
-    bd.innerHTML='<div style="font-weight:700;font-size:.82rem;margin-bottom:6px;color:var(--accent);">📊 Score Breakdown (deterministic)</div>'+
+    bd.innerHTML='<div style="font-weight:700;font-size:.82rem;margin-bottom:6px;color:var(--accent);">📊 Score Breakdown</div>'+
       Object.entries(data.scoreBreakdown).map(([k,v])=>
-        `<div style="display:flex;justify-content:space-between;"><span style="color:var(--muted);text-transform:capitalize;">${k.replace(/([A-Z])/g,' $1').trim()}</span><span style="color:var(--text);">${v}</span></div>`
+        `<div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:var(--muted);text-transform:capitalize;">${k.replace(/([A-Z])/g,' $1').trim()}</span><span style="color:var(--text);text-align:right;">${v}</span></div>`
       ).join('');
     content.appendChild(bd);
   }
@@ -1173,20 +1243,6 @@ function renderResultBox({status,score,reasoning,data}){
       ir.appendChild(row);
     });
     content.appendChild(ir);
-  }
-
-  // ── YOUTUBE: LIMITATION + CHANNEL OWNERSHIP ──
-  if(data.limitation&&_currentVerifyType==='video'){limitNote.style.display='block';limitNote.textContent=data.limitation;}
-  if(data.channelOwnershipVerified===false){
-    const co=document.createElement('div');co.id='channelOwnershipBox';
-    co.style.cssText='margin-top:10px;padding:10px 14px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:10px;font-size:.78rem;color:#fef3c7;';
-    co.innerHTML='⚠️ <strong>Channel ownership not verified</strong> — use GitHub verification for stronger proof.';
-    content.appendChild(co);
-  }
-  if(data.videoTitle){
-    const vt=document.createElement('div');vt.style.cssText='font-size:.8rem;color:var(--muted);margin-top:6px;';
-    vt.textContent='📹 "'+data.videoTitle+'" by '+data.channelName;
-    content.appendChild(vt);
   }
 
   // ── PORTFOLIO: top-level tamper/name summary ──

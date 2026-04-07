@@ -5,18 +5,17 @@
  * 1. Certificate name check — AI cross-checks recipient name on cert
  *    against profile owner's firstName + lastName sent from frontend.
  *    "Google cert issued to John Smith" submitted by "Raiyan Chougle" = FAIL.
- * 2. Rate limit removed — replaced with soft usage counter only.
- *    No more blocking. Returns usage { count, max } for frontend display.
+ * 2. Verification requests are not rate limited by this server.
  * 3. All previous fixes retained.
  */
 
-require('dotenv').config();
+const path    = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env'), override: true });
 const express = require('express');
 const cors    = require('cors');
 const axios   = require('axios');
 const crypto  = require('crypto');
 const fs      = require('fs');
-const path    = require('path');
 const admin   = require('firebase-admin');
 const { google } = require('googleapis');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -45,27 +44,6 @@ app.use(cors({
 app.use(express.json({ limit: '2mb' }));
 
 // ─────────────────────────────────────────────────────────────
-// SOFT USAGE COUNTER — never blocks, just tracks & informs
-// ─────────────────────────────────────────────────────────────
-const usageStore = new Map();
-const USAGE_WINDOW = 24 * 60 * 60 * 1000; // 24 hours
-const USAGE_MAX    = 20; // shown in UI as "X of 20 used today"
-
-function trackUsage(ip) {
-    const now   = Date.now();
-    const entry = usageStore.get(ip);
-    if (!entry || now > entry.resetAt) {
-        usageStore.set(ip, { count: 1, resetAt: now + USAGE_WINDOW });
-        return { count: 1, max: USAGE_MAX, remaining: USAGE_MAX - 1 };
-    }
-    entry.count++;
-    return { count: entry.count, max: USAGE_MAX, remaining: Math.max(0, USAGE_MAX - entry.count) };
-}
-setInterval(() => {
-    const now = Date.now();
-    for (const [ip, e] of usageStore) if (now > e.resetAt) usageStore.delete(ip);
-}, USAGE_WINDOW);
-
 // ─────────────────────────────────────────────────────────────
 // INPUT VALIDATION
 // ─────────────────────────────────────────────────────────────
@@ -95,8 +73,15 @@ const OWNERSHIP_CODE = 'SkillSwap2026';
 const UNVERIFIED_CAP = 40;
 const TIMEOUT_MS     = 35000;
 
+const PRIMARY_GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const GEMINI_FALLBACK_MODELS = String(process.env.GEMINI_FALLBACK_MODELS || '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean)
+    .filter((value, index, arr) => arr.indexOf(value) === index && value !== PRIMARY_GEMINI_MODEL);
+
 const MODEL_CONFIG = {
-    model: 'gemini-2.5-flash',
+    model: PRIMARY_GEMINI_MODEL,
     generationConfig: { responseMimeType: 'application/json', temperature: 0, topP: 1, topK: 1 }
 };
 
@@ -104,6 +89,90 @@ const LEVEL_CONTEXT = {
     beginner:     'BEGINNER — low bar. Basic syntax, 1-2 small projects sufficient.',
     intermediate: 'INTERMEDIATE — medium bar. Real working projects required.',
     expert:       'EXPERT — HIGH bar. Production quality, multiple substantial projects, depth required.'
+};
+
+const CERTIFICATE_METHOD_MAX_SCORE = 80;
+
+const CERTIFICATE_LEVEL_PATTERNS = {
+    beginner: [
+        /\bbeginner\b/i,
+        /\bfundamentals?\b/i,
+        /\bfoundations?\b/i,
+        /\bintroduction\b/i,
+        /\bintro\b/i,
+        /\bessentials?\b/i,
+        /\bbasics?\b/i,
+        /\bfor beginners?\b/i
+    ],
+    intermediate: [
+        /\bintermediate\b/i,
+        /\bpractical\b/i,
+        /\bapplied\b/i,
+        /\bassociate\b/i,
+        /\bhands[\s-]?on\b/i
+    ],
+    advanced: [
+        /\bexpert\b/i,
+        /\badvanced\b/i,
+        /\bprofessional certificate\b/i,
+        /\bspeciali[sz]ation\b/i,
+        /\bmaster(?:s)?\b/i,
+        /\bpostgraduate\b/i,
+        /\bsenior\b/i,
+        /\bcapstone\b/i
+    ]
+};
+
+const CERTIFICATE_GENERIC_TEXT_PATTERNS = [
+    /\bwhat you will learn\b/i,
+    /\bskills? you will gain\b/i,
+    /^skills?$/i,
+    /^courses?$/i,
+    /^courses?\s+speciali[sz]ations?$/i,
+    /^professional certificates?$/i,
+    /\bcareer resources\b/i,
+    /^coursera$/i,
+    /^community$/i,
+    /^more$/i,
+    /\bbrowse\b/i,
+    /\bcatalog\b/i,
+    /\blog in\b/i,
+    /\bsign in\b/i,
+    /\bcreate account\b/i
+];
+
+const CERT_SKILL_SYNONYMS = {
+    html: ['html', 'html5'],
+    css: ['css', 'css3', 'cascading style sheets'],
+    javascript: ['javascript', 'js', 'ecmascript'],
+    typescript: ['typescript'],
+    python: ['python'],
+    java: ['java'],
+    'c++': ['c++', 'cpp'],
+    'c#': ['c#', 'c sharp', 'csharp'],
+    sql: ['sql', 'structured query language'],
+    react: ['react', 'reactjs', 'react.js'],
+    'node.js': ['node.js', 'nodejs'],
+    nodejs: ['node.js', 'nodejs'],
+    webdev: ['webdev', 'web development'],
+    'web development': ['web development', 'webdev']
+};
+
+const GITHUB_SKILL_SYNONYMS = {
+    html: ['html', 'html5'],
+    css: ['css', 'css3', 'scss', 'sass', 'tailwind', 'bootstrap'],
+    javascript: ['javascript', 'js', 'ecmascript', 'node.js', 'nodejs', 'react', 'vue', 'angular', 'next.js', 'nextjs'],
+    typescript: ['typescript', 'ts', 'tsx'],
+    python: ['python', 'django', 'flask', 'fastapi', 'jupyter', 'pandas'],
+    java: ['java', 'spring', 'spring boot', 'android'],
+    'c++': ['c++', 'cpp'],
+    'c#': ['c#', 'c sharp', 'csharp', '.net', 'asp.net'],
+    sql: ['sql', 'postgres', 'postgresql', 'mysql', 'sqlite'],
+    react: ['react', 'reactjs', 'react.js', 'jsx', 'tsx'],
+    'node.js': ['node.js', 'nodejs', 'express', 'nest', 'nest.js'],
+    nodejs: ['node.js', 'nodejs', 'express', 'nest', 'nest.js'],
+    webdev: ['webdev', 'web development', 'frontend', 'front end', 'backend', 'back end', 'full stack', 'fullstack', 'html', 'css', 'javascript', 'react', 'node.js', 'nodejs'],
+    'web development': ['web development', 'webdev', 'frontend', 'front end', 'backend', 'back end', 'full stack', 'fullstack', 'html', 'css', 'javascript', 'react', 'node.js', 'nodejs']
 };
 
 const KNOWN_ISSUERS = [
@@ -2915,97 +2984,126 @@ function withTimeout(p, ms, label) {
     ]);
 }
 
-async function callGemini(model, prompt, imageParts) {
-    const call = () => imageParts?.length
-        ? model.generateContent([prompt, ...imageParts])
-        : model.generateContent(prompt);
+function parseGeminiJsonResponse(text) {
+    const cleaned = String(text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
     try {
-        const r    = await withTimeout(call(), TIMEOUT_MS, 'Gemini');
-        const text = r.response.text().replace(/```json/gi, '').replace(/```/g, '').trim();
-        return JSON.parse(text);
-    } catch (e) {
-        if (e instanceof SyntaxError) {
-            const strict = prompt + '\n\nCRITICAL: Valid JSON only. No markdown. Start { end }.';
-            const r2 = await withTimeout(
-                imageParts?.length ? model.generateContent([strict, ...imageParts]) : model.generateContent(strict),
-                TIMEOUT_MS, 'Gemini retry'
-            );
-            return JSON.parse(r2.response.text().replace(/```json/gi,'').replace(/```/g,'').trim());
+        return JSON.parse(cleaned);
+    } catch (error) {
+        const start = cleaned.indexOf('{');
+        const end = cleaned.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            return JSON.parse(cleaned.slice(start, end + 1));
         }
-        throw e;
+        throw error;
     }
 }
 
+function isGeminiQuotaError(error) {
+    const message = String(error?.message || '').toLowerCase();
+    return error?.status === 429
+        || error?.response?.status === 429
+        || message.includes('too many requests')
+        || message.includes('quota')
+        || message.includes('resource exhausted');
+}
+
+function buildGeminiQuotaMessage(error) {
+    const configuredModels = [PRIMARY_GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS].filter(Boolean).join(', ');
+    return `Gemini API quota exhausted on Google's side for the configured verification models (${configuredModels || 'none configured'}). There is no SkillSwap-side verification limiter active. Check the Google AI Studio project tied to this key, billing, or wait for the provider quota window to reset.`;
+}
+
+function getGeminiFallbackClients() {
+    return GEMINI_FALLBACK_MODELS.map(modelName => ({
+        name: modelName,
+        client: genAI.getGenerativeModel({ ...MODEL_CONFIG, model: modelName })
+    }));
+}
+
+async function executeGeminiCall(model, prompt, imageParts, label) {
+    const response = await withTimeout(
+        imageParts?.length ? model.generateContent([prompt, ...imageParts]) : model.generateContent(prompt),
+        TIMEOUT_MS,
+        label
+    );
+    return parseGeminiJsonResponse(response.response.text());
+}
+
+async function callGemini(model, prompt, imageParts) {
+    const candidates = [
+        { name: PRIMARY_GEMINI_MODEL, client: model },
+        ...getGeminiFallbackClients()
+    ];
+    let lastQuotaError = null;
+
+    for (const candidate of candidates) {
+        try {
+            return await executeGeminiCall(candidate.client, prompt, imageParts, `Gemini ${candidate.name}`);
+        } catch (e) {
+            if (e instanceof SyntaxError) {
+                const strict = prompt + '\n\nCRITICAL: Valid JSON only. No markdown. Start { end }.';
+                try {
+                    return await executeGeminiCall(candidate.client, strict, imageParts, `Gemini strict ${candidate.name}`);
+                } catch (strictError) {
+                    if (isGeminiQuotaError(strictError)) {
+                        lastQuotaError = strictError;
+                        continue;
+                    }
+                    throw strictError;
+                }
+            }
+            if (isGeminiQuotaError(e)) {
+                lastQuotaError = e;
+                continue;
+            }
+            throw e;
+        }
+    }
+
+    if (lastQuotaError) {
+        lastQuotaError.message = buildGeminiQuotaMessage(lastQuotaError);
+        throw lastQuotaError;
+    }
+    throw new Error('Gemini request failed.');
+}
+
 // ─────────────────────────────────────────────────────────────
-// DETERMINISTIC GITHUB SCORE
+// GITHUB SCORE
 // ─────────────────────────────────────────────────────────────
 function calcGitHubScore(profile, repos, langNames, skillLevels, ai) {
-    let score = 0;
-    const bd  = {};
+    const bd = {};
+    const claimedEntries = Object.entries(skillLevels || {});
+    const originalRepos = repos.filter(r => !r.isFork && r.size > 0);
+    const activeOriginal = originalRepos.filter(r => r.size > 10);
+    const recentOriginal = activeOriginal.filter(r => (Date.now() - new Date(r.updatedAt)) / (1000 * 60 * 60 * 24 * 30) <= 12);
+    const skillEvaluations = claimedEntries.map(([skill, level]) =>
+        evaluateGitHubSkillEvidence(skill, level, repos, langNames)
+    );
 
-    const ageMonths = (Date.now() - new Date(profile.created_at)) / (1000*60*60*24*30);
-    const ageScore  = Math.min(15, Math.floor(ageMonths / 4));
-    score += ageScore;
-    bd.accountAge = `${ageScore}/15 (${Math.floor(ageMonths)}mo)`;
+    const avgSkillEvidence = skillEvaluations.length
+        ? Math.round(skillEvaluations.reduce((sum, item) => sum + item.score, 0) / skillEvaluations.length)
+        : 0;
 
-    const orig      = repos.filter(r => !r.isFork && r.size > 0);
-    const forks     = repos.filter(r => r.isFork);
-    const forkRatio = repos.length ? forks.length / repos.length : 0;
-    let rScore = Math.min(20, orig.length * 2);
-    if (forkRatio > 0.7) rScore = Math.max(0, rScore - 10);
-    else if (forkRatio > 0.5) rScore = Math.max(0, rScore - 5);
-    score += rScore;
-    bd.originalRepos = `${rScore}/20 (${orig.length} original, ${forks.length} forks)`;
+    const ageMonths = (Date.now() - new Date(profile.created_at)) / (1000 * 60 * 60 * 24 * 30);
+    const accountAge = Math.min(8, Math.floor(ageMonths / 6));
+    const projectActivity = Math.min(10, (Math.min(activeOriginal.length, 4) * 2) + Math.min(recentOriginal.length, 2));
+    const qualityRating = Math.max(1, Math.min(10, Number(ai?.qualityRating) || 5));
+    const aiQuality = Math.min(12, Math.round((qualityRating / 10) * 12));
 
-    const fresh = orig.filter(r => (Date.now()-new Date(r.createdAt))/(1000*60*60*24) < 7);
-    if (fresh.length) {
-        const fp = Math.min(15, fresh.length * 5);
-        score -= fp;
-        bd.freshRepoPenalty = `-${fp} (${fresh.length} repos < 7 days old)`;
-    }
+    const score = Math.max(
+        0,
+        Math.min(100, Math.round((avgSkillEvidence * 0.86) + (accountAge * 0.5) + (projectActivity * 0.6) + (aiQuality * 0.7)))
+    );
 
-    const active = orig.filter(r => r.size > 10);
-    const recent = active.filter(r => (Date.now()-new Date(r.updatedAt))/(1000*60*60*24*30) <= 12);
-    const act = Math.min(20, active.length*2 + recent.length);
-    score += act;
-    bd.activity = `${act}/20 (${active.length} active, ${recent.length} recent)`;
+    bd.claimedSkillEvidence = `${avgSkillEvidence}/100 avg across claimed skills`;
+    bd.claimedSkillOutcomes = skillEvaluations.length
+        ? skillEvaluations.map(item => `${item.skill} ${item.score}/100 (${item.status}, ${item.level})`).join(' | ')
+        : 'No claimed skills';
+    bd.accountAge = `${accountAge}/8 (${Math.floor(ageMonths)}mo)`;
+    bd.projectActivity = `${projectActivity}/10 (${activeOriginal.length} active original, ${recentOriginal.length} recent original)`;
+    bd.aiQuality = `${aiQuality}/12 (rating: ${qualityRating}/10)`;
+    bd.levelCalibration = 'Included inside each claimed skill score';
 
-    const ALIASES = {
-        javascript: ['js','typescript','jsx','tsx','react','vue','node','angular','next'],
-        python:     ['jupyter notebook','jupyter','django','flask','fastapi'],
-        css:        ['ui/ux','sass','scss','less'],
-        'c++':      ['cpp'],
-        java:       ['kotlin','android'],
-        php:        ['laravel','wordpress'],
-    };
-    const claimed  = Object.keys(skillLevels).map(s => s.toLowerCase());
-    const ll       = langNames.map(l => l.toLowerCase());
-    let langScore  = 0;
-    claimed.forEach(skill => {
-        if (ll.some(l => l.includes(skill) || skill.includes(l))) {
-            langScore += Math.ceil(25 / Math.max(claimed.length, 1)); return;
-        }
-        for (const [base, aliases] of Object.entries(ALIASES)) {
-            if (aliases.includes(skill) && ll.some(l => l.includes(base) || aliases.some(a => l.includes(a)))) {
-                langScore += Math.ceil(25 / Math.max(claimed.length, 1)); return;
-            }
-        }
-    });
-    langScore = Math.min(25, langScore);
-    score += langScore;
-    bd.languageMatch = `${langScore}/25 (${langNames.slice(0,5).join(', ')||'none'})`;
-
-    const aiScore = Math.min(20, Math.round((ai.qualityRating / 10) * 20));
-    score += aiScore;
-    bd.aiQuality = `${aiScore}/20 (rating: ${ai.qualityRating}/10)`;
-
-    if (Object.values(skillLevels).some(l => l==='expert') && orig.length < 5) {
-        score -= 15; bd.levelPenalty = '-15 (expert, <5 repos)';
-    } else if (Object.values(skillLevels).some(l => l==='intermediate') && orig.length < 2) {
-        score -= 8; bd.levelPenalty = '-8 (intermediate, <2 repos)';
-    }
-
-    return { score: Math.max(0, Math.min(100, score)), breakdown: bd };
+    return { score, breakdown: bd, skillEvaluations };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -3060,7 +3158,7 @@ const detectClones = async (u, repos) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// IMAGE / YOUTUBE HELPERS
+// IMAGE HELPERS
 // ─────────────────────────────────────────────────────────────
 const fetchB64 = async url => {
     try {
@@ -3071,22 +3169,85 @@ const fetchB64 = async url => {
     } catch (_) { return null; }
 };
 
-const extractYTId = url => {
-    for (const p of [/youtu\.be\/([^?&\s#]+)/,/youtube\.com\/watch\?v=([^&\s#]+)/,/youtube\.com\/shorts\/([^?&\s#]+)/,/youtube\.com\/embed\/([^?&\s#]+)/]) {
-        const m = url?.match(p); if (m) return m[1];
-    }
-    return null;
-};
-
-const getYTMeta = async id => {
-    try {
-        const r = await axios.get(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`, { timeout: 8000 });
-        return { ...r.data, found: true };
-    } catch (e) { return { found: false }; }
-};
-
 function normalizeWhitespace(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function escapeRegex(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function uniqueStrings(values) {
+    const out = [];
+    const seen = new Set();
+    for (const value of values || []) {
+        const clean = normalizeWhitespace(value);
+        const key = clean.toLowerCase();
+        if (!clean || seen.has(key)) continue;
+        seen.add(key);
+        out.push(clean);
+    }
+    return out;
+}
+
+function normalizeSkillKey(value) {
+    return normalizeWhitespace(String(value || '').toLowerCase().replace(/[_/]+/g, ' ').replace(/\s+/g, ' '));
+}
+
+function getSkillTerms(skill, mode = 'github') {
+    const key = normalizeSkillKey(skill);
+    const map = mode === 'cert' ? CERT_SKILL_SYNONYMS : GITHUB_SKILL_SYNONYMS;
+    return uniqueStrings([key, ...(map[key] || [])].map(normalizeSkillKey));
+}
+
+function textContainsSkillTerm(text, term) {
+    const source = normalizeSkillKey(text);
+    const target = normalizeSkillKey(term);
+    if (!source || !target) return false;
+    const pattern = new RegExp(`(^|[^a-z0-9+#])${escapeRegex(target)}($|[^a-z0-9+#])`, 'i');
+    return pattern.test(source);
+}
+
+function textContainsAnySkillTerm(text, terms) {
+    return (terms || []).some(term => textContainsSkillTerm(text, term));
+}
+
+function extractHeadingTexts(html) {
+    return Array.from(String(html || '').matchAll(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/gi))
+        .map(match => stripHtmlToText(match[1]))
+        .filter(Boolean)
+        .slice(0, 12);
+}
+
+function parseDateValue(value) {
+    const normalized = normalizeWhitespace(String(value || '').replace(/(\d{1,2})(st|nd|rd|th)\b/gi, '$1'));
+    if (!normalized || normalized === 'not shown') return null;
+    const ts = Date.parse(normalized);
+    if (Number.isNaN(ts)) return null;
+    return new Date(ts);
+}
+
+function formatDateIso(value) {
+    const date = value instanceof Date ? value : parseDateValue(value);
+    return date ? date.toISOString().slice(0, 10) : null;
+}
+
+function isFutureCalendarDate(value) {
+    const date = value instanceof Date ? value : parseDateValue(value);
+    if (!date) return false;
+    const compare = new Date(date.getTime());
+    compare.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return compare.getTime() > today.getTime();
+}
+
+function joinList(values) {
+    const items = uniqueStrings(values);
+    if (!items.length) return '';
+    if (items.length === 1) return items[0];
+    if (items.length === 2) return `${items[0]} and ${items[1]}`;
+    return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
 }
 
 function decodeHtmlEntities(value) {
@@ -3135,6 +3296,11 @@ function normalizePersonName(value) {
     return normalizeWhitespace(String(value || '').toLowerCase().replace(/[^a-z\s]/g, ' '));
 }
 
+function isRecipientNameMissing(value) {
+    const normalized = normalizeWhitespace(String(value || '')).toLowerCase();
+    return !normalized || ['not shown', 'not visible', 'unknown', 'recipient not shown', 'name not visible'].includes(normalized);
+}
+
 function namesLikelyMatch(profileName, recipientName) {
     const left = normalizePersonName(profileName);
     const right = normalizePersonName(recipientName);
@@ -3149,6 +3315,53 @@ function namesLikelyMatch(profileName, recipientName) {
     return rightTokens.includes(leftFirst) && rightTokens.includes(leftLast);
 }
 
+function evaluateCertificateNameCheck(profileName, recipientName) {
+    const normalizedProfileName = normalizeWhitespace(profileName);
+    const normalizedRecipientName = normalizeWhitespace(recipientName);
+
+    if (!normalizedProfileName) {
+        return {
+            passed: false,
+            nameMismatch: false,
+            missingProfileName: true,
+            missingRecipientName: false,
+            recipientName: normalizedRecipientName || 'not shown',
+            reason: 'Your profile first and last name are required for certificate ownership verification.'
+        };
+    }
+
+    if (isRecipientNameMissing(normalizedRecipientName)) {
+        return {
+            passed: false,
+            nameMismatch: false,
+            missingProfileName: false,
+            missingRecipientName: true,
+            recipientName: 'not shown',
+            reason: 'The certificate page does not show a recipient name, so ownership cannot be verified.'
+        };
+    }
+
+    if (!namesLikelyMatch(normalizedProfileName, normalizedRecipientName)) {
+        return {
+            passed: false,
+            nameMismatch: true,
+            missingProfileName: false,
+            missingRecipientName: false,
+            recipientName: normalizedRecipientName,
+            reason: `The certificate recipient ${normalizedRecipientName} does not match the profile owner.`
+        };
+    }
+
+    return {
+        passed: true,
+        nameMismatch: false,
+        missingProfileName: false,
+        missingRecipientName: false,
+        recipientName: normalizedRecipientName,
+        reason: 'Certificate recipient matches the profile owner.'
+    };
+}
+
 function parseClaimedSkills(skills, skillLevels) {
     const fromLevels = Object.keys(skillLevels || {}).map(s => normalizeWhitespace(s)).filter(Boolean);
     if (fromLevels.length) return fromLevels;
@@ -3158,25 +3371,338 @@ function parseClaimedSkills(skills, skillLevels) {
         .filter(Boolean);
 }
 
-function inferSkillMatch(haystack, claimedSkills) {
-    const source = String(haystack || '').toLowerCase();
-    if (!claimedSkills.length) return 'partial';
-    const exactMatch = claimedSkills.some(skill => source.includes(skill.toLowerCase()));
-    if (exactMatch) return 'direct';
-    const tokenMatch = claimedSkills.some(skill =>
-        skill.toLowerCase().split(/\s+/).some(token => token.length > 2 && source.includes(token))
-    );
-    return tokenMatch ? 'partial' : 'none';
+function inferSkillMatchFromVerdicts(verdicts) {
+    if (verdicts?.verifiedSkills?.length) return 'direct';
+    if (verdicts?.partialSkills?.length) return 'partial';
+    return 'none';
 }
 
-function toSkillVerdicts(skillMatch, claimedSkills) {
-    if (skillMatch === 'direct') {
-        return { verifiedSkills: claimedSkills, partialSkills: [], unverifiedSkills: [] };
+function evaluateClaimedCertificateSkills(claimedSkills, sources, options = {}) {
+    const primaryTexts = uniqueStrings(sources?.primaryTexts || []);
+    const secondaryTexts = uniqueStrings(sources?.secondaryTexts || []);
+    const urlTermsOnly = !!options.urlTermsOnly;
+
+    const verifiedSkills = [];
+    const partialSkills = [];
+    const unverifiedSkills = [];
+    const matchedSignals = [];
+
+    for (const skill of claimedSkills || []) {
+        const terms = getSkillTerms(skill, 'cert');
+        const primaryMatch = primaryTexts.some(text => textContainsAnySkillTerm(text, terms));
+        const secondaryMatch = secondaryTexts.some(text => textContainsAnySkillTerm(text, terms));
+        if (primaryMatch && !urlTermsOnly) {
+            verifiedSkills.push(skill);
+            matchedSignals.push(`${skill}: exact title or heading match`);
+        } else if (primaryMatch || secondaryMatch) {
+            partialSkills.push(skill);
+            matchedSignals.push(`${skill}: exact term found outside the main title`);
+        } else {
+            unverifiedSkills.push(skill);
+        }
     }
-    if (skillMatch === 'partial') {
-        return { verifiedSkills: [], partialSkills: claimedSkills, unverifiedSkills: [] };
+
+    return {
+        verifiedSkills,
+        partialSkills,
+        unverifiedSkills,
+        matchedSignals,
+        skillMatch: inferSkillMatchFromVerdicts({ verifiedSkills, partialSkills, unverifiedSkills })
+    };
+}
+
+function buildCertificateReasoning({
+    platformName,
+    pageAccessible,
+    recipientName,
+    nameMismatch,
+    nameCheckPassed = true,
+    nameCheckReason = '',
+    skipRecipientLine = false,
+    completionDate,
+    completionDateFuture,
+    verifiedSkills,
+    partialSkills,
+    unverifiedSkills
+}) {
+    const authenticityLine = pageAccessible
+        ? `The public certificate page loaded from ${platformName} and the authenticity score used visible issuer, URL, and page details.`
+        : `The certificate page could not be fully loaded, so this score relies on trusted URL and platform signals instead of the full page contents.`;
+    const identityLine = !nameCheckPassed && nameCheckReason
+        ? nameCheckReason
+        : nameMismatch
+            ? 'The recipient name on the certificate does not match the profile owner, so the certificate cannot be accepted as yours.'
+            : recipientName && recipientName !== 'not shown'
+            ? `The certificate recipient is shown as ${recipientName}.`
+            : 'The certificate recipient name was not clearly visible on the public page.';
+    let dateLine = 'No reliable completion date could be validated from the public certificate data.';
+    if (completionDate && completionDate !== 'not shown') {
+        dateLine = completionDateFuture
+            ? `The displayed completion date ${completionDate} is later than today, so that date is treated as a red flag.`
+            : `The displayed completion date ${completionDate} is consistent with a completed certificate.`;
     }
-    return { verifiedSkills: [], partialSkills: [], unverifiedSkills: claimedSkills };
+    const skillLine = verifiedSkills.length
+        ? `Exact claimed-skill matches were found for ${joinList(verifiedSkills)}.`
+        : partialSkills.length
+            ? `Only limited exact claimed-skill matches were found for ${joinList(partialSkills)}.`
+            : 'This certificate does not directly name any of the claimed skills.';
+    const gapLine = unverifiedSkills.length
+        ? `${joinList(unverifiedSkills)} still needs separate evidence.`
+        : 'Only the claimed skills were evaluated in this summary.';
+
+    const lines = [authenticityLine];
+    if (!skipRecipientLine) lines.push(identityLine);
+    if (nameCheckPassed && !nameMismatch) lines.push(dateLine);
+    lines.push(skillLine);
+    if (gapLine && nameCheckPassed && !nameMismatch) lines.push(gapLine);
+    return lines.filter(Boolean).join(' ');
+}
+
+function filterCertificateAiSuspiciousSignals(signals, options = {}) {
+    const completionDateFuture = !!options.completionDateFuture;
+    return (signals || [])
+        .map(signal => normalizeWhitespace(signal))
+        .filter(Boolean)
+        .filter(signal => {
+            if (!completionDateFuture && /(completion date|copyright year|is in the future|future)/i.test(signal)) {
+                return false;
+            }
+            return true;
+        });
+}
+
+function detectCertificateLevelStrength(text) {
+    const source = normalizeWhitespace(text);
+    if (!source) return 'general';
+
+    const hasHit = group => (CERTIFICATE_LEVEL_PATTERNS[group] || []).some(pattern => pattern.test(source));
+    if (hasHit('beginner')) return 'beginner';
+    if (hasHit('intermediate')) return 'intermediate';
+    if (hasHit('advanced')) return 'advanced';
+    return 'general';
+}
+
+function isCertificateSpecificText(text, options = {}) {
+    const source = normalizeWhitespace(text);
+    if (!source) return false;
+    if (options.allowGeneric) return true;
+    return !CERTIFICATE_GENERIC_TEXT_PATTERNS.some(pattern => pattern.test(source));
+}
+
+function resolveCertificateLevelStrength(evidence = {}) {
+    const primaryTexts = uniqueStrings([
+        evidence.certificateSubject,
+        evidence.title
+    ].filter(Boolean));
+    const headingTexts = uniqueStrings((evidence.headingTexts || []).filter(text => isCertificateSpecificText(text)));
+    const secondaryTexts = uniqueStrings([
+        evidence.metaDescription
+    ].filter(text => isCertificateSpecificText(text, { allowGeneric: true })));
+    const fallbackTexts = uniqueStrings([evidence.fallbackText].filter(Boolean));
+
+    const orderedGroups = [
+        { texts: primaryTexts, source: 'primary' },
+        { texts: headingTexts, source: 'heading' },
+        { texts: secondaryTexts, source: 'meta' },
+        { texts: fallbackTexts, source: 'fallback' }
+    ];
+
+    for (const group of orderedGroups) {
+        const joined = group.texts.join(' ');
+        const strength = detectCertificateLevelStrength(joined);
+        if (strength !== 'general') {
+            return { strength, source: group.source, headingTexts };
+        }
+    }
+
+    return { strength: 'general', source: 'none', headingTexts };
+}
+
+function getLevelEvidenceWeight(level, strength, matchType, allowExpertPartial = false) {
+    const levelKey = String(level || '').toLowerCase();
+    if (matchType === 'none') return 0;
+
+    const table = {
+        beginner: {
+            direct: { beginner: 31, general: 27, intermediate: 20, advanced: 15 },
+            partial: { beginner: 14, general: 10, intermediate: 7, advanced: 4 }
+        },
+        intermediate: {
+            direct: { beginner: 13, general: 19, intermediate: 25, advanced: 22 },
+            partial: { beginner: 4, general: 8, intermediate: 12, advanced: 8 }
+        },
+        expert: {
+            direct: { beginner: 0, general: 7, intermediate: 15, advanced: 28 },
+            partial: { beginner: 0, general: allowExpertPartial ? 2 : 0, intermediate: allowExpertPartial ? 5 : 1, advanced: allowExpertPartial ? 10 : 5 }
+        }
+    };
+
+    const levelTable = table[levelKey] || table.intermediate;
+    return levelTable[matchType]?.[strength] ?? 0;
+}
+
+function computeCertLinkSkillScore(skillLevels, certSkillVerdicts, certificateEvidence) {
+    const { strength } = resolveCertificateLevelStrength(certificateEvidence);
+    const scores = [];
+    for (const [skill, level] of Object.entries(skillLevels || {})) {
+        const matchType = certSkillVerdicts.verifiedSkills.includes(skill)
+            ? 'direct'
+            : certSkillVerdicts.partialSkills.includes(skill)
+                ? 'partial'
+                : 'none';
+        scores.push(getLevelEvidenceWeight(level, strength, matchType, false));
+    }
+    if (!scores.length) return 0;
+    return Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length);
+}
+
+function applyImageCertificateLevelCalibration(result, skillLevels) {
+    const levelEvidence = resolveCertificateLevelStrength({
+        certificateSubject: result.certificateSubject || '',
+        title: result.certificateSubject || ''
+    });
+    const strength = levelEvidence.strength;
+    const entries = Object.entries(skillLevels || {});
+    if (!entries.length) return result;
+
+    let bestMatchType = result.skillMatch === 'direct' ? 'direct' : result.skillMatch === 'partial' ? 'partial' : 'none';
+    let maxWeight = 0;
+    for (const [, level] of entries) {
+        maxWeight = Math.max(maxWeight, getLevelEvidenceWeight(level, strength, bestMatchType, true));
+    }
+
+    let offset = 0;
+    if (bestMatchType === 'direct') {
+        if (maxWeight >= 22) offset += 8;
+        else if (maxWeight >= 16) offset += 2;
+        else if (maxWeight >= 10) offset -= 6;
+        else offset -= 14;
+    } else if (bestMatchType === 'partial') {
+        if (maxWeight >= 10) offset += 0;
+        else if (maxWeight >= 6) offset -= 8;
+        else offset -= 15;
+    }
+
+    if (result.levelMatch === false) offset -= 8;
+    if (result.levelMatch === true && maxWeight >= 20) offset += 4;
+
+    result.confidenceScore = Math.max(0, Math.min(CERTIFICATE_METHOD_MAX_SCORE, Math.round((Number(result.confidenceScore) || 0) + offset)));
+    result.levelCalibration = `Level-aware certificate weighting applied (${strength} evidence).`;
+    result.isVerified = result.confidenceScore >= 50 && !result.nameMismatch && !result.tamperDetected && !result.aiGeneratedSuspicion && result.skillMatch !== 'none';
+    return result;
+}
+
+function sanitizeCertificateLimitationText(value, options = {}) {
+    const text = normalizeWhitespace(value);
+    if (!text) return '';
+    if (!options.completionDateFuture && /(future completion|future date|date is in the future|future authenticity)/i.test(text)) {
+        return 'This evaluation is based on the provided public certificate page and direct claimed-skill matching.';
+    }
+    return text;
+}
+
+function evaluateGitHubSkillEvidence(skillName, level, repos, langNames) {
+    const terms = getSkillTerms(skillName, 'github');
+    const levelKey = String(level || '').toLowerCase();
+    const originalRepos = repos.filter(repo => !repo.isFork && repo.size > 0);
+    const relevantRepos = originalRepos.map(repo => {
+        const nameHit = textContainsAnySkillTerm(repo.name, terms);
+        const descHit = textContainsAnySkillTerm(repo.desc, terms);
+        const topicHit = textContainsAnySkillTerm((repo.topics || []).join(' '), terms);
+        const langHit = textContainsAnySkillTerm(repo.language, terms);
+        if (!nameHit && !descHit && !topicHit && !langHit) return null;
+
+        const recent = (Date.now() - new Date(repo.updatedAt)) / (1000 * 60 * 60 * 24 * 30) <= 18;
+        const substantial = Number(repo.size || 0) > 40;
+        return {
+            name: repo.name,
+            nameHit,
+            descHit,
+            topicHit,
+            langHit,
+            recent,
+            substantial,
+            stars: Number(repo.stars || 0)
+        };
+    }).filter(Boolean);
+
+    const relevantCount = relevantRepos.length;
+    const strongCount = relevantRepos.filter(repo => repo.langHit || repo.nameHit || repo.topicHit).length;
+    const namedCount = relevantRepos.filter(repo => repo.nameHit).length;
+    const descriptiveCount = relevantRepos.filter(repo => repo.descHit || repo.topicHit).length;
+    const activeCount = relevantRepos.filter(repo => repo.recent || repo.substantial).length;
+    const overallLangHit = (langNames || []).some(language => textContainsAnySkillTerm(language, terms));
+
+    let baseScore = 0;
+    baseScore += Math.min(30, relevantCount * 12);
+    baseScore += Math.min(20, strongCount * 8);
+    baseScore += namedCount ? Math.min(15, 8 + ((namedCount - 1) * 3)) : 0;
+    baseScore += descriptiveCount ? Math.min(15, 5 + ((descriptiveCount - 1) * 5)) : 0;
+    baseScore += overallLangHit ? 10 : 0;
+    baseScore += Math.min(10, activeCount * 4);
+
+    let levelOffset = 0;
+    if (levelKey === 'beginner') {
+        levelOffset += 10;
+        if (relevantCount > 0) levelOffset += 4;
+    } else if (levelKey === 'expert') {
+        levelOffset -= 14;
+        if (strongCount < 2) levelOffset -= 10;
+        if (activeCount < 2) levelOffset -= 8;
+        if (namedCount < 1) levelOffset -= 6;
+    } else {
+        if (strongCount < 1) levelOffset -= 6;
+        if (activeCount < 1) levelOffset -= 4;
+    }
+
+    const score = Math.max(0, Math.min(100, Math.round(baseScore + levelOffset)));
+
+    const thresholds = {
+        beginner: { verified: 32, partial: 20 },
+        intermediate: { verified: 48, partial: 32 },
+        expert: { verified: 62, partial: 44 }
+    }[levelKey] || { verified: 48, partial: 32 };
+
+    const status = score >= thresholds.verified
+        ? 'verified'
+        : score >= thresholds.partial
+            ? 'partial'
+            : 'unverified';
+
+    const supportingRepos = relevantRepos
+        .sort((left, right) => {
+            const leftStrength = Number(left.langHit) + Number(left.nameHit) + Number(left.topicHit) + Number(left.descHit);
+            const rightStrength = Number(right.langHit) + Number(right.nameHit) + Number(right.topicHit) + Number(right.descHit);
+            return rightStrength - leftStrength || right.stars - left.stars;
+        })
+        .slice(0, 3)
+        .map(repo => repo.name);
+
+    return { skill: skillName, level, score, status, supportingRepos, baseScore, levelOffset };
+}
+
+function buildGitHubReasoning(skillEvaluations) {
+    const verifiedSkills = skillEvaluations.filter(item => item.status === 'verified').map(item => item.skill);
+    const partialSkills = skillEvaluations.filter(item => item.status === 'partial').map(item => item.skill);
+    const unverifiedSkills = skillEvaluations.filter(item => item.status === 'unverified').map(item => item.skill);
+    const repoEvidence = skillEvaluations
+        .filter(item => item.supportingRepos.length)
+        .map(item => `${item.skill}: ${item.supportingRepos.join(', ')}`)
+        .slice(0, 3);
+
+    const line1 = verifiedSkills.length
+        ? `Strong GitHub evidence supports ${joinList(verifiedSkills)} at the claimed level.`
+        : partialSkills.length
+            ? `The public repos show some evidence for ${joinList(partialSkills)}, but the claimed level still needs stronger proof.`
+            : 'The public repos do not yet provide strong enough evidence for the claimed skills.';
+    const line2 = repoEvidence.length
+        ? `Supporting original repositories among the claimed skills: ${repoEvidence.join('; ')}.`
+        : 'Only the claimed skills were scored; unrelated repository technologies were ignored.';
+    const line3 = unverifiedSkills.length
+        ? `${joinList(unverifiedSkills)} still needs clearer original-project evidence.`
+        : 'Only the claimed skills were included in this GitHub summary.';
+
+    return [line1, line2, line3].join(' ');
 }
 
 function detectCertificatePlatform(rawUrl) {
@@ -3266,69 +3792,74 @@ async function fetchCertificatePage(rawUrl) {
     }
 }
 
-function buildCertLinkFallbackResult(rawUrl, platform, claimedSkills, usage) {
-    const lowerUrl = String(rawUrl || '').toLowerCase();
-    const pageAuthenticSignals = [];
-    const pageSuspiciousSignals = [];
-    let confidenceScore = 0;
+function escapeRegex(text) {
+    return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
-    if (platform.platformTrusted) {
-        pageAuthenticSignals.push(`Trusted platform domain: ${platform.platformName}`);
-        confidenceScore += 35;
-    } else {
-        pageSuspiciousSignals.push('Domain is not in the trusted certificate platform list.');
+function cleanCertificateSubjectCandidate(value, platformName = '') {
+    let text = normalizeWhitespace(value);
+    if (!text) return '';
+    if (platformName) {
+        text = text.replace(new RegExp(`\\s*[|:-]\\s*${escapeRegex(platformName)}\\s*$`, 'i'), '');
     }
-    if (platform.strongVerifyPath) {
-        pageAuthenticSignals.push('URL path matches a public certificate/verification page pattern.');
-        confidenceScore += 20;
-    } else {
-        pageSuspiciousSignals.push('URL path does not clearly look like a public certificate page.');
+    text = text
+        .replace(/\s*[|:-]\s*(coursera|credly|linkedin learning|freecodecamp|nptel|edx|udemy|hackerrank|datacamp|google|aws|microsoft learn|mongodb university)\s*$/i, '')
+        .replace(/^(view|verify|public)\s+(certificate|credential|badge)\s*[:\-]?\s*/i, '')
+        .replace(/^(certificate|credential|badge)\s+(verification|page)\s*[:\-]?\s*/i, '')
+        .trim();
+    if (!text) return '';
+    if (/^(sign in|log in|home|catalog|browse|search|share)$/i.test(text)) return '';
+    if (/(online courses & credentials|join for free|top educators|browse catalog|sign up|create account)/i.test(text)) return '';
+    return text;
+}
+
+function extractRecipientNameFromCertificatePage(page) {
+    const html = String(page?.html || '');
+    const text = normalizeWhitespace(page?.text || '');
+    const patterns = [
+        /"recipientName"\s*:\s*"([^"]{3,120})"/i,
+        /"fullName"\s*:\s*"([^"]{3,120})"/i,
+        /(?:recipient|issued to|awarded to|presented to|learner|student)\s*[:\-]?\s*["“]?([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){1,4})["”]?/i,
+        /this is to certify that\s+([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){1,4})/i
+    ];
+
+    for (const source of [html, text]) {
+        for (const pattern of patterns) {
+            const match = String(source || '').match(pattern);
+            const candidate = normalizeWhitespace(match?.[1] || '').replace(/\\"/g, '"');
+            if (!candidate) continue;
+            if (candidate.length > 80) continue;
+            if (!/[a-z]/i.test(candidate)) continue;
+            if (/(certificate|credential|course|specialization|professional|introduction|coursera|credly|linkedin|google)/i.test(candidate) && candidate.split(' ').length < 2) {
+                continue;
+            }
+            return candidate;
+        }
     }
-    if (/(certificate|certification|credential|badge|verify|accomplishment)/i.test(lowerUrl)) {
-        pageAuthenticSignals.push('Certificate keywords found in the URL.');
-        confidenceScore += 10;
+    return 'not shown';
+}
+
+function extractCertificateSubjectFromPage(page, platform) {
+    const headingTexts = extractHeadingTexts(page?.html || '');
+    const candidates = uniqueStrings([
+        cleanCertificateSubjectCandidate(page?.title, platform?.platformName),
+        ...headingTexts.map(text => cleanCertificateSubjectCandidate(text, platform?.platformName)),
+        cleanCertificateSubjectCandidate(page?.metaDescription, platform?.platformName)
+    ].filter(Boolean));
+
+    for (const candidate of candidates) {
+        if (candidate.length < 4) continue;
+        if (/^(sign in|log in|home|catalog|browse|search|share)$/i.test(candidate)) continue;
+        return candidate;
     }
 
-    const skillMatch = inferSkillMatch(lowerUrl, claimedSkills);
-    if (skillMatch === 'direct') confidenceScore += 10;
-    else if (skillMatch === 'partial') confidenceScore += 5;
-    else pageSuspiciousSignals.push('The URL does not mention the claimed skill directly.');
-
-    confidenceScore = Math.min(80, confidenceScore);
-    const verdicts = toSkillVerdicts(skillMatch, claimedSkills);
-
-    return {
-        isVerified: confidenceScore >= 50,
-        confidenceScore,
-        platformName: platform.platformName,
-        platformTrusted: platform.platformTrusted,
-        pageAccessible: false,
-        issuer: platform.issuer,
-        issuerCredible: platform.platformTrusted || KNOWN_ISSUERS.includes(platform.issuer),
-        certSubject: 'not shown',
-        recipientName: 'not shown',
-        nameMismatch: false,
-        credentialId: 'not shown',
-        completionDate: 'not shown',
-        skillMatch,
-        pageAuthenticSignals,
-        pageSuspiciousSignals,
-        limitation: 'The platform blocked direct page access, so this result is based on trusted URL pattern analysis only.',
-        reasoning: platform.platformTrusted
-            ? `The link points to ${platform.platformName}, which is a trusted certificate platform. The page could not be fetched publicly, so the score uses URL-pattern trust instead of full page analysis. Open/public certificate pages score better than blocked or login-only links.`
-            : 'The link could not be fetched publicly and the domain is not a known certificate issuer. This result is based on URL pattern analysis only, so trust is limited. Use a public certificate page on a recognized platform for a stronger score.',
-        usage,
-        ...verdicts
-    };
+    return 'not shown';
 }
 
 // ─────────────────────────────────────────────────────────────
 // MAIN ROUTE
 // ─────────────────────────────────────────────────────────────
 app.post('/api/verify', async (req, res) => {
-    const ip    = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || 'unknown';
-    const usage = trackUsage(ip); // soft counter only, never blocks
-
     const { type, skillLevels={}, portfolioUrls } = req.body;
 
     const svSkills    = sanitize(req.body.skills,    MAX_SKILLS,    'skills');
@@ -3397,35 +3928,36 @@ User description: "${expertise}"
 Respond ONLY in valid JSON (no markdown):
 {
   "qualityRating": number (1-10),
-  "verifiedSkills": ["skills with clear repo evidence"],
-  "unverifiedSkills": ["skills with no evidence"],
-  "partialSkills": ["skills with weak evidence"],
-  "reasoning": "3 sentences naming specific repos."
+  "reasoning": "3 short sentences about original-code quality only.",
+  "developerSummary": "5-7 sentences. Mention only the claimed skills and specific supporting repositories. Do not mention unrelated stack items."
 }`;
 
             const ai = await callGemini(model, aiPrompt, null);
-            const { score, breakdown } = calcGitHubScore(profile, repos, langNames, skillLevels, ai);
+            const { score, breakdown, skillEvaluations } = calcGitHubScore(profile, repos, langNames, skillLevels, ai);
+            const verifiedSkills = skillEvaluations.filter(item => item.status === 'verified').map(item => item.skill);
+            const partialSkills = skillEvaluations.filter(item => item.status === 'partial').map(item => item.skill);
+            const unverifiedSkills = skillEvaluations.filter(item => item.status === 'unverified').map(item => item.skill);
 
             let finalScore = score, clonePenalty = 0;
             if (clones.length >= 3) { clonePenalty = 25; finalScore = Math.max(0, score-25); }
             else if (clones.length >= 1) { clonePenalty = 10; finalScore = Math.max(0, score-10); }
 
             const result = {
-                isVerified:       finalScore >= 60 && (ai.verifiedSkills||[]).length > 0,
+                isVerified:       finalScore >= 60 && verifiedSkills.length > 0,
                 confidenceScore:  finalScore,
+                verifiedSkills,
+                unverifiedSkills,
+                partialSkills,
                 scoreBreakdown:   breakdown,
-                verifiedSkills:   ai.verifiedSkills   || [],
-                unverifiedSkills: ai.unverifiedSkills || [],
-                partialSkills:    ai.partialSkills    || [],
                 cloneWarning:     clones.length > 0,
                 cloneDetails:     clones,
                 clonePenalty,
                 originalRepoCount: orig.length,
                 forkedRepoCount:   repos.filter(r=>r.isFork).length,
                 languagesFound:   langNames,
-                reasoning:        ai.reasoning,
+                analysisSource:   'gemini',
+                reasoning:        normalizeWhitespace(ai.developerSummary || buildGitHubReasoning(skillEvaluations)),
                 ownershipVerified,
-                usage,
             };
 
             if (!ownershipVerified) {
@@ -3501,6 +4033,7 @@ SKILL VERIFICATION:
 - Does subject match claimed skills?
 - Is issuer credible?
 - Grade/level match?
+- This certificate method is capped at ${CERTIFICATE_METHOD_MAX_SCORE}/100, so do not return a higher confidence score.
 
 Respond ONLY in valid JSON (no markdown, no backticks):
 {
@@ -3508,7 +4041,7 @@ Respond ONLY in valid JSON (no markdown, no backticks):
   "nameMismatch": boolean,
   "nameMismatchReason": "brief reason or 'Names match'",
   "isVerified": boolean,
-  "confidenceScore": number (0-100, must be 0 if nameMismatch true),
+  "confidenceScore": number (0-${CERTIFICATE_METHOD_MAX_SCORE}, must be 0 if nameMismatch true),
   "tamperDetected": boolean,
   "tamperConfidence": "high / medium / low / none",
   "tamperDetails": "what looks edited OR 'No tampering detected'",
@@ -3539,6 +4072,9 @@ Respond ONLY in valid JSON (no markdown, no backticks):
 
                 if (!j.issuerCredible) j.confidenceScore = Math.min(j.confidenceScore, 55);
                 if (j.skillMatch === 'none') { j.isVerified = false; j.confidenceScore = Math.min(j.confidenceScore, 20); }
+                applyImageCertificateLevelCalibration(j, skillLevels);
+                j.confidenceScore = Math.max(0, Math.min(CERTIFICATE_METHOD_MAX_SCORE, Math.round(Number(j.confidenceScore) || 0)));
+                j.isVerified = j.confidenceScore >= 50 && !j.nameMismatch && !j.tamperDetected && !j.aiGeneratedSuspicion && j.skillMatch !== 'none';
 
                 imageResults.push({ index: i+1, url, ...j });
             }
@@ -3569,11 +4105,10 @@ Respond ONLY in valid JSON (no markdown, no backticks):
                 nameMismatchCount: namesFailed.length,
                 verifiedCount:     verified.length,
                 summary,
-                usage,
             });
         }
 
-        // ── YOUTUBE ──────────────────────────────────────────
+        // ── CERTIFICATE LINK ─────────────────────────────────
         else if (type === 'certlink' || type === 'certificate' || type === 'certificate_link') {
             const rawCertLink = req.body.certLinkUrl;
             if (!rawCertLink || rawCertLink.length > MAX_URL) {
@@ -3595,19 +4130,11 @@ Respond ONLY in valid JSON (no markdown, no backticks):
             const page = await fetchCertificatePage(parsedUrl.toString());
 
             if (!page.ok || !page.pageAccessible) {
-                const fallbackResult = buildCertLinkFallbackResult(parsedUrl.toString(), platform, claimedSkills, usage);
-                if (page.errorMessage) {
-                    fallbackResult.pageSuspiciousSignals = [
-                        ...fallbackResult.pageSuspiciousSignals,
-                        `Direct page fetch failed: ${page.errorMessage}`
-                    ];
-                } else if (page.loginWall) {
-                    fallbackResult.pageSuspiciousSignals = [
-                        ...fallbackResult.pageSuspiciousSignals,
-                        'The link appears to require login instead of showing a public certificate page.'
-                    ];
+                if (page.loginWall) {
+                    return res.status(400).json({ error: 'Certificate page must be publicly accessible without login for Gemini verification.' });
                 }
-                return res.json(fallbackResult);
+                const suffix = page.errorMessage ? ` (${page.errorMessage})` : '';
+                return res.status(400).json({ error: `Could not load the public certificate page for Gemini verification${suffix}.` });
             }
 
             const pageSummary = normalizeWhitespace([
@@ -3615,9 +4142,9 @@ Respond ONLY in valid JSON (no markdown, no backticks):
                 page.metaDescription,
                 page.text
             ].filter(Boolean).join(' ')).slice(0, 12000);
-
+            const extractedHeadingTexts = extractHeadingTexts(page.html);
             const lvlLines = Object.entries(skillLevels).map(([s, l]) => `- ${s}: claimed as ${l}`).join('\n') || skills;
-            const certPrompt = `Evaluate this public certificate or badge webpage as skill proof.
+            const certPrompt = `Evaluate this public certificate or badge webpage for authenticity and ownership only.
 
 Profile owner: "${fullName || 'not provided'}"
 Platform: ${platform.platformName}
@@ -3632,16 +4159,13 @@ Page text excerpt:
 """${pageSummary}"""
 
 Rules:
-- Max score is 80 for this method.
-- If the displayed recipient clearly belongs to someone else, set nameMismatch true, isVerified false, confidenceScore 0.
-- If the recipient is not shown, do not force a mismatch.
-- Prefer trustworthy certificate signals: recognized issuer, certificate/badge wording, issue date, credential ID, public verification wording.
-- Penalize generic marketing pages, login walls, and unverifiable pages.
+- Max score is ${CERTIFICATE_METHOD_MAX_SCORE} for this method.
+- Judge authenticity, issuer credibility, recipient name, certificate subject, credential id, and completion date.
+- If the displayed recipient clearly belongs to someone else, set nameMismatch true.
+- Do not decide skill support; that is handled separately.
 
 Respond ONLY in valid JSON:
 {
-  "isVerified": boolean,
-  "confidenceScore": number (0-80),
   "issuer": "issuer name",
   "issuerCredible": boolean,
   "certSubject": "certificate subject or 'not shown'",
@@ -3649,130 +4173,136 @@ Respond ONLY in valid JSON:
   "nameMismatch": boolean,
   "credentialId": "credential id or 'not shown'",
   "completionDate": "completion/issue date or 'not shown'",
-  "skillMatch": "direct / partial / none",
-  "verifiedSkills": ["clearly supported skills"],
-  "partialSkills": ["partially supported skills"],
-  "unverifiedSkills": ["unsupported skills"],
   "pageAuthenticSignals": ["signal 1", "signal 2"],
   "pageSuspiciousSignals": ["warning 1"],
-  "reasoning": "3 short sentences.",
   "limitation": "Short note about this verification method."
 }`;
 
             const certAnalysis = await callGemini(model, certPrompt, null);
-            const recipientName = normalizeWhitespace(certAnalysis.recipientName || 'not shown');
+            const rawRecipientName = normalizeWhitespace(certAnalysis.recipientName || 'not shown');
+            const initialNameCheck = evaluateCertificateNameCheck(fullName, rawRecipientName);
             const explicitNameMismatch = !!certAnalysis.nameMismatch;
-            const inferredNameMismatch = recipientName && recipientName !== 'not shown' && fullName
-                ? !namesLikelyMatch(fullName, recipientName)
-                : false;
-            const nameMismatch = explicitNameMismatch || inferredNameMismatch;
-            const skillMatch = ['direct', 'partial', 'none'].includes(certAnalysis.skillMatch)
-                ? certAnalysis.skillMatch
-                : inferSkillMatch(pageSummary, claimedSkills);
+            const nameCheck = explicitNameMismatch && initialNameCheck.passed
+                ? {
+                    ...initialNameCheck,
+                    passed: false,
+                    nameMismatch: true,
+                    reason: `The certificate recipient ${initialNameCheck.recipientName} does not match the profile owner.`
+                }
+                : initialNameCheck;
+            const recipientName = nameCheck.recipientName;
+            const nameMismatch = nameCheck.nameMismatch;
+            const certSubject = normalizeWhitespace(certAnalysis.certSubject || page.title || 'not shown');
+            const credentialId = normalizeWhitespace(certAnalysis.credentialId || extractCredentialId(pageSummary));
+            const completionDate = normalizeWhitespace(certAnalysis.completionDate || extractCompletionDate(pageSummary));
+            const parsedCompletionDate = parseDateValue(completionDate);
+            const completionDateFuture = parsedCompletionDate ? isFutureCalendarDate(parsedCompletionDate) : false;
+            const levelEvidence = resolveCertificateLevelStrength({
+                title: page.title,
+                certificateSubject: certSubject,
+                headingTexts: extractedHeadingTexts,
+                metaDescription: page.metaDescription
+            });
+            const headingTexts = levelEvidence.headingTexts;
+            const certSkillVerdicts = evaluateClaimedCertificateSkills(claimedSkills, {
+                primaryTexts: [page.title, certSubject, ...headingTexts],
+                secondaryTexts: [page.metaDescription, pageSummary]
+            });
+            const skillMatch = certSkillVerdicts.skillMatch;
 
             const inferredSignals = [];
             const suspiciousSignals = [];
             if (platform.platformTrusted) inferredSignals.push(`Trusted platform domain: ${platform.platformName}`);
             if (platform.strongVerifyPath) inferredSignals.push('Verification-style public URL detected.');
-            if (extractCredentialId(pageSummary) !== 'not shown') inferredSignals.push('Credential identifier pattern detected on the page.');
-            if (extractCompletionDate(pageSummary) !== 'not shown') inferredSignals.push('Completion/issue date detected on the page.');
+            if (credentialId !== 'not shown') inferredSignals.push('Credential identifier pattern detected on the page.');
+            if (parsedCompletionDate && !completionDateFuture) inferredSignals.push('Completion date parsed successfully.');
             if (!platform.platformTrusted) suspiciousSignals.push('Domain is not a recognized certificate platform.');
-            if (skillMatch === 'none') suspiciousSignals.push('The page content does not clearly support the claimed skill.');
+            if (!nameCheck.passed) suspiciousSignals.push(nameCheck.reason);
+            if (completionDateFuture) suspiciousSignals.push(`Completion date appears to be in the future (${completionDate}).`);
+            if (skillMatch === 'none') suspiciousSignals.push('The certificate title and headings do not directly name the claimed skills.');
 
-            let confidenceScore = Number(certAnalysis.confidenceScore) || 0;
-            confidenceScore = Math.max(0, Math.min(80, Math.round(confidenceScore)));
-            if (!platform.platformTrusted) confidenceScore = Math.min(confidenceScore, 55);
-            if (nameMismatch) confidenceScore = 0;
-            if (skillMatch === 'none') confidenceScore = Math.min(confidenceScore, 25);
+            const issuer = normalizeWhitespace(certAnalysis.issuer || platform.issuer);
+            const issuerCredible = certAnalysis.issuerCredible !== false && (platform.platformTrusted || KNOWN_ISSUERS.includes(issuer));
+            let authenticityScore = 0;
+            if (platform.platformTrusted) authenticityScore += 15;
+            if (platform.strongVerifyPath) authenticityScore += 8;
+            if (page.pageAccessible) authenticityScore += 8;
+            if (issuerCredible) authenticityScore += 4;
+            if (credentialId !== 'not shown') authenticityScore += 4;
+            if (recipientName !== 'not shown' && nameCheck.passed) authenticityScore += 3;
+            if (parsedCompletionDate && !completionDateFuture) authenticityScore += 3;
+            authenticityScore = Math.min(45, authenticityScore);
+
+            const levelAwareSkillScore = computeCertLinkSkillScore(skillLevels, certSkillVerdicts, {
+                title: page.title,
+                certificateSubject: certSubject,
+                headingTexts,
+                metaDescription: page.metaDescription,
+                fallbackText: `${page.title || ''} ${certSubject || ''}`
+            });
+            let confidenceScore = authenticityScore + levelAwareSkillScore;
+            confidenceScore = Math.max(0, Math.min(CERTIFICATE_METHOD_MAX_SCORE, Math.round(confidenceScore)));
+            if (!nameCheck.passed) confidenceScore = 0;
+            if (completionDateFuture) confidenceScore = Math.min(confidenceScore, 35);
 
             const aiAuthenticSignals = Array.isArray(certAnalysis.pageAuthenticSignals) ? certAnalysis.pageAuthenticSignals : [];
-            const aiSuspiciousSignals = Array.isArray(certAnalysis.pageSuspiciousSignals) ? certAnalysis.pageSuspiciousSignals : [];
+            const aiSuspiciousSignals = filterCertificateAiSuspiciousSignals(
+                Array.isArray(certAnalysis.pageSuspiciousSignals) ? certAnalysis.pageSuspiciousSignals : [],
+                { completionDateFuture }
+            );
             const pageAuthenticSignals = [...new Set([
                 ...inferredSignals,
-                ...(aiAuthenticSignals.map(s => normalizeWhitespace(s)).filter(Boolean))
+                ...(aiAuthenticSignals.map(s => normalizeWhitespace(s)).filter(Boolean)),
+                ...(certSkillVerdicts.matchedSignals || [])
             ])].slice(0, 6);
             const pageSuspiciousSignals = [...new Set([
                 ...suspiciousSignals,
                 ...(aiSuspiciousSignals.map(s => normalizeWhitespace(s)).filter(Boolean))
             ])].slice(0, 6);
-            const fallbackVerdicts = toSkillVerdicts(skillMatch, claimedSkills);
 
             return res.json({
-                isVerified: !nameMismatch && confidenceScore >= 50,
+                isVerified: nameCheck.passed && !completionDateFuture && certSkillVerdicts.verifiedSkills.length > 0 && confidenceScore >= 50,
                 confidenceScore,
                 platformName: platform.platformName,
                 platformTrusted: platform.platformTrusted,
                 pageAccessible: true,
-                issuer: normalizeWhitespace(certAnalysis.issuer || platform.issuer),
-                issuerCredible: certAnalysis.issuerCredible !== false && (platform.platformTrusted || KNOWN_ISSUERS.includes(normalizeWhitespace(certAnalysis.issuer || platform.issuer))),
-                certSubject: normalizeWhitespace(certAnalysis.certSubject || 'not shown'),
+                analysisSource: 'gemini',
+                issuer,
+                issuerCredible,
+                certSubject,
                 recipientName,
                 nameMismatch,
-                credentialId: normalizeWhitespace(certAnalysis.credentialId || extractCredentialId(pageSummary)),
-                completionDate: normalizeWhitespace(certAnalysis.completionDate || extractCompletionDate(pageSummary)),
+                missingProfileName: nameCheck.missingProfileName,
+                missingRecipientName: nameCheck.missingRecipientName,
+                nameCheckReason: nameCheck.reason,
+                credentialId,
+                completionDate,
+                completionDateIso: formatDateIso(parsedCompletionDate),
+                completionDateFuture,
                 skillMatch,
                 pageAuthenticSignals,
                 pageSuspiciousSignals,
-                reasoning: normalizeWhitespace(certAnalysis.reasoning || 'The certificate page was analyzed using public page text and platform trust signals.'),
-                limitation: normalizeWhitespace(certAnalysis.limitation || 'This method verifies only public certificate page details, not the original issuer database directly.'),
-                usage,
-                verifiedSkills: Array.isArray(certAnalysis.verifiedSkills) ? certAnalysis.verifiedSkills.map(s => normalizeWhitespace(s)).filter(Boolean) : fallbackVerdicts.verifiedSkills,
-                partialSkills: Array.isArray(certAnalysis.partialSkills) ? certAnalysis.partialSkills.map(s => normalizeWhitespace(s)).filter(Boolean) : fallbackVerdicts.partialSkills,
-                unverifiedSkills: Array.isArray(certAnalysis.unverifiedSkills) ? certAnalysis.unverifiedSkills.map(s => normalizeWhitespace(s)).filter(Boolean) : fallbackVerdicts.unverifiedSkills
+                reasoning: buildCertificateReasoning({
+                    platformName: platform.platformName,
+                    pageAccessible: true,
+                    recipientName,
+                    nameMismatch,
+                    nameCheckPassed: nameCheck.passed,
+                    nameCheckReason: nameCheck.reason,
+                    completionDate,
+                    completionDateFuture,
+                    verifiedSkills: certSkillVerdicts.verifiedSkills,
+                    partialSkills: certSkillVerdicts.partialSkills,
+                    unverifiedSkills: certSkillVerdicts.unverifiedSkills
+                }),
+                limitation: sanitizeCertificateLimitationText(
+                    certAnalysis.limitation || 'This method verifies only public certificate page details, not the issuer database directly.',
+                    { completionDateFuture }
+                ),
+                verifiedSkills: certSkillVerdicts.verifiedSkills,
+                partialSkills: certSkillVerdicts.partialSkills,
+                unverifiedSkills: certSkillVerdicts.unverifiedSkills
             });
-        }
-
-        else if (type === 'video') {
-            const rawYT = req.body.youtubeUrl;
-            if (!rawYT || rawYT.length > MAX_URL) return res.status(400).json({ error: 'Invalid YouTube URL.' });
-            const id = extractYTId(rawYT);
-            if (!id) return res.status(400).json({ error: 'Invalid YouTube URL format.' });
-
-            const isShort  = rawYT.includes('/shorts/');
-            const maxScore = isShort ? 35 : 65;
-            const meta     = await getYTMeta(id);
-            if (!meta.found) return res.status(404).json({ error: 'Video not accessible. Must be PUBLIC.' });
-
-            const thumb  = await fetchB64(`https://img.youtube.com/vi/${id}/maxresdefault.jpg`);
-            const lvlLines = Object.entries(skillLevels).map(([s,l])=>`- ${s}: claimed as ${l}`).join('\n') || skills;
-
-            const ytPrompt = `Evaluate this YouTube video as teaching proof.
-
-Skills to verify:
-${lvlLines}
-User description: "${expertise}"
-
-Video: Title="${meta.title}" | Channel="${meta.author_name}" | Is Short: ${isShort}
-Thumbnail provided. You CANNOT watch the video.
-
-Score 0-${maxScore} ONLY. 
-Title directly names skill + educational = high. Title-stuffing = low. Unrelated = fail.
-Shorts always: isVerified false, max 35.
-
-Respond ONLY in valid JSON:
-{
-  "isVerified": boolean,
-  "confidenceScore": number (0-${maxScore} HARD MAX),
-  "titleRelevance": "direct / partial / none",
-  "thumbnailQuality": "educational / average / clickbait / unclear",
-  "channelFocused": boolean,
-  "titleStuffingSuspected": boolean,
-  "videoTitle": "${meta.title}",
-  "channelName": "${meta.author_name}",
-  "reasoning": "3 sentences. State video was not watchable.",
-  "limitation": "Only title, thumbnail, channel analyzed. Full video not accessible.",
-  "ownershipNote": "Channel ownership NOT verified."
-}`;
-
-            const j = await callGemini(model, ytPrompt, thumb ? [thumb] : null);
-
-            j.confidenceScore = Math.min(j.confidenceScore, maxScore);
-            if (j.titleStuffingSuspected) j.confidenceScore = Math.min(j.confidenceScore, 25);
-            if (j.titleRelevance === 'none') { j.isVerified = false; j.confidenceScore = Math.min(j.confidenceScore, 10); }
-            if (isShort) { j.isVerified = false; j.reasoning = (j.reasoning||'') + ' YouTube Shorts too short to demonstrate teaching.'; }
-            j.isVerified = j.confidenceScore >= 50 && !isShort;
-
-            return res.json({ ...j, usage, channelOwnershipVerified: false });
         }
 
         else {
@@ -3785,6 +4315,7 @@ Respond ONLY in valid JSON:
         if (err instanceof SyntaxError)       return res.status(500).json({ error: 'AI returned malformed response. Try again.' });
         if (err.response?.status === 401)     return res.status(500).json({ error: 'GitHub token invalid.' });
         if (err.response?.status === 403)     return res.status(503).json({ error: 'GitHub API rate limit. Wait ~1 hour.' });
+        if (isGeminiQuotaError(err))          return res.status(429).json({ error: buildGeminiQuotaMessage(err) });
         if (err.message?.includes('Timeout')) return res.status(504).json({ error: 'Analysis timed out. Try again.' });
         res.status(500).json({ error: err.message });
     }
@@ -5584,7 +6115,12 @@ app.get('/api/health', (_req, res) => res.json({
     ownershipCode: OWNERSHIP_CODE,
     calendarConfigured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_CALENDAR_REDIRECT_URI),
     firebaseAdminConfigured: !!getFirebaseServiceAccount(),
-    ai: { verification: 'gemini', studyMaterials: 'groq' }
+    ai: {
+        verification: 'gemini',
+        verificationPrimaryModel: PRIMARY_GEMINI_MODEL,
+        verificationFallbackModels: GEMINI_FALLBACK_MODELS,
+        studyMaterials: 'groq'
+    }
 }));
 
 global.__skillswapServerStarted = true;
