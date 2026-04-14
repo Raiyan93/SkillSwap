@@ -4029,11 +4029,31 @@ AI-GENERATED CERT DETECTION:
 - Generic institution name ("World Cert Academy")
 - Zero paper texture (real certs always have some)
 
-SKILL VERIFICATION:
-- Does subject match claimed skills?
-- Is issuer credible?
-- Grade/level match?
-- This certificate method is capped at ${CERTIFICATE_METHOD_MAX_SCORE}/100, so do not return a higher confidence score.
+SKILL & LEVEL VERIFICATION — READ CAREFULLY:
+The user claims the following skills and levels:
+${lvlLines}
+
+Step 1 — Classify the certificate's actual level from its visible title and course name:
+  - "Introduction to...", "Intro to...", "Fundamentals of...", "Basics of...", "Getting Started with..." → certifiedLevel: "beginner"
+  - "Intermediate...", "Applied...", "Practitioner..." → certifiedLevel: "intermediate"
+  - "Advanced...", "Professional...", "Expert...", "Mastery..." → certifiedLevel: "expert"
+  - No level indicator in the title → certifiedLevel: "general"
+
+Step 2 — Compare certifiedLevel against the user's claimed level and set levelMatch:
+  - User claims "expert" + certifiedLevel is "beginner" → levelMatch: false (SEVERE mismatch)
+  - User claims "expert" + certifiedLevel is "intermediate" → levelMatch: false (moderate mismatch)
+  - User claims "expert" + certifiedLevel is "expert" or "general" → levelMatch: true
+  - User claims "intermediate" + certifiedLevel is "beginner" → levelMatch: false
+  - User claims "intermediate" + certifiedLevel is "intermediate", "expert", or "general" → levelMatch: true
+  - User claims "beginner" + certifiedLevel is anything → levelMatch: true
+
+Step 3 — Set confidenceScore based on ALL factors above:
+  - Intro-level cert for an expert claim: score 15–30 (the cert proves beginner knowledge only)
+  - Intro-level cert for an intermediate claim: score 25–45
+  - Matching level, direct skill match, credible issuer: score 55–${CERTIFICATE_METHOD_MAX_SCORE}
+  - Partial skill match: reduce by 15–20
+  - levelMatch: false: reduce further by 10–20
+  - This certificate method is capped at ${CERTIFICATE_METHOD_MAX_SCORE}/100.
 
 Respond ONLY in valid JSON (no markdown, no backticks):
 {
@@ -4049,10 +4069,11 @@ Respond ONLY in valid JSON (no markdown, no backticks):
   "aiGeneratedReason": "why or 'Looks like a real document'",
   "issuer": "issuing body name",
   "issuerCredible": boolean,
-  "certificateSubject": "what cert is for",
+  "certificateSubject": "exact course/certificate title visible on the image",
+  "certifiedLevel": "beginner / intermediate / expert / general",
   "skillMatch": "direct / partial / none",
   "levelMatch": boolean,
-  "reasoning": "3 sentences: name check, tamper, skill match"
+  "reasoning": "4 sentences: name check, tamper assessment, skill match, level comparison"
 }`;
 
                 const j = await callGemini(model, prompt, [part]);
@@ -4072,6 +4093,28 @@ Respond ONLY in valid JSON (no markdown, no backticks):
 
                 if (!j.issuerCredible) j.confidenceScore = Math.min(j.confidenceScore, 55);
                 if (j.skillMatch === 'none') { j.isVerified = false; j.confidenceScore = Math.min(j.confidenceScore, 20); }
+
+                // Hard level-mismatch caps: a lower-level cert cannot prove a higher-level claim
+                const claimedLevels = Object.values(skillLevels || {}).map(l => String(l).toLowerCase());
+                const certLevel = String(j.certifiedLevel || '').toLowerCase();
+                const userClaimsExpert = claimedLevels.some(l => l === 'expert');
+                const userClaimsIntermediate = claimedLevels.some(l => l === 'intermediate');
+                if (certLevel === 'beginner') {
+                    if (userClaimsExpert) {
+                        j.confidenceScore = Math.min(j.confidenceScore, 30);
+                        j.levelMatch = false;
+                        j.levelMismatchWarning = 'Beginner/introductory certificate cannot support an expert-level claim.';
+                    } else if (userClaimsIntermediate) {
+                        j.confidenceScore = Math.min(j.confidenceScore, 45);
+                        j.levelMatch = false;
+                        j.levelMismatchWarning = 'Introductory certificate partially supports an intermediate claim.';
+                    }
+                } else if (certLevel === 'intermediate' && userClaimsExpert) {
+                    j.confidenceScore = Math.min(j.confidenceScore, 50);
+                    j.levelMatch = false;
+                    j.levelMismatchWarning = 'Intermediate certificate cannot fully support an expert-level claim.';
+                }
+
                 applyImageCertificateLevelCalibration(j, skillLevels);
                 j.confidenceScore = Math.max(0, Math.min(CERTIFICATE_METHOD_MAX_SCORE, Math.round(Number(j.confidenceScore) || 0)));
                 j.isVerified = j.confidenceScore >= 50 && !j.nameMismatch && !j.tamperDetected && !j.aiGeneratedSuspicion && j.skillMatch !== 'none';
@@ -6133,7 +6176,8 @@ app.listen(5000, () => {
 });
 
 // --- AI NOTES ROUTES (GROQ + TAVILY) ---
-const STUDY_NOTES_GROQ_MODEL = 'llama-3.3-70b-versatile';
+const STUDY_NOTES_GROQ_MODEL = 'llama-3.1-8b-instant';
+const STUDY_NOTES_GROQ_FALLBACK_MODEL = 'gemma2-9b-it';
 
 function stripModelCodeFences(value) {
     return String(value || '')
@@ -6157,8 +6201,8 @@ function parseJsonObjectFromModelResponse(value, label) {
 
 function toCleanText(value, fallback = '') {
     if (value === null || value === undefined) return fallback;
-    if (typeof value === 'string') return value.trim();
-    return String(value).trim();
+    if (typeof value === 'string') return value.trim() || fallback;
+    return String(value).trim() || fallback;
 }
 
 function toStringArray(value) {
@@ -6415,32 +6459,49 @@ function buildVerificationFallback(topic, notesContent, tavilyResult) {
 }
 
 function buildNotesFromEvidence(topic, tavilyResult) {
+    // Fallback when Groq is unavailable — never dump raw web scrapes into notes
     const sources = Array.isArray(tavilyResult && tavilyResult.sources) ? tavilyResult.sources : [];
-    const snippets = sources.map(source => toCleanText(source && source.snippet)).filter(Boolean);
-    const sentences = snippets.join(' ').split(/[.!?]\s+/).map(s => s.trim()).filter(s => s.length > 20);
-    const uniqueSentences = uniqueListFromArray(sentences).slice(0, 10);
-    const summary = uniqueSentences.slice(0, 2).join('. ') + (uniqueSentences.length ? '.' : '');
-    const keyPoints = uniqueSentences.slice(0, 6).map(s => (s.endsWith('.') ? s : s + '.'));
-
-    const sections = sources.length
-        ? sources.slice(0, 4).map((source, index) => ({
-            heading: toCleanText(source.title) || `Source ${index + 1}`,
-            content: trimEvidenceSnippet(source.snippet, 420)
-        }))
-        : [
-            { heading: 'Overview', content: summary || `No external evidence was available for ${topic}.` },
-            { heading: 'Key Concepts', content: keyPoints.join(' ') || `Add more evidence-backed details for ${topic}.` }
-        ];
-
     return {
         topic,
         notes: {
-            summary: summary || `These notes were generated from the available Tavily evidence for ${topic}.`,
-            keyPoints: keyPoints.length ? keyPoints : [`Gather more sources to expand the notes for ${topic}.`],
-            sections
+            summary: `${topic} is an important subject with a well-defined set of concepts, patterns, and practical applications. AI-powered notes are temporarily unavailable — the content below is a generic overview. Try again in a few minutes for fully AI-generated, source-grounded notes.`,
+            keyPoints: [
+                `Understanding the fundamentals of ${topic} is the essential first step.`,
+                `${topic} is built on a clear set of core principles that everything else builds on.`,
+                `Practical application through real projects is the fastest way to master ${topic}.`,
+                `The ${topic} ecosystem includes tools, libraries, and strong community support.`,
+                `Breaking ${topic} into focused sub-topics makes progressive learning far easier.`,
+                `Consistent daily practice significantly accelerates skill development in ${topic}.`
+            ],
+            sections: [
+                {
+                    heading: `What ${topic} Is`,
+                    content: `${topic} is a well-established concept in its field. It provides a structured approach to solving specific kinds of problems and building reliable solutions. Grasping its purpose and scope is the essential first step toward mastery.`
+                },
+                {
+                    heading: 'Core Concepts',
+                    content: `The core concepts of ${topic} form the foundation that all advanced knowledge builds upon. Focus on understanding the key principles, terminology, and underlying mental models before moving to more complex material.`
+                },
+                {
+                    heading: 'How It Works',
+                    content: `${topic} follows defined patterns and processes. Understanding how it works internally — its architecture, data flow, and key mechanisms — gives you the insight needed to apply it correctly and debug problems efficiently.`
+                },
+                {
+                    heading: 'Practical Applications',
+                    content: `${topic} is applied across many real-world contexts. Working through projects and exercises is the most reliable way to move from theoretical understanding to genuine, transferable proficiency.`
+                },
+                {
+                    heading: 'Getting Started',
+                    content: `Begin with the documented fundamentals of ${topic}, set up the recommended tooling, and follow a structured learning path. Build small projects early to apply what you learn, then expand progressively toward more complex scenarios.`
+                }
+            ]
         },
+        mindmap: null,
+        flashcards: [],
+        quiz: [],
         sources,
-        evidenceNote: toCleanText(tavilyResult && tavilyResult.evidenceNote)
+        evidenceNote: 'AI generation was temporarily unavailable (rate limit). Showing generic notes — try again shortly.',
+        providerLimited: true
     };
 }
 
@@ -6455,18 +6516,37 @@ function trimEvidenceSnippet(value, maxLen = 280) {
     return `${text.slice(0, Math.max(0, maxLen - 3)).trimEnd()}...`;
 }
 
+function cleanTavilySnippet(rawSnippet) {
+    if (!rawSnippet || typeof rawSnippet !== 'string') return '';
+    return rawSnippet
+        .split('\n')
+        .filter(line => {
+            const t = line.trim();
+            if (!t || t.length < 15) return false;
+            if (/\.(png|jpg|gif|svg|webp)/i.test(t)) return false; // image filenames
+            if (/^(geeksforgeeks|skip to|re-watch|follow us|sign in|log in|subscribe|read more|click here|developer notes|android|ios|web)$/i.test(t)) return false;
+            if (/^[\s*\-#|]+$/.test(t)) return false; // lines that are pure punctuation/decorators
+            if (/^(Interview Prep|React Course|React Tutorial|React Exercise|React Basic|React Components|React Props|React Hooks|React Router|React Advanced|React Examples|React Interview|React Projects)/i.test(t)) return false;
+            if (t.split(' ').length < 3) return false; // ultra-short nav items
+            return true;
+        })
+        .join(' ')
+        .replace(/\[\.\.\.]|\[([^\]]+)\]\([^)]+\)|```[^```]*```/g, ' ')
+        .replace(/#{1,6}\s+/g, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+        .slice(0, 420);
+}
+
 function buildVerificationEvidenceSummary(tavilyResult) {
     const sources = Array.isArray(tavilyResult && tavilyResult.sources) ? tavilyResult.sources : [];
     if (!sources.length) {
-        return 'No strong Tavily source snippets were available. Treat this verification as partial and explain that external evidence was limited.';
+        return 'No Tavily sources available. Score conservatively and set status=partial.';
     }
-
-    return sources.slice(0, 3).map((source, index) => (
-        `[Source ${index + 1}]
-Title: ${trimEvidenceSnippet(source.title, 120)}
-URL: ${toCleanText(source.url)}
-Evidence: ${trimEvidenceSnippet(source.snippet, 320)}`
-    )).join('\n\n');
+    return sources.slice(0, 3).map((source, index) => {
+        const cleaned = cleanTavilySnippet(source.snippet);
+        return `[Source ${index + 1}]\nTitle: ${trimEvidenceSnippet(source.title, 100)}\nEvidence: ${cleaned.slice(0, 350)}`;
+    }).join('\n\n');
 }
 
 async function callGroqChatWithRetry(messages, options = {}, retryOptions = {}) {
@@ -6474,19 +6554,29 @@ async function callGroqChatWithRetry(messages, options = {}, retryOptions = {}) 
     const baseDelayMs = Math.max(0, Number(retryOptions.backoffMs) || 0);
     let lastError = null;
 
+    // Try primary model first
     for (let attempt = 0; attempt <= retries; attempt += 1) {
         try {
             return await callGroqChat(messages, options);
         } catch (err) {
             lastError = err;
             if (attempt >= retries || !isGroqRateLimitError(err)) {
-                throw err;
+                if (!isGroqRateLimitError(err)) throw err;
+                break; // rate limited — try fallback model
+
             }
             await delay(baseDelayMs * (attempt + 1 || 1));
         }
     }
 
-    throw lastError || new Error('Groq request failed.');
+    // Primary model was rate-limited — try fallback model (separate quota)
+    console.warn('[groq] Primary model rate-limited. Trying fallback model:', STUDY_NOTES_GROQ_FALLBACK_MODEL);
+    try {
+        return await callGroqChat(messages, { ...options, model: STUDY_NOTES_GROQ_FALLBACK_MODEL });
+    } catch (fallbackErr) {
+        console.warn('[groq] Fallback model also failed:', fallbackErr.message);
+        throw lastError || fallbackErr;
+    }
 }
 
 function uniqueListFromArray(values) {
@@ -6533,10 +6623,12 @@ async function callGroqChat(messages, options = {}) {
         throw new Error('Groq API Key not configured on server');
     }
 
+    const model = options.model || STUDY_NOTES_GROQ_MODEL;
+
     const response = await axios.post(
         'https://api.groq.com/openai/v1/chat/completions',
         {
-            model: STUDY_NOTES_GROQ_MODEL,
+            model,
             messages,
             temperature: options.temperature === undefined ? 0.3 : options.temperature,
             max_tokens: options.maxTokens || 2500
@@ -6624,7 +6716,58 @@ app.post('/api/generate-notes', async (req, res) => {
         if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
 
         const tavilyResult = await searchTavilyEvidence(topic);
-        const result = buildNotesFromEvidence(topic, tavilyResult);
+        const sourceSummary = buildVerificationEvidenceSummary(tavilyResult);
+        const hasEvidence = Array.isArray(tavilyResult && tavilyResult.sources) && tavilyResult.sources.length > 0;
+        let result;
+        try {
+            const genPrompt = [
+                'Generate a comprehensive study package for the topic below.',
+                'Use the Tavily sources for factual accuracy, but write in your own clear teaching language — never copy snippets verbatim.',
+                '',
+                'TOPIC: ' + topic,
+                '',
+                hasEvidence ? ('TAVILY SOURCES:\n' + sourceSummary) : 'No external sources available — use your knowledge of this topic.',
+                '',
+                'STRICT RULES:',
+                '- Do NOT use website names, URLs, or author bylines as headings or content.',
+                '- Do NOT mention Tavily, Groq, or AI in the output content.',
+                '- All content must be topic-specific. No generic filler.',
+                '- Vary which option index (0-3) is correct across quiz questions.',
+                '- Flashcard answers: 2-3 informative sentences each.',
+                '- Section content: 2-4 clear teaching sentences each.',
+                '- keyPoints: exactly 6 specific, useful revision bullets.',
+                '- sections: exactly 5 sections with conceptual headings.',
+                '- mindmap branches: exactly 4 with 3 subnodes each (max 6 words per subnode).',
+                '- flashcards: exactly 6 cards testing different concepts.',
+                '- quiz: exactly 5 questions with 4 options each.',
+                '',
+                'Return ONLY valid JSON — no markdown fences, no extra keys:',
+                '{"topic":"TOPIC","notes":{"summary":"4-6 sentence overview","keyPoints":["p1","p2","p3","p4","p5","p6"],"sections":[{"heading":"What TOPIC Is","content":"..."},{"heading":"Core Concepts","content":"..."},{"heading":"How It Works","content":"..."},{"heading":"Practical Applications","content":"..."},{"heading":"Key Benefits","content":"..."}]},"mindmap":{"center":"TOPIC","branches":[{"label":"Branch1","color":"#7c5cfc","subnodes":["s1","s2","s3"]},{"label":"Branch2","color":"#4facfe","subnodes":["s1","s2","s3"]},{"label":"Branch3","color":"#34d399","subnodes":["s1","s2","s3"]},{"label":"Branch4","color":"#f59e0b","subnodes":["s1","s2","s3"]}]},"flashcards":[{"question":"Q1?","answer":"A1"},{"question":"Q2?","answer":"A2"},{"question":"Q3?","answer":"A3"},{"question":"Q4?","answer":"A4"},{"question":"Q5?","answer":"A5"},{"question":"Q6?","answer":"A6"}],"quiz":[{"question":"Q1?","options":["A","B","C","D"],"correct":0},{"question":"Q2?","options":["A","B","C","D"],"correct":2},{"question":"Q3?","options":["A","B","C","D"],"correct":1},{"question":"Q4?","options":["A","B","C","D"],"correct":3},{"question":"Q5?","options":["A","B","C","D"],"correct":0]}]'
+            ].join('\n');
+            const raw = await callGroqChatWithRetry(
+                [
+                    { role: 'system', content: 'You are an expert educator. Return ONLY valid JSON matching the exact shape requested. No markdown code fences.' },
+                    { role: 'user', content: genPrompt }
+                ],
+                { temperature: 0.4, maxTokens: 3200 },
+                { retries: 2, backoffMs: 1500 }
+            );
+            const parsed = parseJsonObjectFromModelResponse(raw, 'generated study package');
+            result = {
+                topic,
+                notes: normalizeNotesPayload(parsed.notes || parsed, topic),
+                mindmap: parsed.mindmap || null,
+                flashcards: Array.isArray(parsed.flashcards) ? parsed.flashcards : [],
+                quiz: Array.isArray(parsed.quiz) ? parsed.quiz : [],
+                sources: (tavilyResult && tavilyResult.sources) || [],
+                evidenceNote: toCleanText(tavilyResult && tavilyResult.evidenceNote),
+                providerLimited: false
+            };
+        } catch (groqErr) {
+            console.warn('[generate-notes] Groq failed, using Tavily fallback:', groqErr.message);
+            result = buildNotesFromEvidence(topic, tavilyResult);
+            result.providerLimited = true;
+        }
         res.json({ result });
     } catch (err) {
         console.error('[generate-notes]', err.message);
@@ -6641,7 +6784,48 @@ app.post('/api/verify-notes', async (req, res) => {
         }
 
         const tavilyResult = await searchTavilyEvidence(topic);
-        res.json(buildVerificationFallback(topic, notesContent, tavilyResult));
+        const sourceSummary = buildVerificationEvidenceSummary(tavilyResult);
+        const hasEvidence = Array.isArray(tavilyResult && tavilyResult.sources) && tavilyResult.sources.length > 0;
+        let verifyResult;
+        try {
+            const verifyPrompt = [
+                'You are a fact-checker. Evaluate the study notes against the Tavily sources and return a verification report.',
+                '',
+                'TOPIC: ' + topic,
+                '',
+                'STUDENT NOTES:',
+                notesContent.slice(0, 4000),
+                '',
+                hasEvidence ? ('TAVILY SOURCES (ground truth):\n' + sourceSummary) : 'NOTE: No Tavily sources found. Cap score at 60 and set status=partial.',
+                '',
+                'Score 0-100 on accuracy, completeness, clarity, and depth.',
+                '',
+                'Return ONLY valid JSON — no markdown fences:',
+                '{"status":"partial","score":72,"overview":"2-3 sentence quality summary","accuracy":{"score":72,"issues":["specific issue"],"strengths":["specific strength"]},"completeness":{"score":72,"missing":["missing concept"],"covered":["covered concept"]},"clarity":{"score":72,"feedback":"specific feedback"},"depth":{"score":72,"assessment":"specific assessment"},"corrections":["specific correction"],"missingConcepts":["concept to add"],"verifiedFacts":["confirmed fact from sources"],"improvementPrompt":"Specific actionable instructions to rewrite these notes to score 85+."}',
+                '',
+                'Rules: status=verified ONLY if score>=85. Be specific — reference actual content from the notes and sources.'
+            ].join('\n');
+            const rawVerify = await callGroqChatWithRetry(
+                [
+                    { role: 'system', content: 'You are an academic fact-checker. Compare student notes against real-world sources. Return ONLY valid JSON. Be specific, honest, and reference actual note content.' },
+                    { role: 'user', content: verifyPrompt }
+                ],
+                { temperature: 0.1, maxTokens: 1600 },
+                { retries: 1, backoffMs: 1500 }
+            );
+            const parsed = parseJsonObjectFromModelResponse(rawVerify, 'verification report');
+            if (typeof parsed.score === 'number') {
+                parsed.status = parsed.score >= 85 ? 'verified' : 'partial';
+            }
+            verifyResult = normalizeVerificationReport(parsed, {
+                sources: (tavilyResult && tavilyResult.sources) || [],
+                evidenceNote: toCleanText(tavilyResult && tavilyResult.evidenceNote)
+            });
+        } catch (groqErr) {
+            console.warn('[verify-notes] Groq failed, using heuristic fallback:', groqErr.message);
+            verifyResult = buildVerificationFallback(topic, notesContent, tavilyResult);
+        }
+        res.json(verifyResult);
     } catch (err) {
         console.error('[verify-notes]', err.message);
         res.status(500).json({ error: err.message });
@@ -6696,32 +6880,45 @@ Rules:
 - Aim for notes that could earn a 90-plus score on a strict Tavily verification by being accurate, complete, clear, and sufficiently deep.
 - Do not mention verification, scores, Tavily, Groq, or provider limits inside the notes.
 - If the report shows uncertainty, rewrite cautiously instead of inventing facts.
-- Return only valid JSON with this exact shape:
+- Do NOT reproduce the previous notes verbatim. Write genuinely new, improved content.
+- Include all 5 sections with conceptual headings. Target score: 85+.
+- Return ONLY valid JSON with this exact shape (no markdown fences):
 {
   "notes": {
-    "summary": "string",
-    "keyPoints": ["string"],
+    "summary": "4-6 sentence overview",
+    "keyPoints": ["specific point 1", "specific point 2", "specific point 3", "specific point 4", "specific point 5", "specific point 6"],
     "sections": [
-      { "heading": "string", "content": "string" }
+      { "heading": "What TOPIC Is", "content": "2-4 sentences" },
+      { "heading": "Core Concepts", "content": "2-4 sentences" },
+      { "heading": "How It Works", "content": "2-4 sentences" },
+      { "heading": "Practical Applications", "content": "2-4 sentences" },
+      { "heading": "Key Benefits", "content": "2-4 sentences" }
     ]
-  }
-}`;
+  },
+  "mindmap": { "center": "TOPIC", "branches": [{ "label": "...", "color": "#7c5cfc", "subnodes": ["s1","s2","s3"] }] },
+  "flashcards": [{ "question": "Q?", "answer": "2-3 sentence answer." }],
+  "quiz": [{ "question": "Q?", "options": ["A","B","C","D"], "correct": 0 }]
+}` ;
 
         const rawImprovedNotes = await callGroqChatWithRetry(
             [
                 {
                     role: 'system',
-                    content: 'You improve study notes based on verification feedback and Tavily evidence only. Return valid JSON only, never repeat previously flagged mistakes, and optimize for accurate, complete, high-quality notes grounded in the evidence.'
+                    content: 'You are an expert educator rewriting weak study notes. You MUST fix every issue listed in the verification report. You MUST NOT reproduce the previous notes verbatim — write genuinely improved content grounded in the Tavily sources. Return ONLY valid JSON. No markdown fences.'
                 },
                 { role: 'user', content: promptText }
             ],
-            { temperature: 0.15, maxTokens: 1400 },
-            { retries: 1, backoffMs: 1250 }
+            { temperature: 0.35, maxTokens: 3200 },
+            { retries: 2, backoffMs: 1500 }
         );
 
-        const parsedImprovedNotes = parseJsonObjectFromModelResponse(rawImprovedNotes, 'improved notes');
-        const notes = normalizeNotesPayload(parsedImprovedNotes, topic);
-        res.json({ notes, providerLimited: false, fallback: false });
+        const parsedImproved = parseJsonObjectFromModelResponse(rawImprovedNotes, 'improved notes');
+        const notes = normalizeNotesPayload(parsedImproved.notes || parsedImproved, topic);
+        const improvedResult = { notes, providerLimited: false, fallback: false };
+        if (parsedImproved.mindmap) improvedResult.mindmap = parsedImproved.mindmap;
+        if (Array.isArray(parsedImproved.flashcards)) improvedResult.flashcards = parsedImproved.flashcards;
+        if (Array.isArray(parsedImproved.quiz)) improvedResult.quiz = parsedImproved.quiz;
+        res.json(improvedResult);
     } catch (err) {
         console.error('[regenerate-notes-with-feedback]', err.message);
         if (isGroqRateLimitError(err) || /Could not parse improved notes JSON response|Groq returned an empty response/i.test(String(err && err.message || ''))) {
@@ -6750,4 +6947,3 @@ if (!global.__skillswapServerStarted) {
         }
     });
 }
-

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%237c5cfc'/%3E%3Ctext x='32' y='40' font-size='30' text-anchor='middle' fill='white'%3E%F0%9F%A4%96%3C/text%3E%3C/svg%3E"/>
@@ -3700,6 +3700,16 @@ async function regenerateImprovedNotes() {
     if (!resp.ok || data.error) throw new Error(data.error || ('Improved note regeneration failed (' + resp.status + ')'));
 
     lastAiData.notes = normalizeNotesData(data.notes, topic);
+    // Update mindmap/flashcards/quiz if Groq returned improved versions
+    if (data.mindmap && Array.isArray(data.mindmap.branches) && data.mindmap.branches.length) {
+      lastAiData.mindmap = data.mindmap;
+    }
+    if (Array.isArray(data.flashcards) && data.flashcards.length) {
+      lastAiData.flashcards = data.flashcards;
+    }
+    if (Array.isArray(data.quiz) && data.quiz.length) {
+      lastAiData.quiz = data.quiz;
+    }
     delete lastAiData.verification;
     lastAiData.notesImprovementContext = {
       topic: topic,
@@ -3711,8 +3721,9 @@ async function regenerateImprovedNotes() {
     };
     delete lastAiData._savedId;
     refreshAiActionButtons();
+    renderAiOutput(lastAiData, currentAiTab);
     setActiveAiTab('notes');
-    showToast('✨', 'Notes Improved', 'The notes were regenerated using the latest verification feedback.');
+    showToast('✨', 'Notes Improved', 'Notes, mind map, flashcards and quiz have all been improved using Tavily + Groq feedback.');
   } catch (e) {
     hideLoader();
     console.error('Improved note regeneration error:', e);
@@ -4933,13 +4944,13 @@ function sortSessionsList(items) {
   });
 }
 async function loadSessions(uid, userMap) {
-  const snap = await getDocs(query(collection(db,'sessions'),where('participants','array-contains',uid)));
+  const snap = await getDocs(query(collection(db,'sessions'),where('participants','array-contains',uid),limit(20)));
   const sessions = [];
   snap.forEach(item => { const d={...item.data(),id:item.id}; sessions.push(formatSessionDoc(d,userMap,uid)); });
   return sortSessionsList(sessions);
 }
 async function loadNotifications(uid) {
-  const snap = await getDocs(query(collection(db,'notifications'),where('uid','==',uid)));
+  const snap = await getDocs(query(collection(db,'notifications'),where('uid','==',uid),limit(20)));
   const notes = [];
   snap.forEach(item => {
     const d = item.data(), created = toJsDate(d.createdAt);
@@ -5014,7 +5025,7 @@ async function loadAcceptedPartners(uid, userMap) {
 // ── CREDIT TRANSACTIONS ────────────────────────────────────────
 async function loadTransactions(uid, limitCount = 20) {
   try {
-    const snap = await getDocs(query(collection(db,'transactions'),where('uid','==',uid)));
+    const snap = await getDocs(query(collection(db,'transactions'),where('uid','==',uid),limit(30)));
     const transactions = [];
     snap.forEach(item => {
       const d = item.data();
@@ -5076,27 +5087,6 @@ async function loadConversations(uid) {
       return (tb ? tb.getTime() : 0) - (ta ? ta.getTime() : 0);
     });
     return normalizedConversations;
-    const snap = await getDocs(query(collection(db,'conversations'),where('participants','array-contains',uid)));
-    const conversations = [];
-    snap.forEach(item => {
-      const d = item.data();
-      const otherUid = d.participants.find(p => p !== uid);
-      const otherName = d.participantNames?.[otherUid] || 'User';
-      conversations.push({
-        id: item.id, otherUid, name: otherName,
-        emoji: '👤',
-        preview: d.lastMessage?.text || 'No messages yet',
-        unread: d.unreadCounts?.[uid] || 0,
-        online: false,
-        swap: d.swapContext || 'SkillSwap',
-        lastActivityAt: d.lastActivityAt
-      });
-    });
-    conversations.sort(function(a, b) {
-      const ta = toJsDate(a.lastActivityAt); const tb = toJsDate(b.lastActivityAt);
-      return (tb ? tb.getTime() : 0) - (ta ? ta.getTime() : 0);
-    });
-    return conversations;
   } catch(e) { console.error('loadConversations error:',e); return []; }
 }
 
@@ -5127,7 +5117,7 @@ function subscribeToConversationMessages(conversationId) {
   stopConversationMessageSubscription();
   if (!conversationId) return;
   activeMessagesUnsub = onSnapshot(
-    query(collection(db,'conversations',conversationId,'messages'), orderBy('timestamp','asc'), limit(200)),
+    query(collection(db,'conversations',conversationId,'messages'), orderBy('timestamp','asc'), limit(50)),
     function(snap) {
       const liveMessages = [];
       snap.forEach(function(item) {
@@ -6214,7 +6204,7 @@ function setupRealtimeListeners(uid) {
   unsubscribers.push(unsubNotifications);
 
   const unsubTransactions = onSnapshot(
-    query(collection(db,'transactions'),where('uid','==',uid)),
+    query(collection(db,'transactions'),where('uid','==',uid),limit(30)),
     function(snap) {
       const transactions = [];
       snap.forEach(function(item) {
@@ -6243,7 +6233,7 @@ function setupRealtimeListeners(uid) {
   unsubscribers.push(unsubTransactions);
 
   const unsubSavedMaterials = onSnapshot(
-    query(collection(db,'savedMaterials'),where('uid','==',uid)),
+    query(collection(db,'savedMaterials'),where('uid','==',uid),limit(10)),
     function(snap) {
       const materials = [];
       snap.forEach(function(item) {
@@ -6260,7 +6250,7 @@ function setupRealtimeListeners(uid) {
   unsubscribers.push(unsubSavedMaterials);
 
   const unsubSessions = onSnapshot(
-    query(collection(db,'sessions'),where('participants','array-contains',uid)),
+    query(collection(db,'sessions'),where('participants','array-contains',uid),limit(20)),
     function(snap) {
       const sessions = [];
       snap.forEach(function(item) {
@@ -6275,14 +6265,28 @@ function setupRealtimeListeners(uid) {
   );
   unsubscribers.push(unsubSessions);
 
-  // Real-time incoming requests (fetch all for teacher, filter in JS to avoid index requirement)
+  // Snap variables for accepted-partners cross-referencing (declared before listeners to avoid temporal dead zone)
+  let acceptedTeacherSnap = null;
+  let acceptedStudentSnap = null;
+
+  // Merged listener: handles incoming requests display AND accepted-partners tracking
+  // (was two identical lessonRequests/teacherUid queries — now one)
   const unsubRequests = onSnapshot(
     query(collection(db,'lessonRequests'),where('teacherUid','==',uid)),
     async (snap) => {
+      // --- Part 1: update accepted-partners state ---
+      acceptedTeacherSnap = snap;
+      refreshAcceptedPartnersFromSnapshots([
+        { snap: acceptedTeacherSnap, source: 'lessonRequests' },
+        { snap: acceptedStudentSnap, source: 'lessonRequests' },
+        { snap: acceptedTeacherConnectionSnap, source: 'lessonConnections' },
+        { snap: acceptedStudentConnectionSnap, source: 'lessonConnections' }
+      ]);
+      // --- Part 2: show pending incoming requests ---
       const reqs = [];
       snap.forEach(item => {
         const d = {...item.data(), id:item.id};
-        if (d.status !== 'pending') return; // Filter pending only in JS
+        if (d.status !== 'pending') return;
         const student = d.studentUid ? state.userMap[d.studentUid] : null;
         const created = toJsDate(d.createdAt);
         reqs.push({
@@ -6304,27 +6308,9 @@ function setupRealtimeListeners(uid) {
       window.renderIncomingRequests(visibleRequests);
       if(document.getElementById('statSwaps')) document.getElementById('statSwaps').textContent = String(visibleRequests.length);
     },
-    (error) => {
-      console.error('Incoming requests listener error:', error);
-    }
+    (error) => { console.error('Incoming requests listener error:', error); }
   );
   unsubscribers.push(unsubRequests);
-
-  let acceptedTeacherSnap = null;
-  let acceptedStudentSnap = null;
-  const unsubAcceptedAsTeacher = onSnapshot(
-    query(collection(db,'lessonRequests'),where('teacherUid','==',uid)),
-    function(snap) {
-      acceptedTeacherSnap = snap;
-      refreshAcceptedPartnersFromSnapshots([
-        { snap: acceptedTeacherSnap, source: 'lessonRequests' },
-        { snap: acceptedStudentSnap, source: 'lessonRequests' },
-        { snap: acceptedTeacherConnectionSnap, source: 'lessonConnections' },
-        { snap: acceptedStudentConnectionSnap, source: 'lessonConnections' }
-      ]);
-    }
-  );
-  unsubscribers.push(unsubAcceptedAsTeacher);
 
   const unsubAcceptedAsStudent = onSnapshot(
     query(collection(db,'lessonRequests'),where('studentUid','==',uid)),
@@ -6756,4 +6742,3 @@ onAuthStateChanged(auth, async function(user) {
 </script>
 </body>
 </html>
-
