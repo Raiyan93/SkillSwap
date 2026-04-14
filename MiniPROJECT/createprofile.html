@@ -18,6 +18,11 @@ nav ul li a{color:rgba(255,255,255,.9);text-decoration:none;font-size:.93rem;fon
 nav ul li a:hover{color:#60a5fa;}
 .btn-signin{background:linear-gradient(135deg,#3b82f6,#7c3aed);color:#fff;border:none;padding:9px 24px;border-radius:12px;font-size:.9rem;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;text-decoration:none;display:inline-block;}
 main{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:110px 24px 100px;}
+body.embedded-edit{overflow-y:auto}
+body.embedded-edit header,body.embedded-edit .page-header,body.embedded-edit .stepper,body.embedded-edit .server-notice,body.embedded-edit .verify-type-tabs,body.embedded-edit .verify-input-section,body.embedded-edit #verifyBtn,body.embedded-edit #aiResultBox,body.embedded-edit .notice[data-verification-only="true"]{display:none!important}
+body.embedded-edit main{max-width:none;margin:0;padding:0}
+body.embedded-edit .form-card{border-radius:20px;padding:28px;animation:none}
+body.embedded-edit #step-3{display:none!important}
 .page-header{text-align:center;margin-bottom:48px;animation:fadeUp .6s ease both;}
 .page-header h1{font-family:'Syne',sans-serif;font-size:clamp(2rem,5vw,3rem);font-weight:800;line-height:1.1;margin-bottom:14px;letter-spacing:-1px;}
 .page-header h1 span{background:linear-gradient(135deg,var(--purple-light),var(--blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
@@ -293,10 +298,7 @@ main{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:110px 24p
       <div class="section-title">🔍 Skill Verification</div>
       <div class="section-subtitle">Verify your skills with AI — choose the method that best fits you.</div>
 
-      <div class="server-notice">
-        <span>⚡</span>
-        <span>Verification calls your local backend server (<code>localhost:5000</code>). Make sure <code>node server.js</code> is running. Skipping is allowed — you can verify later from your dashboard.</span>
-      </div>
+  
 
       <div class="field">
         <label>Your Expertise Statement</label>
@@ -340,7 +342,7 @@ main{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:110px 24p
         </div>
         <div class="notice" style="margin-bottom:16px;">
           <span class="icon">💡</span>
-          <span>The AI will scan your public repositories, languages used, commit history, project descriptions, and topics to verify your claimed skills. No bio code required.</span>
+          <span>The AI will scan your public repositories, languages used, commit history, project descriptions, and topics to verify your claimed skills.</span>
         </div>
       </div>
 
@@ -478,7 +480,7 @@ main{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:110px 24p
     <!-- ══ STEP 5: REVIEW ══ -->
     <div class="form-section" id="step-5">
       <div class="section-title">✅ Review Your Profile</div>
-      <div class="section-subtitle">Everything good? Save and run AI verification.</div>
+    
       <div style="background:linear-gradient(135deg,rgba(123,92,250,.08),rgba(79,172,254,.06));border:1px solid var(--border);border-radius:20px;padding:36px 28px;margin-bottom:28px;">
         <div class="summary-avatar"><span id="summaryEmoji">🧑</span><img id="summaryImg" /></div>
         <div class="summary-name" id="summaryName">Your Name</div>
@@ -491,13 +493,10 @@ main{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:110px 24p
           <div class="summary-block"><h5>Availability</h5><p style="font-size:.83rem;" id="summaryAvailability">—</p></div>
         </div>
       </div>
-      <div class="notice">
-        <span class="icon">🤖</span>
-        <span>After saving, you'll be taken to the <strong>AI Verification screen</strong> — it analyzes your GitHub repos, code quality, and uses Gemini AI to verify your skills. You'll see full results before continuing.</span>
-      </div>
+      
       <div class="actions">
         <button class="btn-back" onclick="goToStep(4)">← Back</button>
-        <button class="btn-finish" id="finishBtn" onclick="finish()">🚀 Save & Verify My Skills</button>
+        <button class="btn-finish" id="finishBtn" onclick="finish()">🚀 Save </button>
       </div>
     </div>
   </div>
@@ -521,8 +520,15 @@ let currentUser=null,profilePhotoFile=null;
 const getStoredCertificateFiles=()=>verificationState.certificateFiles;
 const setStoredCertificateFiles=next=>(verificationState.certificateFiles=next);
 const getCurrentVerifyUploads=()=>verificationState.currentVerifyCertUploads;
-let isEditMode = new URLSearchParams(window.location.search).get('mode') === 'edit';
-let isReverifyMode = new URLSearchParams(window.location.search).get('mode') === 'reverify';
+const queryParams = new URLSearchParams(window.location.search);
+let isEditMode = queryParams.get('mode') === 'edit';
+let isReverifyMode = queryParams.get('mode') === 'reverify';
+const isEmbeddedEditMode = isEditMode && queryParams.get('embedded') === '1';
+const DEFAULT_STATS = {averageRating:0,totalRatings:0,teacherAverageRating:0,teacherTotalRatings:0,learnerAverageRating:0,learnerTotalRatings:0,sessionsTaught:0,sessionsCompleted:0,paidSessionsTaught:0,completionRate:0,ratingsBreakdown:{knowledge:0,teaching:0,communication:0}};
+
+if (isEmbeddedEditMode) {
+  document.body.classList.add('embedded-edit');
+}
 
 onAuthStateChanged(auth,async(user)=>{
   if(!user){window.location.href='Registration.html';return;}
@@ -562,8 +568,12 @@ function loadExistingProfile(data) {
 
   // Links
   if(data.links){
-    if(document.getElementById('githubURL')) document.getElementById('githubURL').value = data.links.github || '';
-    if(document.getElementById('linkedinURL')) document.getElementById('linkedinURL').value = data.links.linkedin || '';
+    const githubValue = data.links.github || '';
+    const linkedinValue = data.links.linkedin || '';
+    if(document.getElementById('githubURL')) document.getElementById('githubURL').value = githubValue;
+    if(document.getElementById('githubUsername')) document.getElementById('githubUsername').value = githubValue.replace(/^https?:\/\/(?:www\.)?github\.com\//i,'').replace(/^@/,'');
+    if(document.getElementById('linkedinURL')) document.getElementById('linkedinURL').value = linkedinValue;
+    if(document.getElementById('linkedinUsername')) document.getElementById('linkedinUsername').value = linkedinValue.replace(/^https?:\/\/(?:www\.)?linkedin\.com\/in\//i,'').replace(/^@/,'');
     if(document.getElementById('portfolioURL')) document.getElementById('portfolioURL').value = data.links.portfolio || '';
     if(document.getElementById('twitterUsername')) {
       const tw = data.links.twitter || '';
@@ -616,12 +626,28 @@ function loadExistingProfile(data) {
   }
 
   // Update page title for edit mode
-  const pageTitle = document.querySelector('.page-title');
-  if(pageTitle) pageTitle.textContent = isReverifyMode ? 'Re-verify Your Skills' : 'Edit Your Profile';
+  const headerTitle = document.querySelector('.page-header h1');
+  const headerSubtitle = document.querySelector('.page-header p');
+  if(headerTitle) headerTitle.innerHTML = isReverifyMode ? 'Re-verify Your <span>Skills</span>' : 'Edit Your <span>Profile</span>';
+  if(headerSubtitle) headerSubtitle.textContent = isReverifyMode
+    ? 'Refresh your verification details while keeping the rest of your profile.'
+    : 'Update your profile details and save them back to SkillSwap.';
 
   // If reverify mode, jump to verification step
   if(isReverifyMode){
     goToStep(4);
+  } else if (isEmbeddedEditMode) {
+    const finishBtn = document.getElementById('finishBtn');
+    if (finishBtn) finishBtn.innerHTML = '💾 Save Changes';
+    const step2Next = document.querySelector('#step-2 .btn-next');
+    if (step2Next) {
+      step2Next.setAttribute('onclick', 'goToStep(4)');
+      step2Next.textContent = 'Next: Availability →';
+    }
+    const step4Back = document.querySelector('#step-4 .btn-back');
+    if (step4Back) step4Back.setAttribute('onclick', 'goToStep(2)');
+    const step4Next = document.querySelector('#step-4 .btn-next');
+    if (step4Next) step4Next.textContent = 'Next: Review →';
   }
 }
 window.loadExistingProfile = loadExistingProfile;
@@ -752,7 +778,9 @@ window.finish=async function(){
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Uploading...';
 
   try{
-    let photoURL=currentUser.photoURL||'';
+    const existingSnap = await getDoc(doc(db,'users',currentUser.uid));
+    const existingData = existingSnap.exists() ? (existingSnap.data() || {}) : {};
+    let photoURL=(existingData && existingData.photoURL) || currentUser.photoURL || '';
     if(profilePhotoFile){
       btn.innerHTML='<span class="spinner"></span>Uploading photo...';
       try{
@@ -764,9 +792,10 @@ window.finish=async function(){
       }catch(e){console.error('Photo upload failed:',e);}
     }
 
-    const certificateURLs=[];
+    let certificateURLs=Array.isArray(existingData.certificates) ? existingData.certificates.slice() : [];
     const storedCertificateFiles=getStoredCertificateFiles();
     if(storedCertificateFiles.length>0){
+      certificateURLs=[];
       for(let i=0;i<storedCertificateFiles.length;i++){
         const{file,itemEl}=storedCertificateFiles[i],stEl=itemEl.querySelector('.cert-status');
         stEl.textContent='⬆️ Uploading...';stEl.className='cert-status uploading';
@@ -787,7 +816,12 @@ window.finish=async function(){
     const ai = window._lastAIResult;
     let verificationStatus, verifiedSkillsList, verificationScore, verificationMethod;
 
-    if(!ai || ai.status==='skipped' || !ai.score){
+    if(isEditMode){
+      verificationStatus = existingData.verification && existingData.verification.status ? existingData.verification.status : 'unverified';
+      verifiedSkillsList = existingData.verification && Array.isArray(existingData.verification.confirmedSkills) ? existingData.verification.confirmedSkills : [];
+      verificationScore = existingData.verification && existingData.verification.score ? existingData.verification.score : 0;
+      verificationMethod = existingData.verification && existingData.verification.method ? existingData.verification.method : 'skipped';
+    } else if(!ai || ai.status==='skipped' || !ai.score){
       verificationStatus='unverified';verifiedSkillsList=[];verificationScore=0;verificationMethod='skipped';
     } else if(ai.score >= 60 && ai.verifiedSkills.length > 0 && ai.ownershipVerified !== false){
       verificationStatus='verified';verifiedSkillsList=ai.verifiedSkills;verificationScore=ai.score;verificationMethod=ai.method;
@@ -798,6 +832,7 @@ window.finish=async function(){
     }
 
     await setDoc(doc(db,'users',currentUser.uid),{
+      ...existingData,
       uid:currentUser.uid,
       fullName:(get('firstName')+' '+get('lastName')).trim(),
       firstName:get('firstName'),lastName:get('lastName'),
@@ -805,7 +840,7 @@ window.finish=async function(){
       university:get('university'),fieldOfStudy:get('fieldOfStudy'),year:get('year'),
       links:{
         github:finalGithubURL,
-        linkedin:get('linkedinURL'),
+        linkedin:get('linkedinURL') || (get('linkedinUsername') ? 'https://linkedin.com/in/'+get('linkedinUsername').replace(/^@/,'') : ''),
         portfolio:finalPortfolio,
         twitter:get('twitterUsername')?'https://twitter.com/'+get('twitterUsername').replace(/^@/,''):''
       },
@@ -813,20 +848,26 @@ window.finish=async function(){
         toTeach:skillsToTeach,toLearn:skillsToLearn,
         teaching:{style:get('teachingStyle'),language:get('sessionLanguage'),statement:get('expertiseStatement')}
       },
-      verification:{
-        status:verificationStatus,score:verificationScore,method:verificationMethod,
-        date:verificationStatus!=='unverified'?serverTimestamp():null,
-        ownershipConfirmed:ai?(ai.ownershipVerified!==false):false,
-        confirmedSkills:verifiedSkillsList,
-        pendingSkills:ai?ai.partialSkills:[],
-        rejectedSkills:ai?ai.unverifiedSkills:[],
-        scoreBreakdown:ai?ai.scoreBreakdown:null,
-        summary:ai?ai.reasoning:'',
-        cloneWarning:ai?ai.cloneWarning:false,
-        nameMismatchCount:ai?ai.nameMismatchCount:0,
-        // NEW: store cert link if used
-        certLinkUsed:ai&&ai.method==='certlink'?(get('certLinkURL')||''):'',
-      },
+      verification:isEditMode
+        ? (existingData.verification || {
+            status:verificationStatus,
+            score:verificationScore,
+            method:verificationMethod,
+            confirmedSkills:verifiedSkillsList
+          })
+        : {
+            status:verificationStatus,score:verificationScore,method:verificationMethod,
+            date:verificationStatus!=='unverified'?serverTimestamp():null,
+            ownershipConfirmed:ai?(ai.ownershipVerified!==false):false,
+            confirmedSkills:verifiedSkillsList,
+            pendingSkills:ai?ai.partialSkills:[],
+            rejectedSkills:ai?ai.unverifiedSkills:[],
+            scoreBreakdown:ai?ai.scoreBreakdown:null,
+            summary:ai?ai.reasoning:'',
+            cloneWarning:ai?ai.cloneWarning:false,
+            nameMismatchCount:ai?ai.nameMismatchCount:0,
+            certLinkUsed:ai&&ai.method==='certlink'?(get('certLinkURL')||''):'',
+          },
       certificates:certificateURLs,
       availability:{
         days:Array.from(document.querySelectorAll('.day-btn.selected')).map(b=>b.dataset.day),
@@ -834,19 +875,24 @@ window.finish=async function(){
         sessionDuration:get('sessionDuration'),sessionsPerWeek:get('sessionsPerWeek'),
         meetingPreference:get('meetingPreference'),timeZone:get('timeZone')
       },
-      creditBalance:50,
-      stats:{averageRating:0,totalRatings:0,teacherAverageRating:0,teacherTotalRatings:0,learnerAverageRating:0,learnerTotalRatings:0,sessionsTaught:0,sessionsCompleted:0,paidSessionsTaught:0,completionRate:0,ratingsBreakdown:{knowledge:0,teaching:0,communication:0}},
+      creditBalance:typeof existingData.creditBalance === 'number' ? existingData.creditBalance : 50,
+      stats:existingData.stats || DEFAULT_STATS,
       profileCompleted:true,
-      createdAt:serverTimestamp(),updatedAt:serverTimestamp()
+      createdAt:existingData.createdAt || serverTimestamp(),
+      updatedAt:serverTimestamp()
     });
 
     console.log('[Profile] Saved. Going to verification page...');
-    window.location.href='dashboard.html';
+    if (isEmbeddedEditMode && window.parent && window.parent !== window) {
+      window.parent.postMessage({ type:'skillswap-profile-saved' }, '*');
+    } else {
+      window.location.href='dashboard.html';
+    }
 
   }catch(err){
     console.error('Save error:',err);
     showError('Failed to save profile: '+err.message);
-    btn.disabled=false;btn.innerHTML='🚀 Save & Verify My Skills';
+    btn.disabled=false;btn.innerHTML=isEditMode?'💾 Save Changes':'🚀 Save ';
   }
 };
 </script>
@@ -858,6 +904,8 @@ window.aiVerificationStatus='skipped';window.aiConfidenceScore=0;
 window._lastAIResult=null;
 let _currentVerifyType='technical';
 let _profileFirstName='',_profileLastName='';
+const _createProfileQuery = new URLSearchParams(window.location.search);
+const isEmbeddedEditMode = _createProfileQuery.get('mode') === 'edit' && (_createProfileQuery.get('embedded') === '1' || _createProfileQuery.get('embeddedEdit') === '1');
 function getVerificationState(){
   return window.__verificationState||(window.__verificationState={certificateFiles:[],currentVerifyCertUploads:{}});
 }
@@ -936,12 +984,15 @@ function buildSummary(){
 
 window.goToStep=function(step){
   if(window.hideError)window.hideError();
+  if (isEmbeddedEditMode && step === 3) step = 4;
   if(step===5)buildSummary();
   document.querySelectorAll('.form-section').forEach(s=>s.classList.remove('active'));
   document.getElementById('step-'+step).classList.add('active');
-  document.querySelectorAll('.step').forEach(s=>{const n=parseInt(s.dataset.step);s.classList.remove('active','done');if(n<step)s.classList.add('done');if(n===step)s.classList.add('active');s.querySelector('.step-circle').textContent=n<step?'✓':n;});
-  for(let i=1;i<=4;i++){const l=document.getElementById('line-'+i);if(l)l.classList.toggle('done',i<step);}
-  document.getElementById('progressBar').style.width=(step/5*100)+'%';
+  if (!isEmbeddedEditMode) {
+    document.querySelectorAll('.step').forEach(s=>{const n=parseInt(s.dataset.step);s.classList.remove('active','done');if(n<step)s.classList.add('done');if(n===step)s.classList.add('active');s.querySelector('.step-circle').textContent=n<step?'✓':n;});
+    for(let i=1;i<=4;i++){const l=document.getElementById('line-'+i);if(l)l.classList.toggle('done',i<step);}
+    document.getElementById('progressBar').style.width=(step/5*100)+'%';
+  }
   window.scrollTo({top:0,behavior:'smooth'});
 };
 

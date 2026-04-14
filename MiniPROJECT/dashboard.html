@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%237c5cfc'/%3E%3Ctext x='32' y='40' font-size='30' text-anchor='middle' fill='white'%3E%F0%9F%A4%96%3C/text%3E%3C/svg%3E"/>
@@ -461,7 +461,7 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
       <div>
         <div class="search-label">Study Notes Library</div>
         <div style="color:var(--muted);font-size:.82rem;line-height:1.6;max-width:620px">
-          Saved Groq notes and notes shared by partners appear here. Teacher search now lives in the Explore tab.
+          Saved AI notes and notes shared by partners appear here. Teacher search now lives in the Explore tab.
         </div>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -540,7 +540,7 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
   <div class="topbar">
     <div class="topbar-left">
       <div class="greeting">AI Study <span>Tools</span> 🤖</div>
-      <div class="subgreeting">Generate mind maps, flashcards, quizzes and notes powered by Groq</div>
+      <div class="subgreeting">Generate mind maps, flashcards, quizzes and notes powered by the SkillSwap server</div>
     </div>
   </div>
 
@@ -550,7 +550,7 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
           <div class="dot" style="background:var(--cyan)"></div>🤖 AI Study Tools
           <span style="background:linear-gradient(135deg,#f97316,#ef4444);color:#fff;padding:3px 10px 3px 7px;border-radius:50px;margin-left:6px;font-weight:700;display:inline-flex;align-items:center;gap:5px">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 12A9 9 0 1 1 12 3" stroke="white" stroke-width="2.5" stroke-linecap="round"/><path d="M12 12h9" stroke="white" stroke-width="2.5" stroke-linecap="round"/></svg>
-            <span style="font-size:.65rem">Groq</span>
+            <span style="font-size:.65rem">Server AI</span>
           </span>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
@@ -567,12 +567,12 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
             <div id="aiPlaceholder" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:320px;gap:12px;text-align:center">
               <span style="font-size:3.5rem">🤖</span>
               <div style="font-weight:700;font-size:1.1rem">AI Study Tools</div>
-              <div style="color:var(--muted);font-size:.82rem;max-width:340px;line-height:1.6">Enter a topic and click <strong style="color:#fb923c">✨ Generate</strong> — Groq creates interactive mind maps, flowcharts, flashcard decks, and quizzes.</div>
+              <div style="color:var(--muted);font-size:.82rem;max-width:340px;line-height:1.6">Enter a topic and click <strong style="color:#fb923c">✨ Generate</strong> — SkillSwap creates interactive mind maps, flowcharts, flashcard decks, and quizzes.</div>
             </div>
             <div id="aiContent" style="display:none"></div>
             <div id="aiLoader" style="display:none;flex-direction:column;align-items:center;justify-content:center;height:320px;gap:14px">
               <div class="gemini-spinner"></div>
-              <div id="loaderMsg" style="font-size:.85rem;color:var(--muted)">⚡ Groq is thinking...</div>
+              <div id="loaderMsg" style="font-size:.85rem;color:var(--muted)">⚡ Server AI is thinking...</div>
             </div>
           </div>
         </div>
@@ -599,10 +599,7 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
               
             </div>
           </div>
-          <div style="background:rgba(249,115,22,0.06);border:1px solid rgba(249,115,22,0.15);border-radius:12px;padding:12px 14px">
-            <div style="font-size:.72rem;color:#fb923c;font-weight:700;margin-bottom:4px">⚡ Powered by Groq</div>
-            <div style="font-size:.75rem;color:var(--muted);line-height:1.5">Free API · no daily quota · Llama 3.3 70B. Click branches to expand/collapse.</div>
-          </div>
+        
           <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border2);border-radius:14px;padding:12px 14px">
             <div style="font-size:.7rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Saved & Shared Notes</div>
             <div id="aiLibraryList" style="display:flex;flex-direction:column;gap:8px"></div>
@@ -890,25 +887,6 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
   <div class="modal"><button class="modal-close" onclick="closeModal('matchModal')">✕</button><div id="matchModalContent"></div></div>
 </div>
 
-<!-- API KEY MODAL -->
-<div class="modal-overlay" id="apiKeyModal">
-  <div class="modal" style="max-width:440px">
-    <button class="modal-close" onclick="closeModal('apiKeyModal')">✕</button>
-    <div class="modal-title">🔑 Connect Groq API</div>
-    <div class="modal-sub">To use AI study tools like Mindmaps and Flashcards, please connect a free Groq API key (Llama 3.3).</div>
-    <div style="background:rgba(249,115,22,0.07);border:1px solid rgba(249,115,22,0.25);border-radius:12px;padding:14px 16px;font-size:.8rem;color:var(--text2);line-height:1.8;margin-bottom:18px">
-      <strong style="color:#fb923c">Get your free Groq key in 2 minutes:</strong><br>
-      1. Go to <a href="https://console.groq.com/keys" target="_blank" style="color:#fb923c;font-weight:600">console.groq.com/keys</a><br>
-      2. Sign up free — no credit card<br>
-      3. Click <strong>"Create API Key"</strong> → copy (starts with <code style="background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:4px;color:#fbbf24">gsk_</code>)<br>
-      4. Paste below ✅
-    </div>
-    <div class="field-m"><label>Groq API Key</label><input type="password" id="apiKeyInput" placeholder="gsk_..." style="font-family:monospace"/></div>
-    <button class="modal-btn primary" onclick="saveApiKey()" style="background:linear-gradient(135deg,#f97316,#ef4444);box-shadow:0 4px 16px rgba(249,115,22,0.35)">⚡ Connect Groq</button>
-    <button class="modal-btn secondary" onclick="closeModal('apiKeyModal')">Use Offline Mode</button>
-  </div>
-</div>
-
 <!-- ADD SKILL MODAL -->
 <div class="modal-overlay" id="addSkillModal">
   <div class="modal" style="max-width:440px">
@@ -921,6 +899,19 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
     </div>
     <button class="modal-btn primary" onclick="addSkillToRoadmap()">🗺️ Create Roadmap</button>
     <button class="modal-btn secondary" onclick="closeModal('addSkillModal')">Cancel</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="deleteRoadmapModal">
+  <div class="modal" style="max-width:430px">
+    <button class="modal-close" onclick="closeModal('deleteRoadmapModal')">✕</button>
+    <div style="text-align:center;margin-bottom:18px">
+      <div style="width:60px;height:60px;border-radius:18px;background:linear-gradient(135deg,#f87171,#ef4444);display:flex;align-items:center;justify-content:center;font-size:1.7rem;margin:0 auto 14px;box-shadow:0 8px 24px rgba(248,113,113,0.35)">🗑️</div>
+      <div class="modal-title">Delete Roadmap</div>
+      <div class="modal-sub" id="deleteRoadmapModalText">This will remove the roadmap from your dashboard.</div>
+    </div>
+    <button class="modal-btn primary" id="deleteRoadmapConfirmBtn" onclick="confirmDeleteRoadmap()" style="background:linear-gradient(135deg,#ef4444,#dc2626);box-shadow:0 4px 16px rgba(239,68,68,0.28)">Delete Roadmap</button>
+    <button class="modal-btn secondary" onclick="closeModal('deleteRoadmapModal')">Keep Roadmap</button>
   </div>
 </div>
 
@@ -1919,6 +1910,8 @@ function cloneRoadmap(data) {
   return JSON.parse(JSON.stringify(data || {}));
 }
 
+var pendingRoadmapDeleteKey = '';
+
 function syncLocalRoadmap(skillKey, roadmap) {
   window.ROADMAPS = window.ROADMAPS || {};
   window.ROADMAPS[skillKey] = cloneRoadmap(roadmap);
@@ -2053,18 +2046,44 @@ async function toggleWeekState(skillKey, weekIndex) {
 async function deleteRoadmapPrompt(skillKey) {
   var data = (window.ROADMAPS || {})[skillKey];
   var name = getRoadmapDisplayName(skillKey, data);
-  if (!window.confirm('Delete the ' + name + ' roadmap? This will remove it from your account.')) return;
+  pendingRoadmapDeleteKey = skillKey;
+  var msg = document.getElementById('deleteRoadmapModalText');
+  if (msg) msg.textContent = 'Delete the ' + name + ' roadmap? This will remove it from your account.';
+  closeModal('addSkillModal');
+  document.getElementById('deleteRoadmapModal').classList.add('show');
+}
+
+async function confirmDeleteRoadmap() {
+  var skillKey = pendingRoadmapDeleteKey;
+  if (!skillKey) return;
+  var data = (window.ROADMAPS || {})[skillKey];
+  var name = getRoadmapDisplayName(skillKey, data);
+  var btn = document.getElementById('deleteRoadmapConfirmBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Deleting...';
+    btn.style.opacity = '0.7';
+  }
   try {
     await window.deleteRoadmap(skillKey);
     removeLocalRoadmap(skillKey);
+    pendingRoadmapDeleteKey = '';
+    closeModal('deleteRoadmapModal');
     renderFullRoadmap();
     showToast('🗑️','Roadmap Deleted', name + ' was removed from your dashboard.');
   } catch (e) {
     console.error('Delete roadmap error:', e);
     showToast('⚠️','Delete Failed', e && e.message ? e.message : 'Could not delete that roadmap.');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Delete Roadmap';
+      btn.style.opacity = '1';
+    }
   }
 }
 window.deleteRoadmapPrompt = deleteRoadmapPrompt;
+window.confirmDeleteRoadmap = confirmDeleteRoadmap;
 
 // ═══════════════════════════════════════════════════════════════
 // MESSAGES
@@ -2981,20 +3000,8 @@ function showToast(icon, title, msg) {
 function hideToast() { document.getElementById('toast').classList.remove('show'); }
 
 // ═══════════════════════════════════════════════════════════════
-// API KEY (Groq)
 // ═══════════════════════════════════════════════════════════════
-var GROQ_KEY = localStorage.getItem('ss_groq_key') || 'backend-managed';
-
-function saveApiKey() {
-  var val = (document.getElementById('apiKeyInput')||{}).value.trim();
-  if (!val || !val.startsWith('gsk_')) { showToast('⚠️','Invalid Key','Groq keys start with gsk_'); return; }
-  GROQ_KEY = val; localStorage.setItem('ss_groq_key', val);
-  closeModal('apiKeyModal');
-  showToast('✅','Groq Connected!','AI study tools are now powered by Groq Llama 3.3.');
-}
-
-// ═══════════════════════════════════════════════════════════════
-// AI STUDY TOOLS (Groq)
+// AI STUDY TOOLS (Server)
 // ═══════════════════════════════════════════════════════════════
 var lastAiData = null; var currentAiTab = 'mindmap';
 var mmData={},mmCollapsed={},mmHovered=null,mmAnimFrame=null;
@@ -3022,6 +3029,13 @@ function cloneAiValue(value) {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 }
 
+function isVerificationOnlySectionHeading(heading) {
+  var normalized = String(heading || '').trim().toLowerCase();
+  return normalized === 'corrections to apply'
+    || normalized === 'missing concepts to add'
+    || normalized === 'verified takeaways';
+}
+
 function normalizeNotesData(notes, topic) {
   var base = buildSmartNotes(topic);
   var source = notes && typeof notes === 'object' ? notes : {};
@@ -3035,7 +3049,7 @@ function normalizeNotesData(notes, topic) {
         content: String(section && section.content || '').trim()
       };
     }).filter(function(section) {
-      return section.heading || section.content;
+      return (section.heading || section.content) && !isVerificationOnlySectionHeading(section.heading);
     }).slice(0, 8)
   };
 }
@@ -3121,7 +3135,7 @@ function hideLoader() { document.getElementById('aiLoader').style.display='none'
 async function generateAll() {
   var topic = (document.getElementById('aiTopicInput')||{}).value.trim();
   if (!topic) { showToast('⚠️','Topic Required','Enter a topic to study.'); return; }
-  showLoader('⚡ Groq is thinking...');
+  showLoader('Gathering verified sources and building study materials...');
   try {
     var prompt = 'Generate comprehensive study materials for the topic: "' + topic + '".\n\n' +
       'Return ONLY valid JSON with this exact structure (no markdown, no backticks):\n' +
@@ -3131,48 +3145,28 @@ async function generateAll() {
       '"quiz":[{"question":"Q?","options":["A","B","C","D"],"correct":0},{"question":"Q?","options":["A","B","C","D"],"correct":1},{"question":"Q?","options":["A","B","C","D"],"correct":2},{"question":"Q?","options":["A","B","C","D"],"correct":3}],' +
       '"notes":{"summary":"Overview of ' + topic + '.","keyPoints":["Point 1","Point 2","Point 3","Point 4"],"sections":[{"heading":"Introduction","content":"Content here."},{"heading":"Core Concepts","content":"Content here."},{"heading":"Applications","content":"Content here."}]}}';
 
-    var text = '';
-    if (GROQ_KEY && GROQ_KEY !== 'backend-managed') {
-      var resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+GROQ_KEY},
-        body: JSON.stringify({
-          model:'llama-3.3-70b-versatile',
-          messages:[
-            {role:'system',content:'You are a study material generator. Always respond with valid JSON only. No markdown, no backticks, no explanation.'},
-            {role:'user',content:prompt}
-          ],
-          temperature:0.4,
-          max_tokens:3000
-        })
-      });
-      var data = await resp.json();
-      if (!resp.ok || data.error) throw new Error((resp.status || '') + ' ' + (((data || {}).error || {}).message || (data || {}).error || 'Groq request failed'));
-      text = String(((data || {}).choices || [])[0] && data.choices[0].message ? data.choices[0].message.content : '').replace(/```json/gi,'').replace(/```/g,'').trim();
-    } else {
-      var backendResp = await fetch(getBackendUrl('/api/generate-notes'), {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ prompt: prompt })
-      });
-      var backendData = await backendResp.json();
-      if (!backendResp.ok || backendData.error) throw new Error((backendData || {}).error || ('Backend note generation failed (' + backendResp.status + ')'));
-      text = String((backendData || {}).result || '').replace(/```json/gi,'').replace(/```/g,'').trim();
-    }
-    lastAiData = normalizeGeneratedAiData(JSON.parse(text), topic);
+    var backendResp = await fetch(getBackendUrl('/api/generate-notes'), {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ prompt: prompt, topic: topic })
+    });
+    var backendData = await backendResp.json();
+    if (!backendResp.ok || backendData.error) throw new Error((backendData || {}).error || ('Backend note generation failed (' + backendResp.status + ')'));
+    var rawResult = (backendData || {}).result;
+    var parsedResult = (rawResult && typeof rawResult === 'object')
+      ? rawResult
+      : JSON.parse(String(rawResult || '').replace(/```json/gi,'').replace(/```/g,'').trim());
+
+    lastAiData = normalizeGeneratedAiData(parsedResult, topic);
     refreshAiActionButtons();
     renderAiOutput(lastAiData, currentAiTab);
   } catch(e) {
     hideLoader();
-    if (e.message && e.message.includes('401')) {
-      showToast('⚠️','Invalid Groq Key','Check your key at console.groq.com'); openApiKeyModal();
-    } else {
-      var t = topic.toLowerCase();
-      lastAiData = normalizeGeneratedAiData({ topic:topic, mindmap:{center:topic,branches:buildSmartMap(t)}, flowchart:buildSmartFlow(topic), flashcards:buildSmartCards(topic), quiz:buildSmartQuiz(topic), notes:buildSmartNotes(topic) }, topic);
-      refreshAiActionButtons();
-      renderAiOutput(lastAiData, currentAiTab);
-      showToast('⚡','Offline Mode','Using local AI templates. Add a Groq key for richer results.');
-    }
+    var t = topic.toLowerCase();
+    lastAiData = normalizeGeneratedAiData({ topic:topic, mindmap:{center:topic,branches:buildSmartMap(t)}, flowchart:buildSmartFlow(topic), flashcards:buildSmartCards(topic), quiz:buildSmartQuiz(topic), notes:buildSmartNotes(topic) }, topic);
+    refreshAiActionButtons();
+    renderAiOutput(lastAiData, currentAiTab);
+    showToast('⚡','Server AI Unavailable', e && e.message ? e.message : 'Using local AI templates right now.');
   }
 }
 function buildSmartMap(t){
@@ -3334,7 +3328,7 @@ function buildNotesHtml(data){
 function buildNotesVerificationHtml(data){
   var verification = data && data.verification ? data.verification : null;
   if(!verification){
-    return '<div style="padding:22px;border:1px dashed rgba(255,255,255,0.14);border-radius:16px;background:rgba(255,255,255,0.02);text-align:center;color:var(--muted)"><div style="font-size:2rem;margin-bottom:10px">✅</div><div style="font-weight:700;font-size:1rem;color:var(--text);margin-bottom:8px">No verification report yet</div><div style="font-size:.84rem;line-height:1.7;max-width:520px;margin:0 auto 16px">Run <strong style="color:#fb923c">Verify Notes</strong> to check Groq&rsquo;s notes against Tavily-backed evidence and get targeted improvement guidance.</div><button class="mm-btn" onclick="verifyNotes()" style="padding:10px 14px;font-size:.82rem">🔍 Verify Notes</button></div>';
+    return '<div style="padding:22px;border:1px dashed rgba(255,255,255,0.14);border-radius:16px;background:rgba(255,255,255,0.02);text-align:center;color:var(--muted)"><div style="font-size:2rem;margin-bottom:10px">✅</div><div style="font-weight:700;font-size:1rem;color:var(--text);margin-bottom:8px">No verification report yet</div><div style="font-size:.84rem;line-height:1.7;max-width:520px;margin:0 auto 16px">Run <strong style="color:#fb923c">Verify Notes</strong> to compare the notes against Tavily-backed evidence and get targeted improvement guidance.</div><button class="mm-btn" onclick="verifyNotes()" style="padding:10px 14px;font-size:.82rem">🔍 Verify Notes</button></div>';
   }
   var score = Number(verification.score || 0);
   var status = String(verification.status || 'partial');
@@ -3347,8 +3341,8 @@ function buildNotesVerificationHtml(data){
   var modeBorder = isFullVerification ? 'rgba(79,172,254,.3)' : 'rgba(245,158,11,.3)';
   var ninetyPlusNote = !isFullyVerified
     ? (isFullVerification
-        ? '90%+ requires a complete Tavily plus Groq verification with strong enough evidence to reach a fully verified result.'
-        : '90%+ requires a complete Tavily plus Groq verification. This score came from the fallback verifier because the full Groq-backed check was limited.')
+        ? '90%+ is only shown when the notes are strongly supported by the Tavily evidence and marked verified.'
+        : '90%+ is reserved for strongly supported Tavily-backed verification results.')
     : '';
   var scoreColor = score >= 90 ? 'var(--green)' : score >= 70 ? 'var(--orange)' : 'var(--red)';
   var statusColor = status === 'verified' ? 'var(--green)' : status === 'partial' ? 'var(--orange)' : 'var(--red)';
@@ -3515,7 +3509,7 @@ function openSavedMaterial(materialId) {
 
 function buildSavedMaterialsListHtml(materials) {
   if (!materials || !materials.length) {
-    return '<div style="padding:18px;border:1px dashed rgba(255,255,255,0.12);border-radius:14px;color:var(--muted);font-size:.82rem;line-height:1.6">No saved notes yet. Generate Groq notes, save them, and they will appear here. Shared notes from partners will also show up here.</div>';
+    return '<div style="padding:18px;border:1px dashed rgba(255,255,255,0.12);border-radius:14px;color:var(--muted);font-size:.82rem;line-height:1.6">No saved notes yet. Generate evidence-backed notes, save them, and they will appear here. Shared notes from partners will also show up here.</div>';
   }
 
   return materials.slice(0, 6).map(function(item) {
@@ -3595,7 +3589,7 @@ async function verifyNotes() {
 
   var btn = document.getElementById('verifyNotesBtn');
   if (btn) { btn.textContent = '⏳ Verifying...'; btn.disabled = true; btn.style.opacity = '0.6'; }
-  showToast('🔍', 'Verifying Notes...', 'Tavily and Groq are checking your study notes...');
+  showToast('🔍', 'Verifying Notes...', 'Tavily is checking your study notes against verified sources...');
 
   try {
     var notesContent = buildNotesVerificationPayload(lastAiData.notes, topic);
@@ -3619,7 +3613,7 @@ async function verifyNotes() {
     };
     refreshAiActionButtons();
     setActiveAiTab('notes-verification');
-    showToast('✅', 'Verification Complete', data.status === 'partial' ? 'Verification finished with limited external evidence.' : 'Tavily-backed verification is ready.');
+    showToast('✅', 'Verification Complete', data.status === 'partial' ? 'Verification finished with limited source coverage.' : 'Tavily-backed verification is ready.');
   } catch (e) {
     console.error('Verification error:', e);
     showToast('⚠️', 'Verification Failed', e.message || 'Could not verify notes.');
@@ -3631,7 +3625,7 @@ async function verifyNotes() {
 
 async function regenerateImprovedNotes() {
   if (!lastAiData || !lastAiData.notes || !lastAiData.verification) {
-    showToast('⚠️', 'Verify First', 'Run Notes Verification before asking Groq to improve the notes.');
+    showToast('⚠️', 'Verify First', 'Run Notes Verification before improving the notes.');
     return;
   }
   var topic = String(lastAiData.topic || '').trim();
@@ -3642,7 +3636,7 @@ async function regenerateImprovedNotes() {
 
   var btn = document.getElementById('regenerateImprovedNotesBtn');
   if (btn) { btn.textContent = '⏳ Improving Notes...'; btn.disabled = true; btn.style.opacity = '0.6'; }
-  showLoader('✨ Groq is improving your notes...');
+  showLoader('✨ Improving your notes...');
 
   try {
     var previousNotes = normalizeNotesData(lastAiData.notes, topic);
@@ -3677,7 +3671,7 @@ async function regenerateImprovedNotes() {
     delete lastAiData._savedId;
     refreshAiActionButtons();
     setActiveAiTab('notes');
-    showToast('✨', 'Notes Improved', 'Groq regenerated the notes using the latest verification feedback.');
+    showToast('✨', 'Notes Improved', 'The notes were regenerated using the latest verification feedback.');
   } catch (e) {
     hideLoader();
     console.error('Improved note regeneration error:', e);
@@ -4773,8 +4767,6 @@ window.updateMatchRequestPricing = updateMatchRequestPricing;
 function buildUserTags(user) {
   const tags = [];
   const v = user.verification||{}, h = user.humanVerification||{};
-  const badgeTier = user.teacherReputation && user.teacherReputation.badgeTier ? user.teacherReputation.badgeTier : 'none';
-  if (badgeTier !== 'none') tags.push(getBadgeLabel(badgeTier) + ' Badge');
   if (h.status==='verified') tags.push('Human Verified');
   if (v.status==='verified') tags.push('Verified');
   if (v.status==='partial')  tags.push('Partially Verified');
@@ -6720,80 +6712,7 @@ onAuthStateChanged(auth, async function(user) {
   }
 });
 
-/* Legacy duplicate verification block disabled.
-async function verifyNotes() {
-  if (!lastAiData) { showToast('⚠️', 'Nothing to Verify', 'Generate notes first, then click Verify Notes.'); return; }
-  var topic = lastAiData.topic || (document.getElementById('aiTopicInput') || {}).value || '';
-  if (!topic) { showToast('⚠️', 'No Topic', 'Generate notes for a topic first.'); return; }
-  
-  var btn = document.getElementById('verifyNotesBtn');
-  if (btn) { btn.textContent = '⏳ Verifying...'; btn.disabled = true; btn.style.opacity = '0.6'; }
-  showToast('🔍', 'Verifying Notes...', 'Groq is checking your study materials...');
-  var old = document.getElementById('verifyPanel');
-  if (old) old.remove();
-
-  try {
-    var notesContent = '';
-    if (lastAiData.notes) {
-      notesContent += 'Summary: ' + (lastAiData.notes.summary || '') + '\n\n';
-      notesContent += 'Key Points:\n' + (lastAiData.notes.keyPoints || []).map(p => '• ' + p).join('\n') + '\n\n';
-      notesContent += 'Sections:\n' + (lastAiData.notes.sections || []).map(s => s.heading + ': ' + s.content).join('\n') + '\n\n';
-    }
-    if (lastAiData.flashcards && lastAiData.flashcards.length) {
-      notesContent += 'Flashcards:\n' + lastAiData.flashcards.map(f => 'Q: ' + f.question + ' | A: ' + f.answer).join('\n') + '\n\n';
-    }
-
-    var resp = await fetch('http://localhost:5000/api/verify-notes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic: topic, notesContent: notesContent })
-    });
-
-    var data = await resp.json();
-    if (data.error) throw new Error(data.error);
-    
-    buildVerificationPanel(data, topic);
-    showToast('✅', 'Verification Complete', 'Groq has analyzed your notes.');
-  } catch (e) {
-    console.error('Verification error:', e);
-    showToast('⚠️', 'Verification Failed', e.message || 'Could not verify notes.');
-  } finally {
-    if (btn) { btn.innerHTML = '🔍 Verify Notes'; btn.disabled = false; btn.style.opacity = '1'; }
-  }
-}
-
-function buildVerificationPanel(verifData, topic) {
-  var old = document.getElementById('verifyPanel');
-  if (old) old.remove();
-  var panel = document.createElement('div');
-  panel.id = 'verifyPanel';
-  panel.style.marginTop = '16px';
-  panel.style.background = 'rgba(255,255,255,0.03)';
-  panel.style.border = '1px solid var(--border2)';
-  panel.style.borderRadius = '14px';
-  panel.style.padding = '16px';
-  var score = verifData.accuracyScore || 0;
-  var color = score >= 90 ? 'var(--green)' : score >= 70 ? 'var(--orange)' : 'var(--red)';
-  var html = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-                <div style="font-weight:700;font-size:.9rem;color:${color}">Verification Score: ${score}%</div>
-              </div>`;
-  if(verifData.corrections && verifData.corrections.length){
-    html += `<div style="font-size:.8rem;color:var(--text);margin-bottom:8px">Corrections:</div><ul style="padding-left:16px;font-size:.75rem;color:var(--muted);margin-bottom:12px">`;
-    verifData.corrections.forEach(c => html += `<li style="margin-bottom:4px">${c}</li>`);
-    html += `</ul>`;
-  } else {
-    html += `<div style="font-size:.75rem;color:var(--green);margin-bottom:12px">No major corrections needed!</div>`;
-  }
-  if(verifData.additionalContext){
-    html += `<div style="font-size:.8rem;color:var(--text);margin-bottom:4px">Extra Context:</div>
-             <div style="font-size:.75rem;color:var(--muted);background:rgba(255,255,255,0.02);padding:8px;border-radius:8px">${verifData.additionalContext}</div>`;
-  }
-  panel.innerHTML = html;
-  
-  var aiContent = document.getElementById('aiContent');
-  if(aiContent) { aiContent.insertBefore(panel, aiContent.firstChild); }
-}
-*/
 </script>
 </body>
 </html>
+
