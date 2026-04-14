@@ -6131,30 +6131,486 @@ app.listen(5000, () => {
     console.log(`🤖 Groq AI: ${process.env.GROQ_API_KEY ? 'Configured ✅' : 'NOT configured ❌'}`);
 });
 
-// --- AI NOTES ROUTES (GROQ) ---
+// --- AI NOTES ROUTES (GROQ + TAVILY) ---
+const STUDY_NOTES_GROQ_MODEL = 'llama-3.3-70b-versatile';
+
+function stripModelCodeFences(value) {
+    return String(value || '')
+        .replace(/```json/gi, '')
+        .replace(/```/g, '')
+        .trim();
+}
+
+function parseJsonObjectFromModelResponse(value, label) {
+    const cleaned = stripModelCodeFences(value);
+    try {
+        return JSON.parse(cleaned);
+    } catch (_err) {
+        const match = cleaned.match(/\{[\s\S]*\}/);
+        if (match) {
+            return JSON.parse(match[0]);
+        }
+        throw new Error(`Could not parse ${label} JSON response.`);
+    }
+}
+
+function toCleanText(value, fallback = '') {
+    if (value === null || value === undefined) return fallback;
+    if (typeof value === 'string') return value.trim();
+    return String(value).trim();
+}
+
+function toStringArray(value) {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set();
+    return value
+        .map(item => toCleanText(item))
+        .filter(Boolean)
+        .filter(item => {
+            const key = item.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+}
+
+function clampScore(value, fallback = 0) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return fallback;
+    return Math.max(0, Math.min(100, Math.round(numeric)));
+}
+
+function normalizeNotesPayload(rawNotes, topic) {
+    const notes = rawNotes && typeof rawNotes === 'object' && rawNotes.notes && typeof rawNotes.notes === 'object'
+        ? rawNotes.notes
+        : rawNotes;
+    const summary = toCleanText(notes && notes.summary, `Study notes for ${topic}.`);
+    const keyPoints = toStringArray(notes && notes.keyPoints).slice(0, 8);
+    const sections = Array.isArray(notes && notes.sections)
+        ? notes.sections
+            .map(section => ({
+                heading: toCleanText(section && section.heading),
+                content: toCleanText(section && section.content)
+            }))
+            .filter(section => section.heading || section.content)
+            .slice(0, 8)
+        : [];
+
+    return {
+        summary,
+        keyPoints,
+        sections
+    };
+}
+
+function normalizeVerificationReport(rawReport, options = {}) {
+    const report = rawReport && typeof rawReport === 'object' ? rawReport : {};
+    const accuracy = report.accuracy && typeof report.accuracy === 'object' ? report.accuracy : {};
+    const completeness = report.completeness && typeof report.completeness === 'object' ? report.completeness : {};
+    const clarity = report.clarity && typeof report.clarity === 'object' ? report.clarity : {};
+    const depth = report.depth && typeof report.depth === 'object' ? report.depth : {};
+    const sources = Array.isArray(options.sources) ? options.sources : [];
+    const hasEvidence = sources.length > 0;
+    const requestedScoreMode = toCleanText(
+        report.scoreMode || report.score_mode || options.scoreMode,
+        hasEvidence ? 'full' : 'fallback'
+    ).toLowerCase();
+    const scoreMode = requestedScoreMode === 'fallback' ? 'fallback' : 'full';
+
+    const accuracyIssues = toStringArray(accuracy.issues);
+    const accuracyStrengths = toStringArray(accuracy.strengths);
+    const completenessMissing = toStringArray(completeness.missing);
+    const completenessCovered = toStringArray(completeness.covered);
+    const corrections = toStringArray([]
+        .concat(report.corrections || [])
+        .concat(report.needs_correction || [])
+        .concat(accuracyIssues));
+    const missingConcepts = toStringArray([]
+        .concat(report.missingConcepts || [])
+        .concat(report.missing_concepts || [])
+        .concat(completenessMissing));
+    const verifiedFacts = toStringArray([]
+        .concat(report.verifiedFacts || [])
+        .concat(report.verified_facts || [])
+        .concat(accuracyStrengths));
+    const suggestions = toStringArray(report.suggestions);
+    const scoreFallback = Math.round((
+        clampScore(accuracy.score, 0)
+        + clampScore(completeness.score, 0)
+        + clampScore(clarity.score, 0)
+        + clampScore(depth.score, 0)
+    ) / 4);
+
+    let status = toCleanText(report.status, '').toLowerCase();
+    if (!['verified', 'partial', 'unavailable'].includes(status)) {
+        status = scoreMode === 'fallback'
+            ? (hasEvidence ? 'partial' : 'unavailable')
+            : (hasEvidence ? 'verified' : 'partial');
+    }
+    if (scoreMode === 'fallback' && status === 'verified') {
+        status = hasEvidence ? 'partial' : 'unavailable';
+    }
+    if (!hasEvidence && status === 'verified') {
+        status = scoreMode === 'full' ? 'partial' : 'unavailable';
+    }
+
+    let overview = toCleanText(report.overview || report.summary);
+    if (!overview) {
+        overview = hasEvidence
+            ? 'Verification completed against external Tavily evidence and Groq synthesis.'
+            : 'Verification completed with limited external evidence; treat the results as partial.';
+    }
+
+    let improvementPrompt = toCleanText(report.improvementPrompt || report.improvement_prompt);
+    if (!improvementPrompt) {
+        improvementPrompt = [
+            corrections.length ? `Correct these issues: ${corrections.join('; ')}.` : '',
+            missingConcepts.length ? `Add these missing concepts: ${missingConcepts.join('; ')}.` : '',
+            suggestions.length ? `Improve clarity and structure with these suggestions: ${suggestions.join('; ')}.` : '',
+            'Do not repeat previously flagged mistakes.'
+        ].filter(Boolean).join(' ');
+    }
+
+    const allowHighScores = scoreMode === 'full' && status === 'verified';
+    const overallScoreCap = allowHighScores ? 100 : status === 'unavailable' ? 69 : 89;
+    const metricScoreCap = allowHighScores ? 100 : status === 'unavailable' ? 74 : 89;
+
+    return {
+        status,
+        scoreMode,
+        score: Math.min(overallScoreCap, clampScore(report.score, scoreFallback)),
+        overview,
+        accuracy: {
+            score: Math.min(metricScoreCap, clampScore(accuracy.score, scoreFallback)),
+            issues: accuracyIssues,
+            strengths: accuracyStrengths
+        },
+        completeness: {
+            score: Math.min(metricScoreCap, clampScore(completeness.score, scoreFallback)),
+            missing: completenessMissing,
+            covered: completenessCovered
+        },
+        clarity: {
+            score: Math.min(metricScoreCap, clampScore(clarity.score, scoreFallback)),
+            feedback: toCleanText(clarity.feedback, hasEvidence
+                ? 'Clear structure overall, with room for tighter explanations where noted.'
+                : 'Clarity was judged with limited external evidence.')
+        },
+        depth: {
+            score: Math.min(metricScoreCap, clampScore(depth.score, scoreFallback)),
+            assessment: toCleanText(depth.assessment, hasEvidence
+                ? 'Depth was assessed against the available external evidence.'
+                : 'Depth was assessed cautiously because external evidence was limited.')
+        },
+        corrections,
+        missingConcepts,
+        verifiedFacts,
+        suggestions,
+        improvementPrompt,
+        sources,
+        checkedAt: new Date().toISOString(),
+        evidenceStatus: scoreMode === 'fallback' ? 'fallback' : (hasEvidence ? 'tavily-backed' : 'limited'),
+        evidenceNote: toCleanText(options.evidenceNote)
+    };
+}
+
+function isGroqRateLimitError(error) {
+    const message = String(error && error.message ? error.message : '').toLowerCase();
+    return error?.response?.status === 429
+        || error?.status === 429
+        || message.includes('429')
+        || message.includes('rate limit')
+        || message.includes('too many requests');
+}
+
+function collectNoteKeywords(topic, sources) {
+    const text = [topic]
+        .concat((sources || []).map(source => `${source.title || ''} ${source.snippet || ''}`))
+        .join(' ')
+        .toLowerCase();
+    const tokens = text.match(/[a-z][a-z0-9+\-]{3,}/g) || [];
+    const stop = new Set(['about', 'above', 'after', 'again', 'against', 'along', 'also', 'because', 'before', 'being', 'between', 'build', 'clear', 'concept', 'concepts', 'detail', 'details', 'during', 'evidence', 'explain', 'explains', 'their', 'there', 'these', 'those', 'through', 'topic', 'using', 'which', 'while', 'would', 'your', 'study', 'notes']);
+    const counts = {};
+    tokens.forEach(token => {
+        if (stop.has(token)) return;
+        counts[token] = (counts[token] || 0) + 1;
+    });
+    return Object.keys(counts)
+        .sort((left, right) => counts[right] - counts[left] || left.localeCompare(right))
+        .slice(0, 8);
+}
+
+function buildVerificationFallback(topic, notesContent, tavilyResult) {
+    const sources = Array.isArray(tavilyResult && tavilyResult.sources) ? tavilyResult.sources : [];
+    const evidenceNote = toCleanText(tavilyResult && tavilyResult.evidenceNote, 'Groq was rate-limited, so this verification used a local Tavily-backed fallback.');
+    const noteText = toCleanText(notesContent).toLowerCase();
+    const keywords = collectNoteKeywords(topic, sources);
+    const matchedKeywords = keywords.filter(keyword => noteText.includes(keyword));
+    const coverageRatio = keywords.length ? matchedKeywords.length / keywords.length : 0.45;
+    const averageSourceScore = sources.length
+        ? sources.reduce((sum, source) => sum + (Number(source && source.score) || 0), 0) / sources.length
+        : 0;
+    const evidenceStrength = Math.max(0, Math.min(1, averageSourceScore || coverageRatio));
+    const structureBonus = Math.max(0, Math.min(1, (notesContent.length || 0) / 1400));
+    const accuracyScore = clampScore(70 + Math.round(coverageRatio * 14) + Math.round(evidenceStrength * 4), 74);
+    const completenessScore = clampScore(66 + Math.round(coverageRatio * 17) + Math.round(structureBonus * 4), 70);
+    const clarityScore = clampScore(74 + Math.min(13, Math.round((notesContent.length || 0) / 170)), 77);
+    const depthScore = clampScore(64 + Math.round(coverageRatio * 17) + Math.round(structureBonus * 5), 68);
+    const missingConcepts = uniqueListFromArray(keywords.filter(keyword => !matchedKeywords.includes(keyword)).map(keyword => `Explain ${keyword} more clearly.`)).slice(0, 4);
+    const verifiedFacts = uniqueListFromArray(matchedKeywords.map(keyword => `The notes mention ${keyword}, which appears in the external evidence.`)).slice(0, 4);
+    const corrections = sources.length
+        ? ['Review the notes against the linked sources and tighten any claims that are not directly supported.']
+        : ['External evidence was limited, so confirm factual claims before relying on them.'];
+    const fallbackAverage = Math.round((accuracyScore + completenessScore + clarityScore + depthScore) / 4);
+    const overallScore = sources.length
+        ? Math.min(89, clampScore(fallbackAverage, 78))
+        : Math.min(69, clampScore(fallbackAverage, 58));
+
+    return normalizeVerificationReport({
+        status: sources.length ? 'partial' : 'unavailable',
+        scoreMode: 'fallback',
+        score: overallScore,
+        overview: sources.length
+            ? 'Groq verification was temporarily unavailable, so SkillSwap generated a fallback partial verification from Tavily evidence coverage. This score is useful for guidance, but it cannot reach the 90s until a full Tavily plus Groq verification succeeds.'
+            : 'Groq verification was unavailable and Tavily evidence was too limited for a high-confidence review, so this result is low-confidence and unavailable for 90-plus scoring.',
+        accuracy: {
+            score: accuracyScore,
+            issues: corrections,
+            strengths: verifiedFacts
+        },
+        completeness: {
+            score: completenessScore,
+            missing: missingConcepts,
+            covered: verifiedFacts
+        },
+        clarity: {
+            score: clarityScore,
+            feedback: 'The structure appears readable, but you should re-run verification later for a full Groq-backed review.'
+        },
+        depth: {
+            score: depthScore,
+            assessment: 'Depth was estimated from topic coverage rather than a full model critique because Groq was rate-limited.'
+        },
+        corrections,
+        missingConcepts,
+        verifiedFacts,
+        suggestions: [
+            'Re-run verification after the provider rate-limit window resets so SkillSwap can perform a full Tavily plus Groq review.',
+            'Add concrete explanations for the missing concepts listed below.'
+        ],
+        improvementPrompt: 'Improve the notes by adding the missing concepts, tightening unsupported claims, avoiding the previously flagged issues, and aiming for a high-confidence full Tavily plus Groq verification on the next check.'
+    }, {
+        sources,
+        scoreMode: 'fallback',
+        evidenceNote: evidenceNote || 'Groq was rate-limited, so this verification used a local Tavily-backed fallback.'
+    });
+}
+
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function trimEvidenceSnippet(value, maxLen = 280) {
+    const text = toCleanText(value);
+    if (!text) return '';
+    if (text.length <= maxLen) return text;
+    return `${text.slice(0, Math.max(0, maxLen - 3)).trimEnd()}...`;
+}
+
+function buildVerificationEvidenceSummary(tavilyResult) {
+    const sources = Array.isArray(tavilyResult && tavilyResult.sources) ? tavilyResult.sources : [];
+    if (!sources.length) {
+        return 'No strong Tavily source snippets were available. Treat this verification as partial and explain that external evidence was limited.';
+    }
+
+    return sources.slice(0, 3).map((source, index) => (
+        `[Source ${index + 1}]
+Title: ${trimEvidenceSnippet(source.title, 120)}
+URL: ${toCleanText(source.url)}
+Evidence: ${trimEvidenceSnippet(source.snippet, 320)}`
+    )).join('\n\n');
+}
+
+async function callGroqChatWithRetry(messages, options = {}, retryOptions = {}) {
+    const retries = Math.max(0, Number(retryOptions.retries) || 0);
+    const baseDelayMs = Math.max(0, Number(retryOptions.backoffMs) || 0);
+    let lastError = null;
+
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+        try {
+            return await callGroqChat(messages, options);
+        } catch (err) {
+            lastError = err;
+            if (attempt >= retries || !isGroqRateLimitError(err)) {
+                throw err;
+            }
+            await delay(baseDelayMs * (attempt + 1 || 1));
+        }
+    }
+
+    throw lastError || new Error('Groq request failed.');
+}
+
+function uniqueListFromArray(values) {
+    const seen = new Set();
+    return (values || [])
+        .map(item => toCleanText(item))
+        .filter(Boolean)
+        .filter(item => {
+            const key = item.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+}
+
+function buildImprovedNotesFallback(topic, previousNotes, verificationReport) {
+    const notes = normalizeNotesPayload(previousNotes, topic);
+    const report = normalizeVerificationReport(verificationReport || {}, {
+        sources: Array.isArray(verificationReport && verificationReport.sources) ? verificationReport.sources : [],
+        evidenceNote: toCleanText(verificationReport && verificationReport.evidenceNote)
+    });
+
+    const keyPoints = uniqueListFromArray([]
+        .concat(notes.keyPoints || [])
+        .concat((report.missingConcepts || []).map(item => `Added concept: ${item}`))
+        .concat((report.corrections || []).slice(0, 2).map(item => `Correction to review: ${item}`))
+    ).slice(0, 8);
+
+    const sections = (notes.sections || []).map(section => ({
+        heading: section.heading,
+        content: section.content
+    }));
+
+    if (report.corrections && report.corrections.length) {
+        sections.push({
+            heading: 'Corrections To Apply',
+            content: report.corrections.join(' ')
+        });
+    }
+    if (report.missingConcepts && report.missingConcepts.length) {
+        sections.push({
+            heading: 'Missing Concepts To Add',
+            content: report.missingConcepts.join(' ')
+        });
+    }
+    if (report.verifiedFacts && report.verifiedFacts.length) {
+        sections.push({
+            heading: 'Verified Takeaways',
+            content: report.verifiedFacts.join(' ')
+        });
+    }
+
+    return normalizeNotesPayload({
+        summary: `${notes.summary} Improved using Tavily-backed fallback guidance while Groq was rate-limited. Focus on: ${(report.missingConcepts || []).slice(0, 3).join('; ') || 'supported concepts and clearer explanations'}.`,
+        keyPoints,
+        sections
+    }, topic);
+}
+
+async function callGroqChat(messages, options = {}) {
+    const groqKey = process.env.GROQ_API_KEY;
+    if (!groqKey) {
+        throw new Error('Groq API Key not configured on server');
+    }
+
+    const response = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+            model: STUDY_NOTES_GROQ_MODEL,
+            messages,
+            temperature: options.temperature === undefined ? 0.3 : options.temperature,
+            max_tokens: options.maxTokens || 2500
+        },
+        {
+            timeout: TIMEOUT_MS,
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${groqKey}`
+            }
+        }
+    );
+
+    const content = response && response.data && response.data.choices && response.data.choices[0]
+        && response.data.choices[0].message
+        ? response.data.choices[0].message.content
+        : '';
+    if (!content) {
+        throw new Error('Groq returned an empty response.');
+    }
+    return content;
+}
+
+async function searchTavilyEvidence(topic) {
+    const tavilyKey = process.env.TAVILY_API_KEY;
+    if (!tavilyKey) {
+        return {
+            sources: [],
+            evidenceNote: 'Tavily API key is not configured, so the verification used limited external evidence.'
+        };
+    }
+
+    try {
+        const response = await axios.post(
+            'https://api.tavily.com/search',
+            {
+                query: `authoritative overview and core concepts of ${topic}`,
+                topic: 'general',
+                search_depth: 'advanced',
+                max_results: 4,
+                chunks_per_source: 2,
+                include_answer: false,
+                include_raw_content: false,
+                include_favicon: false
+            },
+            {
+                timeout: TIMEOUT_MS,
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${tavilyKey}`
+                }
+            }
+        );
+
+        const sources = Array.isArray(response && response.data && response.data.results)
+            ? response.data.results
+                .map(item => ({
+                    title: toCleanText(item && item.title, 'Untitled source'),
+                    url: toCleanText(item && item.url),
+                    snippet: toCleanText(item && item.content),
+                    score: Number(item && item.score) || 0
+                }))
+                .filter(item => item.url && item.snippet)
+            : [];
+
+        return {
+            sources,
+            evidenceNote: sources.length
+                ? ''
+                : 'Tavily returned no strong source snippets for this topic, so the verification is partial.'
+        };
+    } catch (err) {
+        return {
+            sources: [],
+            evidenceNote: `Tavily evidence lookup was limited: ${err.response && err.response.data && err.response.data.error ? err.response.data.error : err.message}`
+        };
+    }
+}
+
 app.post('/api/generate-notes', async (req, res) => {
     try {
-        const fetch = (await import('node-fetch')).default;
         const { prompt } = req.body;
         if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
-        
-        const groqKey = process.env.GROQ_API_KEY;
-        if (!groqKey) return res.status(500).json({ error: 'Groq API Key not configured on server' });
 
-        const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + groqKey },
-            body: JSON.stringify({
-                model: 'llama-3.3-70b-versatile',
-                messages: [{ role: 'system', content: 'You are an expert AI tutor.' }, { role: 'user', content: prompt }],
-                temperature: 0.3,
-                max_tokens: 2500
-            })
-        });
-        const data = await resp.json();
-        if(data.error) return res.status(500).json({error: data.error.message});
-        
-        res.json({ result: data.choices[0].message.content });
+        const result = await callGroqChat(
+            [
+                { role: 'system', content: 'You are an expert AI tutor.' },
+                { role: 'user', content: prompt }
+            ],
+            { temperature: 0.3, maxTokens: 2500 }
+        );
+
+        res.json({ result });
     } catch (err) {
         console.error('[generate-notes]', err.message);
         res.status(500).json({ error: err.message });
@@ -6163,63 +6619,169 @@ app.post('/api/generate-notes', async (req, res) => {
 
 app.post('/api/verify-notes', async (req, res) => {
     try {
-        const fetch = (await import('node-fetch')).default;
-        const { topic, notesContent } = req.body;
-        if (!topic || !notesContent) return res.status(400).json({ error: 'Topic and notes content required' });
+        const topic = toCleanText(req.body && req.body.topic);
+        const notesContent = toCleanText(req.body && req.body.notesContent);
+        if (!topic || !notesContent) {
+            return res.status(400).json({ error: 'Topic and notes content required' });
+        }
 
-        const groqKey = process.env.GROQ_API_KEY;
-        if (!groqKey) return res.status(500).json({ error: 'Groq API Key not configured on server' });
+        const tavilyResult = await searchTavilyEvidence(topic);
+        const sourceSummary = buildVerificationEvidenceSummary(tavilyResult);
+        const promptText = `You are an expert educator and fact-checker. Compare the study notes with the external evidence and return a strict JSON report.
 
-        const promptText = `You are an expert educator and fact-checker. Analyze these study notes about "${topic}" and provide a detailed verification report.
+TOPIC:
+${topic}
 
 STUDY NOTES:
 ${notesContent}
 
-Please analyze for:
-1. ACCURACY: Are the facts correct? Point out any errors or misconceptions.
-2. COMPLETENESS: What important concepts are missing?
-3. CLARITY: Is the explanation clear and well-structured?
-4. DEPTH: Is the content appropriate for the level (beginner/intermediate)?
+TAVILY EVIDENCE:
+${sourceSummary}
 
-CRITICAL INSTRUCTION ON SCORING: 
-Do NOT automatically give 85% or any fixed number. Calculate the score fairly and dynamically between 0 and 100 based strictly on your evaluation of accuracy, completeness, clarity, and depth combined. An excellent, thorough note might get 95-100, while a mediocre note gets 60-75. Be strict and varied.
+SCORING RUBRIC:
+- 90-100: highly accurate, no material factual errors, covers the core concepts well, has clear structure, and shows enough depth for confident study use.
+- 75-89: mostly accurate and useful, but still missing important concepts, nuance, examples, or has minor clarity or factual issues.
+- 50-74: mixed quality, with notable omissions, weak explanations, or questionable claims.
+- 0-49: unreliable, seriously incomplete, or misleading.
 
-Return ONLY a JSON object with this exact structure:
+Rules:
+- Evaluate the notes against the evidence above.
+- Use the rubric above and do not artificially avoid the 90s when the notes genuinely deserve them.
+- If the notes are strong and well-supported, scores above 90 are appropriate.
+- Set status to "verified" only if the notes are well-supported by the evidence.
+- Set status to "partial" if evidence is limited, mixed, or only partly supports the notes.
+- Set status to "unavailable" only if the evidence is too weak for a meaningful verification.
+- If status is not "verified", keep the overall score below 90.
+- Focus on the notes summary, key points, and sections.
+- Return only valid JSON with this exact structure:
 {
-  "score": number (0-100),
-  "accuracy": { "score": number, "issues": ["..."], "strengths": ["..."] },
-  "completeness": { "score": number, "missing": ["..."], "covered": ["..."] },
-  "clarity": { "score": number, "feedback": "..." },
-  "depth": { "score": number, "assessment": "..." },
-  "summary": "Overall summary",
+  "status": "verified" | "partial" | "unavailable",
+  "scoreMode": "full",
+  "score": 0,
+  "overview": "Overall summary of accuracy and evidence confidence",
+  "accuracy": { "score": 0, "issues": ["..."], "strengths": ["..."] },
+  "completeness": { "score": 0, "missing": ["..."], "covered": ["..."] },
+  "clarity": { "score": 0, "feedback": "..." },
+  "depth": { "score": 0, "assessment": "..." },
+  "corrections": ["..."],
+  "missingConcepts": ["..."],
+  "verifiedFacts": ["..."],
   "suggestions": ["..."],
-  "verified_facts": ["..."],
-  "needs_correction": ["..."]
+  "improvementPrompt": "Detailed instruction for rewriting the notes without repeating flagged mistakes"
 }`;
 
-        const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + groqKey },
-            body: JSON.stringify({
-                model: 'llama-3.3-70b-versatile',
-                messages: [
-                    { role: 'system', content: 'You are an expert educator and fact-checker. Analyze study materials and return detailed verification reports in valid JSON only. You must provide realistically spread scores (not hardcoded to 85, evaluate thoroughly).' },
-                    { role: 'user', content: promptText }
-                ],
-                temperature: 0.6,
-                max_tokens: 2000
-            })
-        });
-        
-        const data = await resp.json();
-        if(data.error) return res.status(500).json({error: data.error.message});
-        
-        let text = data.choices[0].message.content.replace(/```json/gi, '').replace(/```/g, '').trim();
-        let verification = JSON.parse(text);
-        
+        const rawVerification = await callGroqChatWithRetry(
+            [
+                {
+                    role: 'system',
+                    content: 'You are an expert educator and fact-checker. Use Tavily evidence to verify study notes, allow 90-plus scores when they are truly deserved, and return valid JSON only.'
+                },
+                { role: 'user', content: promptText }
+            ],
+            { temperature: 0.15, maxTokens: 1250 },
+            { retries: 1, backoffMs: 1250 }
+        );
+
+        const parsedVerification = parseJsonObjectFromModelResponse(rawVerification, 'verification');
+        const verification = normalizeVerificationReport(parsedVerification, Object.assign({}, tavilyResult, {
+            scoreMode: 'full'
+        }));
         res.json(verification);
-    } catch(err) {
+    } catch (err) {
         console.error('[verify-notes]', err.message);
+        if (isGroqRateLimitError(err) || /Could not parse verification JSON response|Groq returned an empty response/i.test(String(err && err.message || ''))) {
+            const topic = toCleanText(req.body && req.body.topic);
+            const notesContent = toCleanText(req.body && req.body.notesContent);
+            const tavilyResult = await searchTavilyEvidence(topic);
+            return res.json(buildVerificationFallback(topic, notesContent, tavilyResult));
+        }
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/regenerate-notes-with-feedback', async (req, res) => {
+    try {
+        const topic = toCleanText(req.body && req.body.topic);
+        const previousNotes = req.body && req.body.previousNotes;
+        const verificationReport = req.body && req.body.verificationReport;
+
+        if (!topic || !previousNotes || !verificationReport) {
+            return res.status(400).json({ error: 'Topic, previous notes, and verification report are required' });
+        }
+
+        const normalizedPreviousNotes = normalizeNotesPayload(previousNotes, topic);
+        const normalizedVerification = normalizeVerificationReport(verificationReport, {
+            sources: Array.isArray(verificationReport && verificationReport.sources) ? verificationReport.sources : [],
+            evidenceNote: toCleanText(verificationReport && verificationReport.evidenceNote)
+        });
+        const priorMistakes = toStringArray(
+            []
+                .concat(verificationReport.priorMistakes || [])
+                .concat(verificationReport.prior_mistakes || [])
+                .concat(normalizedVerification.corrections || [])
+                .concat(normalizedVerification.missingConcepts || [])
+        );
+
+        const promptText = `Rewrite these study notes so they clearly improve on the earlier version.
+
+TOPIC:
+${topic}
+
+EARLIER NOTES JSON:
+${JSON.stringify(normalizedPreviousNotes, null, 2)}
+
+VERIFICATION REPORT JSON:
+${JSON.stringify(Object.assign({}, normalizedVerification, { priorMistakes }), null, 2)}
+
+Rules:
+- Correct every flagged issue.
+- Include missing concepts that matter for understanding the topic.
+- Preserve useful accurate parts when possible.
+- Treat the prior mistakes as a hard do-not-repeat list.
+- Improve the overview, key points, and sections so the notes are clearly better than before.
+- Aim for notes that could earn a 90-plus score on a full Tavily plus Groq verification by being accurate, complete, clear, and sufficiently deep.
+- Do not mention verification, scores, Tavily, Groq, or provider limits inside the notes.
+- If the report shows uncertainty, rewrite cautiously instead of inventing facts.
+- Return only valid JSON with this exact shape:
+{
+  "notes": {
+    "summary": "string",
+    "keyPoints": ["string"],
+    "sections": [
+      { "heading": "string", "content": "string" }
+    ]
+  }
+}`;
+
+        const rawImprovedNotes = await callGroqChatWithRetry(
+            [
+                {
+                    role: 'system',
+                    content: 'You improve study notes based on verification feedback. Return valid JSON only, never repeat previously flagged mistakes, and optimize for accurate, complete, high-quality notes.'
+                },
+                { role: 'user', content: promptText }
+            ],
+            { temperature: 0.15, maxTokens: 1400 },
+            { retries: 1, backoffMs: 1250 }
+        );
+
+        const parsedImprovedNotes = parseJsonObjectFromModelResponse(rawImprovedNotes, 'improved notes');
+        const notes = normalizeNotesPayload(parsedImprovedNotes, topic);
+        res.json({ notes, providerLimited: false, fallback: false });
+    } catch (err) {
+        console.error('[regenerate-notes-with-feedback]', err.message);
+        if (isGroqRateLimitError(err) || /Could not parse improved notes JSON response|Groq returned an empty response/i.test(String(err && err.message || ''))) {
+            const topic = toCleanText(req.body && req.body.topic);
+            const previousNotes = req.body && req.body.previousNotes;
+            const verificationReport = req.body && req.body.verificationReport;
+            const fallbackNotes = buildImprovedNotesFallback(topic, previousNotes, verificationReport);
+            return res.json({
+                notes: fallbackNotes,
+                providerLimited: true,
+                fallback: true,
+                message: 'Groq was rate-limited, so SkillSwap used a fallback note improver. Re-run later for a stronger AI rewrite.'
+            });
+        }
         res.status(500).json({ error: err.message });
     }
 });

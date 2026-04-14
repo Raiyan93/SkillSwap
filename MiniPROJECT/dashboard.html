@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%237c5cfc'/%3E%3Ctext x='32' y='40' font-size='30' text-anchor='middle' fill='white'%3E%F0%9F%A4%96%3C/text%3E%3C/svg%3E"/>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>SkillSwap — Dashboard</title>
@@ -579,17 +580,20 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
           <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border2);border-radius:14px;padding:8px">
             <div style="font-size:.7rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;padding:0 4px">View Mode</div>
             <div style="display:flex;flex-direction:column;gap:4px">
-              <button class="ai-tab active" onclick="switchAiTab(this,'mindmap')" style="text-align:left;padding:10px 14px;border-radius:10px;font-size:.82rem">🗺️ Mind Map</button>
-              <button class="ai-tab" onclick="switchAiTab(this,'flowchart')" style="text-align:left;padding:10px 14px;border-radius:10px;font-size:.82rem">🔀 Flowchart</button>
-              <button class="ai-tab" onclick="switchAiTab(this,'flashcards')" style="text-align:left;padding:10px 14px;border-radius:10px;font-size:.82rem">🃏 Flashcards</button>
-              <button class="ai-tab" onclick="switchAiTab(this,'quiz')" style="text-align:left;padding:10px 14px;border-radius:10px;font-size:.82rem">❓ Quiz</button>
-              <button class="ai-tab" onclick="switchAiTab(this,'notes')" style="text-align:left;padding:10px 14px;border-radius:10px;font-size:.82rem">📝 Notes</button>
+              <button class="ai-tab active" data-ai-tab="mindmap" onclick="switchAiTab(this,'mindmap')" style="text-align:left;padding:10px 14px;border-radius:10px;font-size:.82rem">🗺️ Mind Map</button>
+              <button class="ai-tab" data-ai-tab="flowchart" onclick="switchAiTab(this,'flowchart')" style="text-align:left;padding:10px 14px;border-radius:10px;font-size:.82rem">🔀 Flowchart</button>
+              <button class="ai-tab" data-ai-tab="flashcards" onclick="switchAiTab(this,'flashcards')" style="text-align:left;padding:10px 14px;border-radius:10px;font-size:.82rem">🃏 Flashcards</button>
+              <button class="ai-tab" data-ai-tab="quiz" onclick="switchAiTab(this,'quiz')" style="text-align:left;padding:10px 14px;border-radius:10px;font-size:.82rem">❓ Quiz</button>
+              <button class="ai-tab" data-ai-tab="notes" onclick="switchAiTab(this,'notes')" style="text-align:left;padding:10px 14px;border-radius:10px;font-size:.82rem">📝 Notes</button>
+              <button class="ai-tab" data-ai-tab="notes-verification" onclick="switchAiTab(this,'notes-verification')" style="text-align:left;padding:10px 14px;border-radius:10px;font-size:.82rem">✅ Notes Verification</button>
             </div>
           </div>
           <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border2);border-radius:14px;padding:8px">
             <div style="font-size:.7rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;padding:0 4px">Actions</div>
             <div style="display:flex;flex-direction:column;gap:6px">
-              <button onclick="generateAll()" class="mm-btn" style="text-align:left;padding:10px 14px;font-size:.82rem">🔄 Regenerate</button>
+              <button id="regenerateAllBtn" onclick="generateAll()" class="mm-btn" style="text-align:left;padding:10px 14px;font-size:.82rem">🔄 Regenerate All</button>
+              <button id="verifyNotesBtn" onclick="verifyNotes()" class="mm-btn" style="text-align:left;padding:10px 14px;font-size:.82rem">🔍 Verify Notes</button>
+              <button id="regenerateImprovedNotesBtn" onclick="regenerateImprovedNotes()" class="mm-btn" style="display:none;text-align:left;padding:10px 14px;font-size:.82rem">✨ Regenerate Improved Notes</button>
               <button onclick="copyAiOutput()" class="mm-btn" style="text-align:left;padding:10px 14px;font-size:.82rem">📋 Copy Notes</button>
               <button onclick="saveAiMaterialsLocal()" class="mm-btn" style="text-align:left;padding:10px 14px;font-size:.82rem">💾 Save to Library</button>
               
@@ -2979,7 +2983,7 @@ function hideToast() { document.getElementById('toast').classList.remove('show')
 // ═══════════════════════════════════════════════════════════════
 // API KEY (Groq)
 // ═══════════════════════════════════════════════════════════════
-var GROQ_KEY = 'backend-managed';
+var GROQ_KEY = localStorage.getItem('ss_groq_key') || 'backend-managed';
 
 function saveApiKey() {
   var val = (document.getElementById('apiKeyInput')||{}).value.trim();
@@ -2995,12 +2999,116 @@ function saveApiKey() {
 var lastAiData = null; var currentAiTab = 'mindmap';
 var mmData={},mmCollapsed={},mmHovered=null,mmAnimFrame=null;
 var currentQuiz=[],quizAnswers={};
+window.SkillSwapBackendBaseUrl = window.SkillSwapBackendBaseUrl || 'http://localhost:5000';
+
+function getBackendUrl(path) {
+  return window.SkillSwapBackendBaseUrl.replace(/\/+$/,'') + path;
+}
+
+function uniqueAiStrings(values) {
+  var seen = {};
+  return (values || []).map(function(value) {
+    return String(value == null ? '' : value).trim();
+  }).filter(function(value) {
+    if (!value) return false;
+    var key = value.toLowerCase();
+    if (seen[key]) return false;
+    seen[key] = true;
+    return true;
+  });
+}
+
+function cloneAiValue(value) {
+  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
+
+function normalizeNotesData(notes, topic) {
+  var base = buildSmartNotes(topic);
+  var source = notes && typeof notes === 'object' ? notes : {};
+  var sections = Array.isArray(source.sections) && source.sections.length ? source.sections : base.sections;
+  return {
+    summary: String(source.summary || base.summary || ('Study notes for ' + topic + '.')).trim(),
+    keyPoints: uniqueAiStrings(Array.isArray(source.keyPoints) && source.keyPoints.length ? source.keyPoints : base.keyPoints).slice(0, 8),
+    sections: sections.map(function(section) {
+      return {
+        heading: String(section && section.heading || '').trim(),
+        content: String(section && section.content || '').trim()
+      };
+    }).filter(function(section) {
+      return section.heading || section.content;
+    }).slice(0, 8)
+  };
+}
+
+function stripSessionOnlyAiFields(data) {
+  var next = cloneAiValue(data) || {};
+  delete next.verification;
+  delete next.notesImprovementContext;
+  delete next._savedId;
+  return next;
+}
+
+function getPersistableAiData(data) {
+  return stripSessionOnlyAiFields(data);
+}
+window.getPersistableAiData = getPersistableAiData;
+
+function normalizeGeneratedAiData(data, topic) {
+  var resolvedTopic = String((data && data.topic) || topic || '').trim();
+  var next = data && typeof data === 'object' ? cloneAiValue(data) : {};
+  next.topic = resolvedTopic;
+  next.mindmap = next.mindmap && Array.isArray(next.mindmap.branches)
+    ? next.mindmap
+    : { center: resolvedTopic, branches: buildSmartMap(resolvedTopic.toLowerCase()) };
+  next.mindmap.center = next.mindmap.center || resolvedTopic;
+  next.flowchart = Array.isArray(next.flowchart) && next.flowchart.length ? next.flowchart : buildSmartFlow(resolvedTopic);
+  next.flashcards = Array.isArray(next.flashcards) && next.flashcards.length ? next.flashcards : buildSmartCards(resolvedTopic);
+  next.quiz = Array.isArray(next.quiz) && next.quiz.length ? next.quiz : buildSmartQuiz(resolvedTopic);
+  next.notes = normalizeNotesData(next.notes, resolvedTopic);
+  return stripSessionOnlyAiFields(next);
+}
+
+function getVerificationMistakes(report) {
+  var accuracyIssues = report && report.accuracy && Array.isArray(report.accuracy.issues) ? report.accuracy.issues : [];
+  var missingConcepts = Array.isArray(report && report.missingConcepts) ? report.missingConcepts : [];
+  var corrections = Array.isArray(report && report.corrections) ? report.corrections : [];
+  return uniqueAiStrings([].concat(accuracyIssues).concat(corrections).concat(missingConcepts));
+}
+
+function resetCurrentAiVerificationState() {
+  if (!lastAiData || typeof lastAiData !== 'object') return;
+  delete lastAiData.verification;
+  delete lastAiData.notesImprovementContext;
+  refreshAiActionButtons();
+  if (currentAiTab === 'notes-verification') renderAiOutput(lastAiData, currentAiTab);
+}
+
+function refreshAiActionButtons() {
+  var hasNotes = !!(lastAiData && lastAiData.notes);
+  var hasVerification = !!(hasNotes && lastAiData.verification);
+  var verifyBtn = document.getElementById('verifyNotesBtn');
+  var improveBtn = document.getElementById('regenerateImprovedNotesBtn');
+  if (verifyBtn) {
+    verifyBtn.disabled = !hasNotes;
+    verifyBtn.style.opacity = hasNotes ? '1' : '0.55';
+  }
+  if (improveBtn) {
+    improveBtn.style.display = hasVerification ? 'block' : 'none';
+    improveBtn.disabled = !hasVerification;
+    improveBtn.style.opacity = hasVerification ? '1' : '0.55';
+  }
+}
+
+function setActiveAiTab(tab) {
+  currentAiTab = tab;
+  document.querySelectorAll('.ai-tab').forEach(function(button) {
+    button.classList.toggle('active', button.getAttribute('data-ai-tab') === tab);
+  });
+  if (lastAiData) renderAiOutput(lastAiData, tab);
+}
 
 function switchAiTab(btn, tab) {
-  currentAiTab = tab;
-  document.querySelectorAll('.ai-tab').forEach(function(b){ b.classList.remove('active'); });
-  btn.classList.add('active');
-  if (lastAiData) renderAiOutput(lastAiData, tab);
+  setActiveAiTab(tab);
 }
 function showLoader(msg) {
   document.getElementById('aiPlaceholder').style.display='none';
@@ -3013,7 +3121,6 @@ function hideLoader() { document.getElementById('aiLoader').style.display='none'
 async function generateAll() {
   var topic = (document.getElementById('aiTopicInput')||{}).value.trim();
   if (!topic) { showToast('⚠️','Topic Required','Enter a topic to study.'); return; }
-  if (!GROQ_KEY) { openApiKeyModal(); return; }
   showLoader('⚡ Groq is thinking...');
   try {
     var prompt = 'Generate comprehensive study materials for the topic: "' + topic + '".\n\n' +
@@ -3024,23 +3131,45 @@ async function generateAll() {
       '"quiz":[{"question":"Q?","options":["A","B","C","D"],"correct":0},{"question":"Q?","options":["A","B","C","D"],"correct":1},{"question":"Q?","options":["A","B","C","D"],"correct":2},{"question":"Q?","options":["A","B","C","D"],"correct":3}],' +
       '"notes":{"summary":"Overview of ' + topic + '.","keyPoints":["Point 1","Point 2","Point 3","Point 4"],"sections":[{"heading":"Introduction","content":"Content here."},{"heading":"Core Concepts","content":"Content here."},{"heading":"Applications","content":"Content here."}]}}';
 
-    var resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+GROQ_KEY},
-      body: JSON.stringify({ model:'llama-3.3-70b-versatile', messages:[{role:'system',content:'You are a study material generator. Always respond with valid JSON only. No markdown, no backticks, no explanation.'},{role:'user',content:prompt}], temperature:0.4, max_tokens:3000 })
-    });
-    var data = await resp.json();
-    if (data.error) throw new Error(data.error.message);
-    var text = data.choices[0].message.content.replace(/```json/gi,'').replace(/```/g,'').trim();
-    lastAiData = JSON.parse(text);
+    var text = '';
+    if (GROQ_KEY && GROQ_KEY !== 'backend-managed') {
+      var resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+GROQ_KEY},
+        body: JSON.stringify({
+          model:'llama-3.3-70b-versatile',
+          messages:[
+            {role:'system',content:'You are a study material generator. Always respond with valid JSON only. No markdown, no backticks, no explanation.'},
+            {role:'user',content:prompt}
+          ],
+          temperature:0.4,
+          max_tokens:3000
+        })
+      });
+      var data = await resp.json();
+      if (!resp.ok || data.error) throw new Error((resp.status || '') + ' ' + (((data || {}).error || {}).message || (data || {}).error || 'Groq request failed'));
+      text = String(((data || {}).choices || [])[0] && data.choices[0].message ? data.choices[0].message.content : '').replace(/```json/gi,'').replace(/```/g,'').trim();
+    } else {
+      var backendResp = await fetch(getBackendUrl('/api/generate-notes'), {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ prompt: prompt })
+      });
+      var backendData = await backendResp.json();
+      if (!backendResp.ok || backendData.error) throw new Error((backendData || {}).error || ('Backend note generation failed (' + backendResp.status + ')'));
+      text = String((backendData || {}).result || '').replace(/```json/gi,'').replace(/```/g,'').trim();
+    }
+    lastAiData = normalizeGeneratedAiData(JSON.parse(text), topic);
+    refreshAiActionButtons();
     renderAiOutput(lastAiData, currentAiTab);
   } catch(e) {
     hideLoader();
     if (e.message && e.message.includes('401')) {
       showToast('⚠️','Invalid Groq Key','Check your key at console.groq.com'); openApiKeyModal();
     } else {
-      // fallback to smart offline data
       var t = topic.toLowerCase();
-      lastAiData = { topic:topic, mindmap:{center:topic,branches:buildSmartMap(t)}, flowchart:buildSmartFlow(topic), flashcards:buildSmartCards(topic), quiz:buildSmartQuiz(topic), notes:buildSmartNotes(topic) };
+      lastAiData = normalizeGeneratedAiData({ topic:topic, mindmap:{center:topic,branches:buildSmartMap(t)}, flowchart:buildSmartFlow(topic), flashcards:buildSmartCards(topic), quiz:buildSmartQuiz(topic), notes:buildSmartNotes(topic) }, topic);
+      refreshAiActionButtons();
       renderAiOutput(lastAiData, currentAiTab);
       showToast('⚡','Offline Mode','Using local AI templates. Add a Groq key for richer results.');
     }
@@ -3089,6 +3218,8 @@ function renderAiOutput(data, tab) {
   else if(tab==='flashcards') el.innerHTML=buildFlashcardsHtml(data.flashcards);
   else if(tab==='quiz')       {el.innerHTML=buildQuizHtml(data.quiz);currentQuiz=data.quiz||[];quizAnswers={};}
   else if(tab==='notes')      el.innerHTML=buildNotesHtml(data);
+  else if(tab==='notes-verification') el.innerHTML=buildNotesVerificationHtml(data);
+  refreshAiActionButtons();
 }
 function buildMindMapHtml(mm){
   if(!mm) return '<p style="color:var(--muted);text-align:center;padding:20px">No data.</p>';
@@ -3192,7 +3323,7 @@ function answerQuiz(qi,oi){
   }
 }
 function buildNotesHtml(data){
-  var notes=data.notes||{summary:'Study notes for '+(data.topic||'this topic')+'.',keyPoints:[],sections:[]};
+  var notes=normalizeNotesData(data.notes,data.topic||'this topic');
   var html='<div style="font-size:.72rem;color:var(--muted);margin-bottom:16px">📝 Study Notes · <strong style="color:var(--text2)">'+(data.topic||'Topic')+'</strong></div>';
   if(notes.summary)html+='<div style="background:linear-gradient(135deg,rgba(124,92,252,.1),rgba(79,172,254,.08));border:1px solid rgba(124,92,252,.25);border-radius:14px;padding:16px 18px;margin-bottom:16px"><div style="font-size:.7rem;font-weight:700;color:var(--purple2);text-transform:uppercase;margin-bottom:8px">📌 Overview</div><div style="font-size:.88rem;color:var(--text);line-height:1.7">'+escapeHtml(notes.summary)+'</div></div>';
   if(notes.keyPoints&&notes.keyPoints.length)html+='<div style="background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.2);border-radius:14px;padding:14px 18px;margin-bottom:16px"><div style="font-size:.7rem;font-weight:700;color:var(--green);text-transform:uppercase;margin-bottom:10px">✅ Key Points</div><div style="display:flex;flex-direction:column;gap:7px">'+notes.keyPoints.map(function(k){return'<div style="display:flex;align-items:flex-start;gap:10px"><span style="width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0;margin-top:6px"></span><span style="font-size:.84rem;color:var(--text2);line-height:1.6">'+escapeHtml(k)+'</span></div>';}).join('')+'</div></div>';
@@ -3200,11 +3331,82 @@ function buildNotesHtml(data){
   (notes.sections||[]).forEach(function(s,i){html+='<div style="border-left:3px solid '+scs[i%scs.length]+';padding:12px 16px;margin-bottom:12px;background:rgba(255,255,255,.02);border-radius:0 12px 12px 0"><div style="font-size:.8rem;font-weight:700;color:'+scs[i%scs.length]+';margin-bottom:6px">'+escapeHtml(s.heading||'')+'</div><div style="font-size:.84rem;color:var(--text2);line-height:1.7">'+escapeHtml(s.content||'')+'</div></div>';});
   return html;
 }
+function buildNotesVerificationHtml(data){
+  var verification = data && data.verification ? data.verification : null;
+  if(!verification){
+    return '<div style="padding:22px;border:1px dashed rgba(255,255,255,0.14);border-radius:16px;background:rgba(255,255,255,0.02);text-align:center;color:var(--muted)"><div style="font-size:2rem;margin-bottom:10px">✅</div><div style="font-weight:700;font-size:1rem;color:var(--text);margin-bottom:8px">No verification report yet</div><div style="font-size:.84rem;line-height:1.7;max-width:520px;margin:0 auto 16px">Run <strong style="color:#fb923c">Verify Notes</strong> to check Groq&rsquo;s notes against Tavily-backed evidence and get targeted improvement guidance.</div><button class="mm-btn" onclick="verifyNotes()" style="padding:10px 14px;font-size:.82rem">🔍 Verify Notes</button></div>';
+  }
+  var score = Number(verification.score || 0);
+  var status = String(verification.status || 'partial');
+  var scoreMode = String(verification.scoreMode || 'full');
+  var isFullVerification = scoreMode === 'full';
+  var isFullyVerified = isFullVerification && status === 'verified';
+  var modeLabel = isFullVerification ? 'Full Verification' : 'Fallback Verification';
+  var modeColor = isFullVerification ? '#4facfe' : '#f59e0b';
+  var modeBg = isFullVerification ? 'rgba(79,172,254,.12)' : 'rgba(245,158,11,.12)';
+  var modeBorder = isFullVerification ? 'rgba(79,172,254,.3)' : 'rgba(245,158,11,.3)';
+  var ninetyPlusNote = !isFullyVerified
+    ? (isFullVerification
+        ? '90%+ requires a complete Tavily plus Groq verification with strong enough evidence to reach a fully verified result.'
+        : '90%+ requires a complete Tavily plus Groq verification. This score came from the fallback verifier because the full Groq-backed check was limited.')
+    : '';
+  var scoreColor = score >= 90 ? 'var(--green)' : score >= 70 ? 'var(--orange)' : 'var(--red)';
+  var statusColor = status === 'verified' ? 'var(--green)' : status === 'partial' ? 'var(--orange)' : 'var(--red)';
+  var statusBg = status === 'verified' ? 'rgba(52,211,153,.12)' : status === 'partial' ? 'rgba(245,158,11,.12)' : 'rgba(248,113,113,.12)';
+  function metricCard(label, metric, extraText){
+    var metricScore = Number(metric && metric.score != null ? metric.score : score);
+    var metricColor = metricScore >= 90 ? 'var(--green)' : metricScore >= 70 ? 'var(--orange)' : 'var(--red)';
+    return '<div style="background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:14px;padding:14px 16px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px"><div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-weight:700">'+escapeHtml(label)+'</div><div style="font-size:.9rem;font-weight:800;color:'+metricColor+'">'+escapeHtml(String(metricScore))+'%</div></div><div style="font-size:.8rem;line-height:1.6;color:var(--text2)">'+escapeHtml(extraText || 'No extra details provided.')+'</div></div>';
+  }
+  function listBlock(title, items, accent, emptyText){
+    var safeItems = Array.isArray(items) ? items : [];
+    var html = '<div style="background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:14px;padding:14px 16px"><div style="font-size:.74rem;text-transform:uppercase;letter-spacing:.8px;color:'+accent+';font-weight:700;margin-bottom:10px">'+escapeHtml(title)+'</div>';
+    if(safeItems.length){
+      html += '<div style="display:flex;flex-direction:column;gap:8px">' + safeItems.map(function(item){
+        return '<div style="display:flex;align-items:flex-start;gap:10px"><span style="width:7px;height:7px;border-radius:50%;background:'+accent+';flex-shrink:0;margin-top:6px"></span><span style="font-size:.82rem;line-height:1.6;color:var(--text2)">'+escapeHtml(item)+'</span></div>';
+      }).join('') + '</div>';
+    } else {
+      html += '<div style="font-size:.82rem;line-height:1.6;color:var(--muted)">'+escapeHtml(emptyText)+'</div>';
+    }
+    return html + '</div>';
+  }
+  var html = '<div style="font-size:.72rem;color:var(--muted);margin-bottom:16px">✅ Notes Verification · <strong style="color:var(--text2)">'+escapeHtml(data.topic||'Topic')+'</strong></div>';
+  html += '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between;background:linear-gradient(135deg,rgba(124,92,252,.12),rgba(79,172,254,.08));border:1px solid rgba(124,92,252,.25);border-radius:16px;padding:16px 18px;margin-bottom:16px"><div><div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-weight:700;margin-bottom:6px">Verification Score</div><div style="font-size:1.65rem;font-weight:800;color:'+scoreColor+'">'+escapeHtml(String(score))+'%</div></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div style="padding:6px 10px;border-radius:999px;background:'+statusBg+';border:1px solid '+statusColor+'44;color:'+statusColor+';font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.8px">'+escapeHtml(status)+'</div><button class="mm-btn" onclick="regenerateImprovedNotes()" style="padding:9px 12px;font-size:.78rem">✨ Regenerate Improved Notes</button></div></div>';
+  html += '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:-4px 0 16px"><div style="padding:6px 10px;border-radius:999px;background:'+modeBg+';border:1px solid '+modeBorder+';color:'+modeColor+';font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.8px">'+escapeHtml(modeLabel)+'</div>';
+  if(ninetyPlusNote){
+    html += '<div style="flex:1 1 260px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.24);border-radius:12px;padding:12px 14px;font-size:.82rem;line-height:1.6;color:var(--text2)">'+escapeHtml(ninetyPlusNote)+'</div>';
+  }
+  html += '</div>';
+  html += '<div style="background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:14px;padding:14px 16px;margin-bottom:16px"><div style="font-size:.74rem;text-transform:uppercase;letter-spacing:.8px;color:var(--purple2);font-weight:700;margin-bottom:10px">Overview</div><div style="font-size:.84rem;line-height:1.7;color:var(--text)">'+escapeHtml(verification.overview || 'No overall summary was returned.')+'</div></div>';
+  if(verification.evidenceNote){
+    html += '<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.24);border-radius:14px;padding:12px 14px;margin-bottom:16px"><div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.8px;color:var(--orange);font-weight:700;margin-bottom:6px">Evidence Note</div><div style="font-size:.82rem;line-height:1.6;color:var(--text2)">'+escapeHtml(verification.evidenceNote)+'</div></div>';
+  }
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">' + metricCard('Accuracy', verification.accuracy, (verification.accuracy && verification.accuracy.strengths && verification.accuracy.strengths[0]) || (verification.accuracy && verification.accuracy.issues && verification.accuracy.issues[0]) || 'Accuracy checked against the evidence.') + metricCard('Completeness', verification.completeness, (verification.completeness && verification.completeness.covered && verification.completeness.covered[0]) || (verification.completeness && verification.completeness.missing && verification.completeness.missing[0]) || 'Coverage checked against the evidence.') + metricCard('Clarity', verification.clarity, verification.clarity && verification.clarity.feedback) + metricCard('Depth', verification.depth, verification.depth && verification.depth.assessment) + '</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:16px">' + listBlock('Corrections', verification.corrections, '#f87171', 'No major corrections were flagged.') + listBlock('Missing Concepts', verification.missingConcepts, '#f59e0b', 'No major gaps were identified.') + listBlock('Verified Facts', verification.verifiedFacts, '#34d399', 'No specific fact list was returned.') + '</div>';
+  html += '<div style="background:rgba(79,172,254,.06);border:1px solid rgba(79,172,254,.22);border-radius:14px;padding:14px 16px;margin-bottom:16px"><div style="font-size:.74rem;text-transform:uppercase;letter-spacing:.8px;color:#4facfe;font-weight:700;margin-bottom:8px">Improvement Guidance</div><div style="font-size:.84rem;line-height:1.7;color:var(--text2)">'+escapeHtml(verification.improvementPrompt || 'No improvement prompt was returned.')+'</div></div>';
+  if(verification.sources && verification.sources.length){
+    html += '<div style="background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:14px;padding:14px 16px"><div style="font-size:.74rem;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-weight:700;margin-bottom:10px">Sources</div><div style="display:flex;flex-direction:column;gap:10px">' + verification.sources.map(function(source, index){
+      return '<div style="padding:12px;border-radius:12px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06)"><div style="font-size:.82rem;font-weight:700;color:var(--text);margin-bottom:4px">' + escapeHtml(source.title || ('Source ' + (index + 1))) + '</div><a href="' + escapeHtml(source.url || '#') + '" target="_blank" rel="noopener noreferrer" style="display:inline-block;font-size:.76rem;color:#60a5fa;margin-bottom:8px;word-break:break-all">' + escapeHtml(source.url || '') + '</a><div style="font-size:.8rem;line-height:1.6;color:var(--text2)">' + escapeHtml(source.snippet || 'No snippet available.') + '</div></div>';
+    }).join('') + '</div></div>';
+  }
+  return html;
+}
 function copyAiOutput(){
   if(!lastAiData){showToast('⚠️','Nothing to copy','Generate study materials first.');return;}
-  var lines=['Study Materials: '+(lastAiData.topic||''),'=== FLOWCHART ==='];
-  (lastAiData.flowchart||[]).forEach(function(s){lines.push((s.step||'')+'. '+(s.title||'')+': '+(s.description||''));});
-  lines.push('','=== FLASHCARDS ===');(lastAiData.flashcards||[]).forEach(function(c){lines.push('Q: '+(c.question||''));lines.push('A: '+(c.answer||''));lines.push('');});
+  var notes=normalizeNotesData(lastAiData.notes,lastAiData.topic||'this topic');
+  var lines=['Study Notes: '+(lastAiData.topic||''),'','Overview',notes.summary || ''];
+  if(notes.keyPoints&&notes.keyPoints.length){
+    lines.push('','Key Points');
+    notes.keyPoints.forEach(function(point){ lines.push('- ' + point); });
+  }
+  if(notes.sections&&notes.sections.length){
+    lines.push('','Sections');
+    notes.sections.forEach(function(section){
+      lines.push((section.heading || 'Section') + ':');
+      lines.push(section.content || '');
+      lines.push('');
+    });
+  }
   var text=lines.join('\n');
   if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(function(){showToast('📋','Copied!','Study notes copied.');}).catch(function(){fallbackCopy(text);});}else fallbackCopy(text);
 }
@@ -3293,18 +3495,15 @@ function openSavedMaterial(materialId) {
     return;
   }
 
-  lastAiData = Object.assign({}, material.data, {
-    topic: material.topic || (material.data && material.data.topic) || 'Saved Topic',
-    _savedId: material.id
-  });
+  lastAiData = normalizeGeneratedAiData(material.data, material.topic || (material.data && material.data.topic) || 'Saved Topic');
+  lastAiData._savedId = material.id;
+  refreshAiActionButtons();
 
   var input = document.getElementById('aiTopicInput');
   if (input) input.value = lastAiData.topic || '';
 
   focusAiStudyTools();
-  var notesBtn = Array.from(document.querySelectorAll('.ai-tab')).find(function(btn) {
-    return (btn.getAttribute('onclick') || '').indexOf("'notes'") !== -1;
-  });
+  var notesBtn = document.querySelector('.ai-tab[data-ai-tab="notes"]');
   if (notesBtn) switchAiTab(notesBtn, 'notes');
   else {
     currentAiTab = 'notes';
@@ -3361,83 +3560,135 @@ window.CURRENT_USER_PROFILE = null;
 window.SESSIONS = [];
 window.INCOMING_REQUESTS = [];
 window.SAVED_MATERIALS = [];
+refreshAiActionButtons();
+
+var aiTopicInputEl = document.getElementById('aiTopicInput');
+if (aiTopicInputEl) {
+  aiTopicInputEl.addEventListener('input', function() {
+    if (!lastAiData || !lastAiData.topic) return;
+    var typedTopic = String(this.value || '').trim();
+    if (typedTopic && typedTopic !== lastAiData.topic && (lastAiData.verification || lastAiData.notesImprovementContext)) {
+      resetCurrentAiVerificationState();
+    }
+  });
+}
 
 setTimeout(function(){
   showToast('⏰','Welcome back!','Your dashboard is loading live data...');
 }, 1500);
 
+function buildNotesVerificationPayload(notes, topic) {
+  var normalized = normalizeNotesData(notes, topic);
+  var lines = ['Topic: ' + topic, '', 'Summary:', normalized.summary || '', '', 'Key Points:'];
+  (normalized.keyPoints || []).forEach(function(point) { lines.push('• ' + point); });
+  lines.push('', 'Sections:');
+  (normalized.sections || []).forEach(function(section) {
+    lines.push((section.heading || 'Section') + ': ' + (section.content || ''));
+  });
+  return lines.join('\n').trim();
+}
+
 async function verifyNotes() {
-  if (!lastAiData) { showToast('⚠️', 'Nothing to Verify', 'Generate notes first, then click Verify Notes.'); return; }
-  var topic = lastAiData.topic || (document.getElementById('aiTopicInput') || {}).value || '';
+  if (!lastAiData || !lastAiData.notes) { showToast('⚠️', 'Nothing to Verify', 'Generate notes first, then click Verify Notes.'); return; }
+  var topic = String(lastAiData.topic || (document.getElementById('aiTopicInput') || {}).value || '').trim();
   if (!topic) { showToast('⚠️', 'No Topic', 'Generate notes for a topic first.'); return; }
-  
+
   var btn = document.getElementById('verifyNotesBtn');
   if (btn) { btn.textContent = '⏳ Verifying...'; btn.disabled = true; btn.style.opacity = '0.6'; }
-  showToast('🔍', 'Verifying Notes...', 'Groq is checking your study materials...');
-  var old = document.getElementById('verifyPanel');
-  if (old) old.remove();
+  showToast('🔍', 'Verifying Notes...', 'Tavily and Groq are checking your study notes...');
 
   try {
-    var notesContent = '';
-    if (lastAiData.notes) {
-      notesContent += 'Summary: ' + (lastAiData.notes.summary || '') + '\n\n';
-      notesContent += 'Key Points:\n' + (lastAiData.notes.keyPoints || []).map(p => '• ' + p).join('\n') + '\n\n';
-      notesContent += 'Sections:\n' + (lastAiData.notes.sections || []).map(s => s.heading + ': ' + s.content).join('\n') + '\n\n';
-    }
-    if (lastAiData.flashcards && lastAiData.flashcards.length) {
-      notesContent += 'Flashcards:\n' + lastAiData.flashcards.map(f => 'Q: ' + f.question + ' | A: ' + f.answer).join('\n') + '\n\n';
-    }
-
-    var resp = await fetch('http://localhost:5000/api/verify-notes', {
+    var notesContent = buildNotesVerificationPayload(lastAiData.notes, topic);
+    var resp = await fetch(getBackendUrl('/api/verify-notes'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ topic: topic, notesContent: notesContent })
     });
 
     var data = await resp.json();
-    if (data.error) throw new Error(data.error);
-    
-    buildVerificationPanel(data, topic);
-    showToast('✅', 'Verification Complete', 'Groq has analyzed your notes.');
+    if (!resp.ok || data.error) throw new Error(data.error || ('Verification failed (' + resp.status + ')'));
+
+    lastAiData.verification = data;
+    lastAiData.notesImprovementContext = {
+      topic: topic,
+      previousNotes: cloneAiValue(normalizeNotesData(lastAiData.notes, topic)),
+      latestVerification: cloneAiValue(data),
+      priorMistakes: uniqueAiStrings([].concat(lastAiData.notesImprovementContext && lastAiData.notesImprovementContext.priorMistakes || []).concat(getVerificationMistakes(data))),
+      improvementPrompt: data.improvementPrompt || (lastAiData.notesImprovementContext && lastAiData.notesImprovementContext.improvementPrompt) || '',
+      updatedAt: new Date().toISOString()
+    };
+    refreshAiActionButtons();
+    setActiveAiTab('notes-verification');
+    showToast('✅', 'Verification Complete', data.status === 'partial' ? 'Verification finished with limited external evidence.' : 'Tavily-backed verification is ready.');
   } catch (e) {
     console.error('Verification error:', e);
     showToast('⚠️', 'Verification Failed', e.message || 'Could not verify notes.');
   } finally {
     if (btn) { btn.innerHTML = '🔍 Verify Notes'; btn.disabled = false; btn.style.opacity = '1'; }
+    refreshAiActionButtons();
   }
 }
 
-function buildVerificationPanel(verifData, topic) {
-  var old = document.getElementById('verifyPanel');
-  if (old) old.remove();
-  var panel = document.createElement('div');
-  panel.id = 'verifyPanel';
-  panel.style.marginTop = '16px';
-  panel.style.background = 'rgba(255,255,255,0.03)';
-  panel.style.border = '1px solid var(--border2)';
-  panel.style.borderRadius = '14px';
-  panel.style.padding = '16px';
-  var score = verifData.accuracyScore || 0;
-  var color = score >= 90 ? 'var(--green)' : score >= 70 ? 'var(--orange)' : 'var(--red)';
-  var html = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-                <div style="font-weight:700;font-size:.9rem;color:${color}">Verification Score: ${score}%</div>
-              </div>`;
-  if(verifData.corrections && verifData.corrections.length){
-    html += `<div style="font-size:.8rem;color:var(--text);margin-bottom:8px">Corrections:</div><ul style="padding-left:16px;font-size:.75rem;color:var(--muted);margin-bottom:12px">`;
-    verifData.corrections.forEach(c => html += `<li style="margin-bottom:4px">${c}</li>`);
-    html += `</ul>`;
-  } else {
-    html += `<div style="font-size:.75rem;color:var(--green);margin-bottom:12px">No major corrections needed!</div>`;
+async function regenerateImprovedNotes() {
+  if (!lastAiData || !lastAiData.notes || !lastAiData.verification) {
+    showToast('⚠️', 'Verify First', 'Run Notes Verification before asking Groq to improve the notes.');
+    return;
   }
-  if(verifData.additionalContext){
-    html += `<div style="font-size:.8rem;color:var(--text);margin-bottom:4px">Extra Context:</div>
-             <div style="font-size:.75rem;color:var(--muted);background:rgba(255,255,255,0.02);padding:8px;border-radius:8px">${verifData.additionalContext}</div>`;
+  var topic = String(lastAiData.topic || '').trim();
+  if (!topic) {
+    showToast('⚠️', 'No Topic', 'Generate notes for a topic first.');
+    return;
   }
-  panel.innerHTML = html;
-  
-  var aiContent = document.getElementById('aiContent');
-  if(aiContent) { aiContent.insertBefore(panel, aiContent.firstChild); }
+
+  var btn = document.getElementById('regenerateImprovedNotesBtn');
+  if (btn) { btn.textContent = '⏳ Improving Notes...'; btn.disabled = true; btn.style.opacity = '0.6'; }
+  showLoader('✨ Groq is improving your notes...');
+
+  try {
+    var previousNotes = normalizeNotesData(lastAiData.notes, topic);
+    var improvementContext = lastAiData.notesImprovementContext || {};
+    var verificationReport = Object.assign({}, cloneAiValue(lastAiData.verification) || {}, {
+      priorMistakes: uniqueAiStrings([].concat(improvementContext.priorMistakes || []).concat(getVerificationMistakes(lastAiData.verification)))
+    });
+
+    var resp = await fetch(getBackendUrl('/api/regenerate-notes-with-feedback'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topic: topic,
+        previousNotes: previousNotes,
+        verificationReport: verificationReport
+      })
+    });
+
+    var data = await resp.json();
+    if (!resp.ok || data.error) throw new Error(data.error || ('Improved note regeneration failed (' + resp.status + ')'));
+
+    lastAiData.notes = normalizeNotesData(data.notes, topic);
+    delete lastAiData.verification;
+    lastAiData.notesImprovementContext = {
+      topic: topic,
+      previousNotes: cloneAiValue(previousNotes),
+      latestVerification: cloneAiValue(verificationReport),
+      priorMistakes: verificationReport.priorMistakes || [],
+      improvementPrompt: verificationReport.improvementPrompt || improvementContext.improvementPrompt || '',
+      updatedAt: new Date().toISOString()
+    };
+    delete lastAiData._savedId;
+    refreshAiActionButtons();
+    setActiveAiTab('notes');
+    showToast('✨', 'Notes Improved', 'Groq regenerated the notes using the latest verification feedback.');
+  } catch (e) {
+    hideLoader();
+    console.error('Improved note regeneration error:', e);
+    showToast('⚠️', 'Improve Failed', e.message || 'Could not regenerate improved notes.');
+  } finally {
+    if (btn) { btn.innerHTML = '✨ Regenerate Improved Notes'; btn.disabled = false; btn.style.opacity = '1'; }
+    refreshAiActionButtons();
+  }
 }
+window.verifyNotes = verifyNotes;
+window.regenerateImprovedNotes = regenerateImprovedNotes;
 </script>
 
 <!-- Firebase Module — Auth + Firestore + all live data functions -->
@@ -3472,7 +3723,8 @@ const state = {
 window.state = state;
 let unsubscribers = []; // For real-time listeners cleanup
 let activeMessagesUnsub = null;
-const BACKEND_BASE_URL = 'http://localhost:5000';
+const BACKEND_BASE_URL = window.SkillSwapBackendBaseUrl || 'http://localhost:5000';
+window.SkillSwapBackendBaseUrl = BACKEND_BASE_URL;
 const sharedPricing = window.SkillSwapPricing || {
   resolveSkillKey: function(skill) { return lower(skill); },
   getCredits: function(_skill, level) { return ({ beginner: 15, intermediate: 25, expert: 33 })[String(level || '').toLowerCase()] || 25; }
@@ -3486,6 +3738,7 @@ async function getAuthToken() {
 function getBackendUrl(path) {
   return BACKEND_BASE_URL.replace(/\/+$/,'') + path;
 }
+window.getBackendUrl = getBackendUrl;
 
 async function apiJson(path, options) {
   var token = await getAuthToken();
@@ -4984,10 +5237,11 @@ window.saveRoadmapProgress = saveRoadmapProgress;
 // ── SAVED AI MATERIALS ─────────────────────────────────────────
 async function saveAiMaterials(topic, data) {
   if (!state.currentUser) throw new Error('Not authenticated');
+  const persistableData = window.getPersistableAiData ? window.getPersistableAiData(data) : data;
   const ref = await addDoc(collection(db,'savedMaterials'), {
     uid: state.currentUser.uid, topic,
     generatedAt: serverTimestamp(), savedAt: serverTimestamp(),
-    data, sharedWith: [], isFavorite: false
+    data: persistableData, sharedWith: [], isFavorite: false
   });
   return ref.id;
 }
@@ -6466,6 +6720,7 @@ onAuthStateChanged(auth, async function(user) {
   }
 });
 
+/* Legacy duplicate verification block disabled.
 async function verifyNotes() {
   if (!lastAiData) { showToast('⚠️', 'Nothing to Verify', 'Generate notes first, then click Verify Notes.'); return; }
   var topic = lastAiData.topic || (document.getElementById('aiTopicInput') || {}).value || '';
@@ -6538,6 +6793,7 @@ function buildVerificationPanel(verifData, topic) {
   var aiContent = document.getElementById('aiContent');
   if(aiContent) { aiContent.insertBefore(panel, aiContent.firstChild); }
 }
+*/
 </script>
 </body>
 </html>
