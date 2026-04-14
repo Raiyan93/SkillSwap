@@ -749,7 +749,7 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
       <div class="greeting">My <span>Profile</span> 👤</div>
     </div>
     <div class="topbar-right">
-      <button onclick="window.location.href='createprofile.html?mode=edit'" style="background:rgba(124,92,252,0.12);border:1px solid rgba(124,92,252,0.25);color:var(--purple2);padding:9px 18px;border-radius:11px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;margin-right:8px">✏️ Edit Profile</button>
+      <button onclick="openProfileEditModal('edit')" style="background:rgba(124,92,252,0.12);border:1px solid rgba(124,92,252,0.25);color:var(--purple2);padding:9px 18px;border-radius:11px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;margin-right:8px">✏️ Edit Profile</button>
       <button onclick="window.logoutUser&&window.logoutUser()" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.25);color:var(--red);padding:9px 18px;border-radius:11px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif">🚪 Logout</button>
     </div>
   </div>
@@ -885,6 +885,19 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
 <!-- MATCH MODAL -->
 <div class="modal-overlay" id="matchModal">
   <div class="modal"><button class="modal-close" onclick="closeModal('matchModal')">✕</button><div id="matchModalContent"></div></div>
+</div>
+
+<div class="modal-overlay" id="profileEditModal">
+  <div class="modal" style="max-width:1100px;width:min(1100px,96vw);padding:18px 18px 12px">
+    <button class="modal-close" onclick="closeModal('profileEditModal')">✕</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px 14px;border-bottom:1px solid var(--border2);margin-bottom:14px">
+      <div>
+        <div class="modal-title" style="margin-bottom:4px">Edit Profile</div>
+        <div class="modal-sub" id="profileEditModalSub" style="margin-bottom:0">Update your details and re-verify skills without leaving the dashboard.</div>
+      </div>
+    </div>
+    <iframe id="profileEditFrame" title="Edit Profile" style="width:100%;height:min(82vh,900px);border:none;border-radius:18px;background:var(--card)"></iframe>
+  </div>
 </div>
 
 <!-- ADD SKILL MODAL -->
@@ -2901,7 +2914,7 @@ function renderProfile() {
       '</div>';
     }
   } else {
-    verifHtml = '<div style="color:var(--muted);font-size:.84rem">No verification data yet. <button onclick="window.location.href=\'createprofile.html?mode=reverify\'" style="background:none;border:none;color:var(--purple2);cursor:pointer;font-weight:700;text-decoration:underline">Verify your skills →</button></div>';
+    verifHtml = '<div style="color:var(--muted);font-size:.84rem">No verification data yet. <button onclick="openProfileEditModal(\'reverify\')" style="background:none;border:none;color:var(--purple2);cursor:pointer;font-weight:700;text-decoration:underline">Verify your skills →</button></div>';
   }
   setHtml('profileVerifDetail', verifHtml);
 
@@ -2975,6 +2988,34 @@ function updateSettingName() {
 // MODAL UTILS
 // ═══════════════════════════════════════════════════════════════
 function closeModal(id) { var el=document.getElementById(id); if(el) el.classList.remove('show'); }
+function openProfileEditModal(mode) {
+  var iframe = document.getElementById('profileEditFrame');
+  var sub = document.getElementById('profileEditModalSub');
+  if (!iframe) return;
+  var targetMode = mode === 'reverify' ? 'reverify' : 'edit';
+  iframe.src = 'createprofile.html?mode=' + encodeURIComponent(targetMode) + '&embedded=1';
+  if (sub) {
+    sub.textContent = targetMode === 'reverify'
+      ? 'Re-run AI verification for your profile without leaving the dashboard.'
+      : 'Update your details and re-verify skills without leaving the dashboard.';
+  }
+  document.getElementById('profileEditModal').classList.add('show');
+}
+window.openProfileEditModal = openProfileEditModal;
+
+window.addEventListener('message', async function(event) {
+  if (!event || !event.data || event.data.type !== 'skillswap-profile-saved') return;
+  closeModal('profileEditModal');
+  try {
+    await refreshDashboard();
+    switchTab('profile', document.querySelector('.nav-item[onclick*="profile"]') || null);
+    showToast('✅','Profile Updated','Your profile and verification details were saved.');
+  } catch (err) {
+    console.error('Profile refresh after save failed:', err);
+    showToast('⚠️','Profile Saved','Saved successfully, but the dashboard needs a refresh to show the latest data.');
+  }
+});
+
 function openRecoveryAppealModal() {
   if (!isSuspendedProfile(state.profile)) {
     if (window.showToast) window.showToast('!', 'Recovery Not Needed', 'Your account is not currently suspended.');
