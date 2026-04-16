@@ -1,3 +1,22 @@
+# Secrets
 skillswap-backend/.env
+
+# Dependencies (never commit these)
 **/node_modules/
+
+# Lock files
 MiniPROJECT/package-lock.json
+skillswap-backend/package-lock.json
+
+# Firebase local cache
+.firebase/
+firebase-debug.log
+.firebaserc
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp

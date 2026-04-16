@@ -1,8 +1,11 @@
 {
   "name": "skillswap-backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "SkillSwap backend API server",
   "main": "server.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -11,13 +14,15 @@
     "backfill:firestore": "node scripts/backfill-firestore-normalization.js",
     "backfill:legacy-settlement": "node scripts/backfill-legacy-session-settlement.js",
     "backfill:role-stats-credits": "node scripts/backfill-role-stats-and-skill-credits.js",
-    "migrate:escrow": "node scripts/migrate-future-paid-session-escrow.js",
+    "migrate:escrow": "node scripts/migrate-future-paid-session-escrow.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
     "axios": "^1.13.6",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "firebase-admin": "^13.4.0",
-    "googleapis": "^150.0.1",
-    "node-fetch": "^3.3.2"
+    "googleapis": "^150.0.1"
   }
 }
