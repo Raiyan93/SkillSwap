@@ -1,4 +1,4 @@
-/**
+﻿/**
  * SkillSwap Verification Server — server.js
  *
  * KEY FIXES THIS VERSION:
@@ -29,7 +29,10 @@ const app = express();
 const ALLOWED_ORIGINS = [
     'http://localhost', 'http://127.0.0.1',
     'http://localhost:3000', 'http://localhost:5500',
-    'http://127.0.0.1:5500', 'http://localhost:8080',
+    'http://127.0.0.1:5500', 'http://localhost:5501',
+    'http://127.0.0.1:5501', 'http://localhost:5502',
+    'http://localhost:8080',
+    // Production: add your deployed frontend URL here, e.g.:
     // 'https://yourskillswapsite.com'
 ];
 app.use(cors({
@@ -3028,7 +3031,54 @@ async function executeGeminiCall(model, prompt, imageParts, label) {
     return parseGeminiJsonResponse(response.response.text());
 }
 
+// ── GEMINI VERIFICATION RATE LIMITER ────────────────────────────────────────
+// Max 5 AI verifications per hour. Resets automatically after 1 hour elapses
+// OR instantly when admin restarts the server (in-memory — no persistence).
+const geminiVerificationRateLimit = {
+    count: 0,
+    windowStartMs: null,
+    MAX_PER_HOUR: 5,
+    WINDOW_MS: 60 * 60 * 1000, // 1 hour in ms
+    check() {
+        const now = Date.now();
+        // Auto-reset if the 1-hour window has fully elapsed
+        if (this.windowStartMs !== null && (now - this.windowStartMs) >= this.WINDOW_MS) {
+            this.count = 0;
+            this.windowStartMs = null;
+        }
+        if (this.count >= this.MAX_PER_HOUR) {
+            const elapsed = this.windowStartMs ? now - this.windowStartMs : 0;
+            const remainingMs = Math.max(0, this.WINDOW_MS - elapsed);
+            const remainingMin = Math.ceil(remainingMs / 60000);
+            const err = new Error('GEMINI_VERIFICATION_RATE_LIMITED');
+            err.isGeminiVerificationRateLimit = true;
+            err.remainingMinutes = remainingMin;
+            throw err;
+        }
+    },
+    increment() {
+        if (this.windowStartMs === null) this.windowStartMs = Date.now();
+        this.count++;
+    },
+    status() {
+        const now = Date.now();
+        if (this.windowStartMs !== null && (now - this.windowStartMs) >= this.WINDOW_MS) {
+            return { count: 0, remaining: this.MAX_PER_HOUR, resetIn: 0 };
+        }
+        const elapsed = this.windowStartMs ? now - this.windowStartMs : 0;
+        const resetIn = this.windowStartMs ? Math.max(0, Math.ceil((this.WINDOW_MS - elapsed) / 60000)) : 0;
+        return {
+            count: this.count,
+            remaining: Math.max(0, this.MAX_PER_HOUR - this.count),
+            resetIn
+        };
+    }
+};
+
 async function callGemini(model, prompt, imageParts) {
+    // Enforce verification rate limit (5/hour, resets on restart or after 1 hour)
+    geminiVerificationRateLimit.check();
+
     const candidates = [
         { name: PRIMARY_GEMINI_MODEL, client: model },
         ...getGeminiFallbackClients()
@@ -3037,12 +3087,16 @@ async function callGemini(model, prompt, imageParts) {
 
     for (const candidate of candidates) {
         try {
-            return await executeGeminiCall(candidate.client, prompt, imageParts, `Gemini ${candidate.name}`);
+            const result = await executeGeminiCall(candidate.client, prompt, imageParts, `Gemini ${candidate.name}`);
+            geminiVerificationRateLimit.increment(); // count only on success
+            return result;
         } catch (e) {
             if (e instanceof SyntaxError) {
                 const strict = prompt + '\n\nCRITICAL: Valid JSON only. No markdown. Start { end }.';
                 try {
-                    return await executeGeminiCall(candidate.client, strict, imageParts, `Gemini strict ${candidate.name}`);
+                    const strictResult = await executeGeminiCall(candidate.client, strict, imageParts, `Gemini strict ${candidate.name}`);
+                    geminiVerificationRateLimit.increment(); // count strict retry too
+                    return strictResult;
                 } catch (strictError) {
                     if (isGeminiQuotaError(strictError)) {
                         lastQuotaError = strictError;
@@ -4354,6 +4408,14 @@ Respond ONLY in valid JSON:
 
     } catch (err) {
         console.error('[verify]', err.message);
+        if (err.isGeminiVerificationRateLimit) {
+            const min = err.remainingMinutes || 60;
+            return res.status(429).json({
+                error: `AI verification limit reached (5 per hour). Please try again in ${min} minute${min === 1 ? '' : 's'}, or ask the admin to restart the server to reset the limit.`,
+                rateLimited: true,
+                remainingMinutes: min
+            });
+        }
         if (err.message?.includes('SAFETY'))  return res.status(400).json({ error: 'Content flagged by safety filters.' });
         if (err instanceof SyntaxError)       return res.status(500).json({ error: 'AI returned malformed response. Try again.' });
         if (err.response?.status === 401)     return res.status(500).json({ error: 'GitHub token invalid.' });
@@ -6738,11 +6800,12 @@ app.post('/api/generate-notes', async (req, res) => {
                 '- keyPoints: exactly 6 specific, useful revision bullets.',
                 '- sections: exactly 5 sections with conceptual headings.',
                 '- mindmap branches: exactly 4 with 3 subnodes each (max 6 words per subnode).',
+                '- flowchart: exactly 6 steps — a progressive, topic-specific learning path (not generic advice).',
                 '- flashcards: exactly 6 cards testing different concepts.',
                 '- quiz: exactly 5 questions with 4 options each.',
                 '',
                 'Return ONLY valid JSON — no markdown fences, no extra keys:',
-                '{"topic":"TOPIC","notes":{"summary":"4-6 sentence overview","keyPoints":["p1","p2","p3","p4","p5","p6"],"sections":[{"heading":"What TOPIC Is","content":"..."},{"heading":"Core Concepts","content":"..."},{"heading":"How It Works","content":"..."},{"heading":"Practical Applications","content":"..."},{"heading":"Key Benefits","content":"..."}]},"mindmap":{"center":"TOPIC","branches":[{"label":"Branch1","color":"#7c5cfc","subnodes":["s1","s2","s3"]},{"label":"Branch2","color":"#4facfe","subnodes":["s1","s2","s3"]},{"label":"Branch3","color":"#34d399","subnodes":["s1","s2","s3"]},{"label":"Branch4","color":"#f59e0b","subnodes":["s1","s2","s3"]}]},"flashcards":[{"question":"Q1?","answer":"A1"},{"question":"Q2?","answer":"A2"},{"question":"Q3?","answer":"A3"},{"question":"Q4?","answer":"A4"},{"question":"Q5?","answer":"A5"},{"question":"Q6?","answer":"A6"}],"quiz":[{"question":"Q1?","options":["A","B","C","D"],"correct":0},{"question":"Q2?","options":["A","B","C","D"],"correct":2},{"question":"Q3?","options":["A","B","C","D"],"correct":1},{"question":"Q4?","options":["A","B","C","D"],"correct":3},{"question":"Q5?","options":["A","B","C","D"],"correct":0]}]'
+                '{"topic":"TOPIC","notes":{"summary":"4-6 sentence overview","keyPoints":["p1","p2","p3","p4","p5","p6"],"sections":[{"heading":"What TOPIC Is","content":"..."},{"heading":"Core Concepts","content":"..."},{"heading":"How It Works","content":"..."},{"heading":"Practical Applications","content":"..."},{"heading":"Key Benefits","content":"..."}]},"mindmap":{"center":"TOPIC","branches":[{"label":"Branch1","color":"#7c5cfc","subnodes":["s1","s2","s3"]},{"label":"Branch2","color":"#4facfe","subnodes":["s1","s2","s3"]},{"label":"Branch3","color":"#34d399","subnodes":["s1","s2","s3"]},{"label":"Branch4","color":"#f59e0b","subnodes":["s1","s2","s3"]}]},"flowchart":[{"step":1,"title":"Topic-specific step 1","description":"What to do at this stage"},{"step":2,"title":"...","description":"..."},{"step":3,"title":"...","description":"..."},{"step":4,"title":"...","description":"..."},{"step":5,"title":"...","description":"..."},{"step":6,"title":"...","description":"..."}],"flashcards":[{"question":"Q1?","answer":"A1"},{"question":"Q2?","answer":"A2"},{"question":"Q3?","answer":"A3"},{"question":"Q4?","answer":"A4"},{"question":"Q5?","answer":"A5"},{"question":"Q6?","answer":"A6"}],"quiz":[{"question":"Q1?","options":["A","B","C","D"],"correct":0},{"question":"Q2?","options":["A","B","C","D"],"correct":2},{"question":"Q3?","options":["A","B","C","D"],"correct":1},{"question":"Q4?","options":["A","B","C","D"],"correct":3},{"question":"Q5?","options":["A","B","C","D"],"correct":0]}]'
             ].join('\n');
             const raw = await callGroqChatWithRetry(
                 [
@@ -6757,6 +6820,7 @@ app.post('/api/generate-notes', async (req, res) => {
                 topic,
                 notes: normalizeNotesPayload(parsed.notes || parsed, topic),
                 mindmap: parsed.mindmap || null,
+                flowchart: Array.isArray(parsed.flowchart) && parsed.flowchart.length ? parsed.flowchart : null,
                 flashcards: Array.isArray(parsed.flashcards) ? parsed.flashcards : [],
                 quiz: Array.isArray(parsed.quiz) ? parsed.quiz : [],
                 sources: (tavilyResult && tavilyResult.sources) || [],
@@ -6789,7 +6853,7 @@ app.post('/api/verify-notes', async (req, res) => {
         let verifyResult;
         try {
             const verifyPrompt = [
-                'You are a fact-checker. Evaluate the study notes against the Tavily sources and return a verification report.',
+                'You are a strict, honest academic fact-checker. Evaluate the student notes below against the Tavily sources and return a verification report with REAL computed scores.',
                 '',
                 'TOPIC: ' + topic,
                 '',
@@ -6798,19 +6862,19 @@ app.post('/api/verify-notes', async (req, res) => {
                 '',
                 hasEvidence ? ('TAVILY SOURCES (ground truth):\n' + sourceSummary) : 'NOTE: No Tavily sources found. Cap score at 60 and set status=partial.',
                 '',
-                'Score 0-100 on accuracy, completeness, clarity, and depth.',
+                'SCORING: Calculate REAL integer scores (0-100) for each field based on your actual analysis. Do NOT use example/placeholder numbers.',
                 '',
                 'Return ONLY valid JSON — no markdown fences:',
-                '{"status":"partial","score":72,"overview":"2-3 sentence quality summary","accuracy":{"score":72,"issues":["specific issue"],"strengths":["specific strength"]},"completeness":{"score":72,"missing":["missing concept"],"covered":["covered concept"]},"clarity":{"score":72,"feedback":"specific feedback"},"depth":{"score":72,"assessment":"specific assessment"},"corrections":["specific correction"],"missingConcepts":["concept to add"],"verifiedFacts":["confirmed fact from sources"],"improvementPrompt":"Specific actionable instructions to rewrite these notes to score 85+."}',
+                '{\"status\":\"COMPUTED_STATUS\",\"score\":OVERALL_0_100,\"overview\":\"2-3 sentence honest quality summary based on actual analysis\",\"accuracy\":{\"score\":ACCURACY_0_100,\"issues\":[\"specific inaccuracy found in notes\"],\"strengths\":[\"specific accurate point in notes\"]},\"completeness\":{\"score\":COMPLETENESS_0_100,\"missing\":[\"important concept missing from notes\"],\"covered\":[\"concept well covered in notes\"]},\"clarity\":{\"score\":CLARITY_0_100,\"feedback\":\"specific clarity observation about the notes\"},\"depth\":{\"score\":DEPTH_0_100,\"assessment\":\"specific depth observation about how deeply concepts are explained\"},\"corrections\":[\"specific correction needed\"],\"missingConcepts\":[\"concept to add\"],\"verifiedFacts\":[\"confirmed fact from sources\"],\"improvementPrompt\":\"Specific guidance on which concepts to expand or correct - reference actual note content.\"}',
                 '',
-                'Rules: status=verified ONLY if score>=85. Be specific — reference actual content from the notes and sources.'
+                'RULES: status="verified" if score>=85, "partial" if 40-84, "unverified" if <40. Replace ALL CAPS placeholders with your actual computed integers. Do not output placeholder text literally.'
             ].join('\n');
             const rawVerify = await callGroqChatWithRetry(
                 [
-                    { role: 'system', content: 'You are an academic fact-checker. Compare student notes against real-world sources. Return ONLY valid JSON. Be specific, honest, and reference actual note content.' },
+                    { role: 'system', content: 'You are a strict academic fact-checker. Carefully evaluate student notes against provided sources. Compute REAL integer scores for each dimension — do NOT copy example values. Return ONLY valid JSON.' },
                     { role: 'user', content: verifyPrompt }
                 ],
-                { temperature: 0.1, maxTokens: 1600 },
+                { temperature: 0.3, maxTokens: 1800 },
                 { retries: 1, backoffMs: 1500 }
             );
             const parsed = parseJsonObjectFromModelResponse(rawVerify, 'verification report');

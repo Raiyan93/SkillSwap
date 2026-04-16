@@ -3380,11 +3380,6 @@ function buildNotesVerificationHtml(data){
   var modeColor = isFullVerification ? '#4facfe' : '#f59e0b';
   var modeBg = isFullVerification ? 'rgba(79,172,254,.12)' : 'rgba(245,158,11,.12)';
   var modeBorder = isFullVerification ? 'rgba(79,172,254,.3)' : 'rgba(245,158,11,.3)';
-  var ninetyPlusNote = !isFullyVerified
-    ? (isFullVerification
-        ? '90%+ is only shown when the notes are strongly supported by the Tavily evidence and marked verified.'
-        : '90%+ is reserved for strongly supported Tavily-backed verification results.')
-    : '';
   var scoreColor = score >= 90 ? 'var(--green)' : score >= 70 ? 'var(--orange)' : 'var(--red)';
   var statusColor = status === 'verified' ? 'var(--green)' : status === 'partial' ? 'var(--orange)' : 'var(--red)';
   var statusBg = status === 'verified' ? 'rgba(52,211,153,.12)' : status === 'partial' ? 'rgba(245,158,11,.12)' : 'rgba(248,113,113,.12)';
@@ -3408,9 +3403,6 @@ function buildNotesVerificationHtml(data){
   var html = '<div style="font-size:.72rem;color:var(--muted);margin-bottom:16px">✅ Notes Verification · <strong style="color:var(--text2)">'+escapeHtml(data.topic||'Topic')+'</strong></div>';
   html += '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between;background:linear-gradient(135deg,rgba(124,92,252,.12),rgba(79,172,254,.08));border:1px solid rgba(124,92,252,.25);border-radius:16px;padding:16px 18px;margin-bottom:16px"><div><div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-weight:700;margin-bottom:6px">Verification Score</div><div style="font-size:1.65rem;font-weight:800;color:'+scoreColor+'">'+escapeHtml(String(score))+'%</div></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div style="padding:6px 10px;border-radius:999px;background:'+statusBg+';border:1px solid '+statusColor+'44;color:'+statusColor+';font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.8px">'+escapeHtml(status)+'</div><button class="mm-btn" onclick="regenerateImprovedNotes()" style="padding:9px 12px;font-size:.78rem">✨ Regenerate Improved Notes</button></div></div>';
   html += '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:-4px 0 16px"><div style="padding:6px 10px;border-radius:999px;background:'+modeBg+';border:1px solid '+modeBorder+';color:'+modeColor+';font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.8px">'+escapeHtml(modeLabel)+'</div>';
-  if(ninetyPlusNote){
-    html += '<div style="flex:1 1 260px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.24);border-radius:12px;padding:12px 14px;font-size:.82rem;line-height:1.6;color:var(--text2)">'+escapeHtml(ninetyPlusNote)+'</div>';
-  }
   html += '</div>';
   html += '<div style="background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:14px;padding:14px 16px;margin-bottom:16px"><div style="font-size:.74rem;text-transform:uppercase;letter-spacing:.8px;color:var(--purple2);font-weight:700;margin-bottom:10px">Overview</div><div style="font-size:.84rem;line-height:1.7;color:var(--text)">'+escapeHtml(verification.overview || 'No overall summary was returned.')+'</div></div>';
   if(verification.evidenceNote){
@@ -4114,16 +4106,44 @@ function overlapCount(a, b) {
 }
 
 function computeMatchScore(me, other) {
-  if (!me || !other) return 50;
-  const skillMatch = overlapCount(getLearnSkills(me), getTeachSkills(other));
-  const slotMatch  = overlapCount((me.availability&&me.availability.slots)||[], (other.availability&&other.availability.slots)||[]);
-  const dayMatch   = overlapCount((me.availability&&me.availability.days)||[], (other.availability&&other.availability.days)||[]);
-  const vScore     = other.verification && other.verification.score ? other.verification.score : 0;
-  const rating     = other.stats && other.stats.teacherAverageRating ? other.stats.teacherAverageRating : 0;
-  const ratings    = other.stats && other.stats.teacherTotalRatings ? other.stats.teacherTotalRatings : 0;
-  const human      = other.humanVerification && other.humanVerification.status==='verified' ? 10 : 0;
-  const demo       = other.teachingProfile && other.teachingProfile.demoOptIn ? 6 : 0;
-  return Math.max(45, Math.min(99, 40 + skillMatch*22 + slotMatch*6 + dayMatch*4 + Math.round(vScore*.12) + Math.round(rating*5) + Math.min(10,ratings) + human + demo));
+  if (!me || !other) return 0;
+  var myLearn    = getLearnSkills(me);
+  var theirTeach = getTeachSkills(other);
+  var myTeach    = getTeachSkills(me);
+  var theirLearn = getLearnSkills(other);
+
+  var skillMatch   = overlapCount(myLearn,  theirTeach); // what I want to learn vs what they teach
+  var reverseMatch = overlapCount(myTeach,  theirLearn); // what I teach vs what they want to learn
+
+  // ── If there is NO skill match at all, cap the score hard ───────────
+  // Even a perfect teacher cannot score highly if they teach nothing you need.
+  if (skillMatch === 0) {
+    // Small courtesy score if you can at least teach them something (swap potential)
+    return Math.min(28, 8 + reverseMatch * 6);
+  }
+
+  // ── Skill match is the foundation ───────────────────────────────────
+  // 1 match → base 52, 2 matches → base 68, 3+ → approaches 80+
+  var base = 35 + skillMatch * 18;
+
+  // ── Teacher quality signals ──────────────────────────────────────────
+  var vScore  = other.verification && other.verification.score ? other.verification.score : 0;
+  var rating  = other.stats && other.stats.teacherAverageRating ? other.stats.teacherAverageRating : 0;
+  var ratings = other.stats && other.stats.teacherTotalRatings  ? other.stats.teacherTotalRatings  : 0;
+  var human   = other.humanVerification && other.humanVerification.status === 'verified' ? 8 : 0;
+  var demo    = other.teachingProfile   && other.teachingProfile.demoOptIn ? 4 : 0;
+  var quality = Math.round(vScore * 0.07) + Math.round(rating * 3.5) + Math.min(7, ratings) + human + demo;
+
+  // ── Schedule compatibility ───────────────────────────────────────────
+  var slotMatch = overlapCount((me.availability&&me.availability.slots)||[], (other.availability&&other.availability.slots)||[]);
+  var dayMatch  = overlapCount((me.availability&&me.availability.days)||[],  (other.availability&&other.availability.days)||[]);
+  var schedule  = slotMatch * 4 + dayMatch * 3;
+
+  // ── Mutual swap bonus ────────────────────────────────────────────────
+  // SkillSwap is a two-way exchange: bonus if they can also learn from you
+  var swapBonus = reverseMatch > 0 ? Math.min(8, reverseMatch * 4) : 0;
+
+  return Math.max(0, Math.min(99, base + quality + schedule + swapBonus));
 }
 
 function pickRequestedSkill(me, other) {
