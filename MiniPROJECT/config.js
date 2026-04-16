@@ -10,7 +10,7 @@
  *     then redeploy Firebase Hosting (firebase deploy --only hosting).
  */
 (function () {
-  var RENDER_BACKEND_URL = 'https://YOUR_APP_NAME.onrender.com'; // ← update after Render deploy
+  var RENDER_BACKEND_URL = 'https://skillswap-backend-sbgd.onrender.com';
 
   var isLocal =
     location.hostname === 'localhost' ||
