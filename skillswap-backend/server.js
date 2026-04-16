@@ -19,7 +19,7 @@ const fs      = require('fs');
 const admin   = require('firebase-admin');
 const { google } = require('googleapis');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const skillPricing = require(path.join(__dirname, '..', 'MiniPROJECT', 'skill-pricing.js'));
+const skillPricing = require(path.join(__dirname, 'skill-pricing.js'));
 
 const app = express();
 
@@ -32,8 +32,8 @@ const ALLOWED_ORIGINS = [
     'http://127.0.0.1:5500', 'http://localhost:5501',
     'http://127.0.0.1:5501', 'http://localhost:5502',
     'http://localhost:8080',
-    // Production: add your deployed frontend URL here, e.g.:
-    // 'https://yourskillswapsite.com'
+    // Production frontend — set FRONTEND_URL on Render (e.g. https://skillswap-d2626.web.app)
+    ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL.replace(/\/+$/, '')] : []),
 ];
 app.use(cors({
     origin: (origin, cb) => {
@@ -6229,13 +6229,8 @@ app.get('/api/health', (_req, res) => res.json({
     }
 }));
 
-global.__skillswapServerStarted = true;
+// NOTE: Server starts at the bottom of this file after all routes are registered.
 
-app.listen(5000, () => {
-    console.log('🚀 SkillSwap Verification Server — port 5000');
-    console.log(`🔐 Ownership code: "${OWNERSHIP_CODE}" | Cap without it: ${UNVERIFIED_CAP}`);
-    console.log(`🤖 Groq AI: ${process.env.GROQ_API_KEY ? 'Configured ✅' : 'NOT configured ❌'}`);
-});
 
 // --- AI NOTES ROUTES (GROQ + TAVILY) ---
 const STUDY_NOTES_GROQ_MODEL = 'llama-3.1-8b-instant';
@@ -7001,13 +6996,12 @@ Rules:
     }
 });
 
-const PORT = 5000;
-if (!global.__skillswapServerStarted) {
-    global.__skillswapServerStarted = true;
-    app.listen(PORT, () => {
-        console.log(`SkillSwap backend is running on port ${PORT}`);
-        if(!process.env.GROQ_API_KEY) {
-            console.warn(`[WARNING] GROQ_API_KEY is not defined in the environment. AI features will not work.`);
-        }
-    });
-}
+// ── Start server (single listen — after all routes are registered) ──────────
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 SkillSwap Verification Server — port ${PORT}`);
+    console.log(`🔐 Ownership code: "${OWNERSHIP_CODE}" | Cap without it: ${UNVERIFIED_CAP}`);
+    console.log(`🤖 Groq AI: ${process.env.GROQ_API_KEY ? 'Configured ✅' : 'NOT configured ❌'}`);
+    if (!process.env.GROQ_API_KEY) console.warn('[WARNING] GROQ_API_KEY not set — AI features disabled.');
+});
+ 

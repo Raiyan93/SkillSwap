@@ -4,6 +4,7 @@
   "description": "",
   "main": "server.js",
   "scripts": {
+    "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "provision:reviewer": "node scripts/provision-reviewer.js",
     "seed:human-verification-demo": "node scripts/seed-human-verification-demo.js",
@@ -11,14 +12,6 @@
     "backfill:legacy-settlement": "node scripts/backfill-legacy-session-settlement.js",
     "backfill:role-stats-credits": "node scripts/backfill-role-stats-and-skill-credits.js",
     "migrate:escrow": "node scripts/migrate-future-paid-session-escrow.js",
-    "audit:firestore": "node scripts/audit-firestore-consistency.js"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "dependencies": {
-    "@google/generative-ai": "^0.24.1",
     "axios": "^1.13.6",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",

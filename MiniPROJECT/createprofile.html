@@ -998,7 +998,7 @@ window.goToStep=function(step){
 };
 
 /* ══════════════════════════════════════════════════════════════
-   AI VERIFICATION (calls localhost:5000)
+   AI VERIFICATION
 ══════════════════════════════════════════════════════════════ */
 window.verifyWithAI=async function(){
   hideError();
@@ -1092,7 +1092,7 @@ window.verifyWithAI=async function(){
 
     }
 
-    const response=await fetch('http://localhost:5000/api/verify',{
+    const response=await fetch((window.SkillSwapBackendBaseUrl||'http://localhost:5000')+'/api/verify',{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(payload)
     });

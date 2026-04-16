@@ -1003,6 +1003,24 @@ input[type='checkbox']:focus{outline:2px solid var(--purple);outline-offset:2px}
   </div>
 </div>
 
+<!-- CANCEL SESSION MODAL -->
+<div class="modal-overlay" id="cancelSessionModal">
+  <div class="modal" style="max-width:400px">
+    <button class="modal-close" onclick="closeModal('cancelSessionModal')">✕</button>
+    <div style="text-align:center;margin-bottom:18px">
+      <div style="width:60px;height:60px;border-radius:18px;background:linear-gradient(135deg,var(--orange),var(--red));display:flex;align-items:center;justify-content:center;font-size:1.8rem;margin:0 auto 14px;box-shadow:0 8px 24px rgba(248,113,113,0.4)">❌</div>
+      <div class="modal-title">Cancel Session</div>
+      <div class="modal-sub">Are you sure you want to cancel this session? Paid sessions may refund or split credits based on the cancellation window.</div>
+    </div>
+    <input type="hidden" id="cancelSessionId" value="">
+    
+    <div style="display:flex;gap:12px;margin-top:20px;flex-direction:column">
+      <button class="modal-btn primary" style="background:var(--red);color:#fff;border-color:var(--red);box-shadow:0 4px 14px rgba(248,113,113,0.4)" onclick="confirmCancelSession()">Yes, Cancel Session</button>
+      <button class="modal-btn secondary" onclick="closeModal('cancelSessionModal')">Keep Session</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="recoveryAppealModal">
   <div class="modal" style="max-width:520px">
     <button class="modal-close" onclick="closeModal('recoveryAppealModal')">✕</button>
@@ -4964,7 +4982,7 @@ function sortSessionsList(items) {
   });
 }
 async function loadSessions(uid, userMap) {
-  const snap = await getDocs(query(collection(db,'sessions'),where('participants','array-contains',uid),limit(20)));
+  const snap = await getDocs(query(collection(db,'sessions'),where('participants','array-contains',uid),limit(100)));
   const sessions = [];
   snap.forEach(item => { const d={...item.data(),id:item.id}; sessions.push(formatSessionDoc(d,userMap,uid)); });
   return sortSessionsList(sessions);
@@ -5956,16 +5974,31 @@ window.cancelScheduledSession = async function(sessionId) {
     if (window.showToast) window.showToast('!', 'Session missing', 'Could not find that session.');
     return;
   }
-  if (!window.confirm('Cancel this session now? Paid sessions may refund or split credits based on the cancellation window.')) {
-    return;
+  document.getElementById('cancelSessionId').value = sessionId;
+  document.getElementById('cancelSessionModal').classList.add('show');
+};
+
+window.confirmCancelSession = async function() {
+  var sessionId = document.getElementById('cancelSessionId').value;
+  if (!sessionId) return;
+  var btn = document.querySelector('#cancelSessionModal .modal-btn.primary');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Cancelling...';
   }
   try {
     await apiJson('/api/sessions/' + encodeURIComponent(sessionId) + '/cancel', { method:'POST' });
+    closeModal('cancelSessionModal');
     await refreshDashboard();
-    if (window.showToast) window.showToast('OK', 'Session Cancelled', 'The session cancellation was saved.');
+    if (window.showToast) window.showToast('OK', 'Session Cancelled', 'The session cancellation was successfull.');
   } catch (err) {
     console.error('cancel session error:', err);
     if (window.showToast) window.showToast('!', 'Cancel Failed', err && err.message ? err.message : 'Could not cancel this session.');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Yes, Cancel Session';
+    }
   }
 };
 
@@ -6269,8 +6302,10 @@ function setupRealtimeListeners(uid) {
   );
   unsubscribers.push(unsubSavedMaterials);
 
+  // Real-time listener — simple query, no composite index needed.
+  // limit(100) ensures even heavy test accounts with many old sessions get all active ones.
   const unsubSessions = onSnapshot(
-    query(collection(db,'sessions'),where('participants','array-contains',uid),limit(20)),
+    query(collection(db,'sessions'),where('participants','array-contains',uid),limit(100)),
     function(snap) {
       const sessions = [];
       snap.forEach(function(item) {
@@ -6707,7 +6742,31 @@ window.ssScheduleSession = async function(draft) {
   if (response && typeof response.creditsAgreed === 'number') {
     acceptedPartner.creditsOffered = response.creditsAgreed;
   }
+  // Run full dashboard refresh first
   await refreshDashboard();
+  // After refresh, check if the new session made it into the fetched list.
+  // If not (because limit(50) was full of old sessions), inject it directly.
+  if (response && response.sessionId) {
+    const alreadyLoaded = (window.SESSIONS || []).some(function(s) { return s.id === response.sessionId; });
+    if (!alreadyLoaded) {
+      try {
+        const newSnap = await getDoc(doc(db, 'sessions', response.sessionId));
+        if (newSnap.exists()) {
+          const newSession = formatSessionDoc({ ...newSnap.data(), id: newSnap.id }, state.userMap, state.currentUser.uid);
+          newSession._new = true;
+          // Prepend to SESSIONS — drop the oldest entry to stay under cap
+          window.SESSIONS = [newSession].concat((window.SESSIONS || []).filter(function(s) { return s.id !== newSnap.id; }));
+          state.sessions = window.SESSIONS;
+          if (window.renderSessions) window.renderSessions('sessionsList');
+          if (window.renderSessions) window.renderSessions('sessionsListFull');
+          if (window.renderScheduleTab) window.renderScheduleTab();
+          refreshConnectedUi();
+        }
+      } catch (injectErr) {
+        console.warn('[ssScheduleSession] Could not inject new session:', injectErr.message);
+      }
+    }
+  }
   return response;
 };
 

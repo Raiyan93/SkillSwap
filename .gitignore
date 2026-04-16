@@ -1,1 +1,3 @@
 skillswap-backend/.env
+**/node_modules/
+MiniPROJECT/package-lock.json
