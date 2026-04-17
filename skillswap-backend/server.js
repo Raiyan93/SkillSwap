@@ -6995,11 +6995,10 @@ Rules:
       { "heading": "Practical Applications", "content": "Write 2-4 sentences of real content here." },
       { "heading": "Key Benefits", "content": "Write 2-4 sentences of real content here." }
     ]
-  },
-  "flashcards": [{ "question": "Write a real question here?", "answer": "Write a 2-3 sentence answer here." }],
-  "quiz": [{ "question": "Write a real quiz question here?", "options": ["First real option text", "Second real option text", "Third real option text", "Fourth real option text"], "correct": 0 }]
+  }
 }`;
-// Note: mindmap is intentionally excluded — the initial Gemini mindmap is preserved as-is
+// Note: mindmap, flashcards, quiz, flowchart are intentionally excluded. 
+// We preserve the initial AI generation for those.
 
         const rawImprovedNotes = await callGroqChatWithRetry(
             [
@@ -7016,20 +7015,8 @@ Rules:
         const parsedImproved = parseJsonObjectFromModelResponse(rawImprovedNotes, 'improved notes');
         const notes = normalizeNotesPayload(parsedImproved.notes || parsedImproved, topic);
         const improvedResult = { notes, providerLimited: false, fallback: false };
-        // Intentionally do NOT overwrite mindmap — Gemini's initial mindmap is higher quality
-        // Only update flashcards and quiz if Groq returned them with valid option texts
-        if (Array.isArray(parsedImproved.flashcards) && parsedImproved.flashcards.length) {
-            improvedResult.flashcards = parsedImproved.flashcards;
-        }
-        if (Array.isArray(parsedImproved.quiz) && parsedImproved.quiz.length) {
-            // Validate quiz options are real text, not placeholder letters like ["A","B","C","D"]
-            const validQuiz = parsedImproved.quiz.filter(q =>
-                Array.isArray(q.options) &&
-                q.options.length >= 2 &&
-                q.options.every(opt => typeof opt === 'string' && opt.length > 2)
-            );
-            if (validQuiz.length > 0) improvedResult.quiz = validQuiz;
-        }
+        // Intentionally do NOT regenerate or overwrite mindmap, flashcards, quiz, or flowchart
+        // Focus Groq's tokens and attention purely on improving the notes text.
         res.json(improvedResult);
     } catch (err) {
         console.error('[regenerate-notes-with-feedback]', err.message);
