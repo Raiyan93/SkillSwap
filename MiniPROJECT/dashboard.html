@@ -1557,7 +1557,7 @@ function renderAcceptedPartners(items) {
               return '<span class="pill info">' + escapeHtml(skill) + '</span>';
             }).join('') +
           '</div>' +
-          '<div class="request-meta">' + escapeHtml(item.skillRequested || 'General guidance') + ' Â· ' + escapeHtml(creditText) + '</div>' +
+          '<div class="request-meta">' + escapeHtml(item.skillRequested || 'General guidance') + ' · ' + escapeHtml(creditText) + '</div>' +
           '<div class="pill-row">' +
             '<span class="pill">' + escapeHtml(item.role === 'teacher' ? 'Teacher' : 'Learner') + '</span>' +
             '<span class="pill info">' + escapeHtml(item.sessionType === 'demo' ? 'Demo' : 'Paid') + '</span>' +
@@ -1725,7 +1725,7 @@ openMatchModal = function(encoded) {
       '<div class="modal-title">' + escapeHtml(u.name) + '</div><div style="color:var(--muted);font-size:.82rem">' + escapeHtml(u.uni||'') + '</div>' +
     '</div>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">' +
-      '<div style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);border-radius:12px;padding:12px;text-align:center"><div style="font-size:.7rem;color:var(--muted);margin-bottom:4px">Teaches</div><div style="font-weight:700;color:var(--green)">' + escapeHtml(u.teaches||u.primaryTeach||'â€”') + '</div></div>' +
+      '<div style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);border-radius:12px;padding:12px;text-align:center"><div style="font-size:.7rem;color:var(--muted);margin-bottom:4px">Teaches</div><div style="font-weight:700;color:var(--green)">' + escapeHtml(u.teaches||u.primaryTeach||'—') + '</div></div>' +
       '<div style="background:rgba(124,92,252,0.08);border:1px solid rgba(124,92,252,0.2);border-radius:12px;padding:12px;text-align:center"><div style="font-size:.7rem;color:var(--muted);margin-bottom:4px">Type</div><div style="font-weight:700;color:var(--purple2)">' + (u.demoOptIn?'Free demo available':safeCreditsFrom+' credits/session') + '</div></div>' +
     '</div>' +
     '<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border2);border-radius:12px;padding:14px;margin-bottom:16px">' +
