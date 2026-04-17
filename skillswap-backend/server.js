@@ -6256,10 +6256,24 @@ function parseJsonObjectFromModelResponse(value, label) {
     }
 }
 
+// Strip common UTF-8 artifact characters that appear when AI output is mis-encoded
+function sanitizeAiText(str) {
+    if (typeof str !== 'string') return str;
+    return str
+        .replace(/â€™/g, "'").replace(/â€˜/g, "'")
+        .replace(/â€œ/g, '"').replace(/â€/g, '"')
+        .replace(/â€"/g, '–').replace(/â€"/g, '—')
+        .replace(/â€¦/g, '...').replace(/â€¢/g, '•')
+        .replace(/Â·/g, '·').replace(/Â /g, ' ').replace(/Â/g, '')
+        .replace(/\u00e2\u0080\u0099/g, "'").replace(/\u00e2\u0080\u009c/g, '"').replace(/\u00e2\u0080\u009d/g, '"')
+        .replace(/\u00c2/g, '').replace(/\u00a0/g, ' ')
+        .trim();
+}
+
 function toCleanText(value, fallback = '') {
     if (value === null || value === undefined) return fallback;
-    if (typeof value === 'string') return value.trim() || fallback;
-    return String(value).trim() || fallback;
+    if (typeof value === 'string') return sanitizeAiText(value.trim()) || fallback;
+    return sanitizeAiText(String(value).trim()) || fallback;
 }
 
 function toStringArray(value) {
@@ -6972,20 +6986,20 @@ Rules:
 - Return ONLY valid JSON with this exact shape (no markdown fences):
 {
   "notes": {
-    "summary": "4-6 sentence overview",
-    "keyPoints": ["specific point 1", "specific point 2", "specific point 3", "specific point 4", "specific point 5", "specific point 6"],
+    "summary": "Write 4-6 sentences summarising the topic here.",
+    "keyPoints": ["Specific key point one.", "Specific key point two.", "Specific key point three.", "Specific key point four.", "Specific key point five.", "Specific key point six."],
     "sections": [
-      { "heading": "What TOPIC Is", "content": "2-4 sentences" },
-      { "heading": "Core Concepts", "content": "2-4 sentences" },
-      { "heading": "How It Works", "content": "2-4 sentences" },
-      { "heading": "Practical Applications", "content": "2-4 sentences" },
-      { "heading": "Key Benefits", "content": "2-4 sentences" }
+      { "heading": "What TOPIC Is", "content": "Write 2-4 sentences of real content here." },
+      { "heading": "Core Concepts", "content": "Write 2-4 sentences of real content here." },
+      { "heading": "How It Works", "content": "Write 2-4 sentences of real content here." },
+      { "heading": "Practical Applications", "content": "Write 2-4 sentences of real content here." },
+      { "heading": "Key Benefits", "content": "Write 2-4 sentences of real content here." }
     ]
   },
-  "mindmap": { "center": "TOPIC", "branches": [{ "label": "...", "color": "#7c5cfc", "subnodes": ["s1","s2","s3"] }] },
-  "flashcards": [{ "question": "Q?", "answer": "2-3 sentence answer." }],
-  "quiz": [{ "question": "Q?", "options": ["A","B","C","D"], "correct": 0 }]
+  "flashcards": [{ "question": "Write a real question here?", "answer": "Write a 2-3 sentence answer here." }],
+  "quiz": [{ "question": "Write a real quiz question here?", "options": ["First real option text", "Second real option text", "Third real option text", "Fourth real option text"], "correct": 0 }]
 }`;
+// Note: mindmap is intentionally excluded — the initial Gemini mindmap is preserved as-is
 
         const rawImprovedNotes = await callGroqChatWithRetry(
             [
@@ -7002,9 +7016,20 @@ Rules:
         const parsedImproved = parseJsonObjectFromModelResponse(rawImprovedNotes, 'improved notes');
         const notes = normalizeNotesPayload(parsedImproved.notes || parsedImproved, topic);
         const improvedResult = { notes, providerLimited: false, fallback: false };
-        if (parsedImproved.mindmap) improvedResult.mindmap = parsedImproved.mindmap;
-        if (Array.isArray(parsedImproved.flashcards)) improvedResult.flashcards = parsedImproved.flashcards;
-        if (Array.isArray(parsedImproved.quiz)) improvedResult.quiz = parsedImproved.quiz;
+        // Intentionally do NOT overwrite mindmap — Gemini's initial mindmap is higher quality
+        // Only update flashcards and quiz if Groq returned them with valid option texts
+        if (Array.isArray(parsedImproved.flashcards) && parsedImproved.flashcards.length) {
+            improvedResult.flashcards = parsedImproved.flashcards;
+        }
+        if (Array.isArray(parsedImproved.quiz) && parsedImproved.quiz.length) {
+            // Validate quiz options are real text, not placeholder letters like ["A","B","C","D"]
+            const validQuiz = parsedImproved.quiz.filter(q =>
+                Array.isArray(q.options) &&
+                q.options.length >= 2 &&
+                q.options.every(opt => typeof opt === 'string' && opt.length > 2)
+            );
+            if (validQuiz.length > 0) improvedResult.quiz = validQuiz;
+        }
         res.json(improvedResult);
     } catch (err) {
         console.error('[regenerate-notes-with-feedback]', err.message);
