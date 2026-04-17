@@ -1,4 +1,4 @@
-﻿/**
+/**
  * SkillSwap Verification Server — server.js
  *
  * KEY FIXES THIS VERSION:
@@ -6860,7 +6860,7 @@ app.post('/api/verify-notes', async (req, res) => {
                 'SCORING: Calculate REAL integer scores (0-100) for each field based on your actual analysis. Do NOT use example/placeholder numbers.',
                 '',
                 'Return ONLY valid JSON — no markdown fences:',
-                '{\"status\":\"COMPUTED_STATUS\",\"score\":OVERALL_0_100,\"overview\":\"2-3 sentence honest quality summary based on actual analysis\",\"accuracy\":{\"score\":ACCURACY_0_100,\"issues\":[\"specific inaccuracy found in notes\"],\"strengths\":[\"specific accurate point in notes\"]},\"completeness\":{\"score\":COMPLETENESS_0_100,\"missing\":[\"important concept missing from notes\"],\"covered\":[\"concept well covered in notes\"]},\"clarity\":{\"score\":CLARITY_0_100,\"feedback\":\"specific clarity observation about the notes\"},\"depth\":{\"score\":DEPTH_0_100,\"assessment\":\"specific depth observation about how deeply concepts are explained\"},\"corrections\":[\"specific correction needed\"],\"missingConcepts\":[\"concept to add\"],\"verifiedFacts\":[\"confirmed fact from sources\"],\"improvementPrompt\":\"Specific guidance on which concepts to expand or correct - reference actual note content.\"}',
+                '{"status":"COMPUTED_STATUS","score":OVERALL_0_100,"overview":"2-3 sentence honest quality summary based on actual analysis","accuracy":{"score":ACCURACY_0_100,"issues":["specific inaccuracy found in notes"],"strengths":["specific accurate point in notes"]},"completeness":{"score":COMPLETENESS_0_100,"missing":["important concept missing from notes"],"covered":["concept well covered in notes"]},"clarity":{"score":CLARITY_0_100,"feedback":"specific clarity observation about the notes"},"depth":{"score":DEPTH_0_100,"assessment":"specific depth observation about how deeply concepts are explained"},"corrections":["specific correction needed"],"missingConcepts":["concept to add"],"verifiedFacts":["confirmed fact from sources"],"improvementPrompt":"Specific guidance on which concepts to expand or correct - reference actual note content."}',
                 '',
                 'RULES: status="verified" if score>=85, "partial" if 40-84, "unverified" if <40. Replace ALL CAPS placeholders with your actual computed integers. Do not output placeholder text literally.'
             ].join('\n');
@@ -6916,19 +6916,33 @@ app.post('/api/regenerate-notes-with-feedback', async (req, res) => {
 
         const tavilyResult = await searchTavilyEvidence(topic);
         const sourceSummary = buildVerificationEvidenceSummary(tavilyResult);
+
+        // Build compact payloads — no pretty-printing, strip sources from report
+        // (they're already in TAVILY EVIDENCE), cap lengths to stay within Groq token limits
+        const compactVerification = {
+            corrections: normalizedVerification.corrections || [],
+            missingConcepts: normalizedVerification.missingConcepts || [],
+            suggestions: normalizedVerification.suggestions || [],
+            improvementPrompt: normalizedVerification.improvementPrompt || '',
+            priorMistakes: priorMistakes.slice(0, 12)
+        };
+        const previousNotesStr = JSON.stringify(normalizedPreviousNotes).slice(0, 4000);
+        const verificationStr = JSON.stringify(compactVerification).slice(0, 2000);
+        const evidenceStr = sourceSummary.slice(0, 3000);
+
         const promptText = `Rewrite these study notes so they clearly improve on the earlier version using ONLY the evidence below.
 
 TOPIC:
 ${topic}
 
 EARLIER NOTES JSON:
-${JSON.stringify(normalizedPreviousNotes, null, 2)}
+${previousNotesStr}
 
 VERIFICATION REPORT JSON:
-${JSON.stringify(Object.assign({}, normalizedVerification, { priorMistakes }), null, 2)}
+${verificationStr}
 
 TAVILY EVIDENCE:
-${sourceSummary}
+${evidenceStr}
 
 Rules:
 - Correct every flagged issue.
@@ -6957,7 +6971,7 @@ Rules:
   "mindmap": { "center": "TOPIC", "branches": [{ "label": "...", "color": "#7c5cfc", "subnodes": ["s1","s2","s3"] }] },
   "flashcards": [{ "question": "Q?", "answer": "2-3 sentence answer." }],
   "quiz": [{ "question": "Q?", "options": ["A","B","C","D"], "correct": 0 }]
-}` ;
+}`;
 
         const rawImprovedNotes = await callGroqChatWithRetry(
             [
