@@ -3680,6 +3680,14 @@ async function regenerateImprovedNotes() {
     showToast('⚠️', 'Verify First', 'Run Notes Verification before improving the notes.');
     return;
   }
+  // Warn if notes are already high quality — over-editing high-score notes tends to reduce quality
+  var currentScore = lastAiData.verification && (lastAiData.verification.score || 0);
+  if (currentScore >= 88 && !window._forceRegenerate) {
+    window._forceRegenerate = true;
+    showToast('⭐', 'Notes Already High Quality', 'Your notes scored ' + currentScore + '%. Further improvements may reduce quality. Click Regenerate again to proceed anyway.');
+    return;
+  }
+  window._forceRegenerate = false;
   var topic = String(lastAiData.topic || '').trim();
   if (!topic) {
     showToast('⚠️', 'No Topic', 'Generate notes for a topic first.');

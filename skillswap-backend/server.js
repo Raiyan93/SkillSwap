@@ -6917,18 +6917,32 @@ app.post('/api/regenerate-notes-with-feedback', async (req, res) => {
         const tavilyResult = await searchTavilyEvidence(topic);
         const sourceSummary = buildVerificationEvidenceSummary(tavilyResult);
 
-        // Build compact payloads — no pretty-printing, strip sources from report
-        // (they're already in TAVILY EVIDENCE), cap lengths to stay within Groq token limits
-        const compactVerification = {
-            corrections: normalizedVerification.corrections || [],
-            missingConcepts: normalizedVerification.missingConcepts || [],
-            suggestions: normalizedVerification.suggestions || [],
-            improvementPrompt: normalizedVerification.improvementPrompt || '',
-            priorMistakes: priorMistakes.slice(0, 12)
-        };
-        const previousNotesStr = JSON.stringify(normalizedPreviousNotes).slice(0, 4000);
+        // Build compact payloads — no pretty-print, strip sources (already in TAVILY EVIDENCE)
+        // Raise notes cap to 6000 so improved notes aren't truncated on re-improvement
+        const currentScore = normalizedVerification.score || 0;
+        const isHighScore = currentScore >= 88;
+        const compactVerification = isHighScore
+            ? {
+                // High-score notes: only send real corrections and missing concepts
+                // Omit suggestions to prevent Groq from over-editing working content
+                corrections: (normalizedVerification.corrections || []).slice(0, 5),
+                missingConcepts: (normalizedVerification.missingConcepts || []).slice(0, 5),
+                improvementPrompt: normalizedVerification.improvementPrompt || '',
+                priorMistakes: priorMistakes.slice(0, 5)
+            }
+            : {
+                corrections: normalizedVerification.corrections || [],
+                missingConcepts: normalizedVerification.missingConcepts || [],
+                suggestions: normalizedVerification.suggestions || [],
+                improvementPrompt: normalizedVerification.improvementPrompt || '',
+                priorMistakes: priorMistakes.slice(0, 12)
+            };
+        const previousNotesStr = JSON.stringify(normalizedPreviousNotes).slice(0, 6000);
         const verificationStr = JSON.stringify(compactVerification).slice(0, 2000);
         const evidenceStr = sourceSummary.slice(0, 3000);
+        const highScoreGuard = isHighScore
+            ? `\n- IMPORTANT: These notes already scored ${currentScore}%. They are mostly correct. Make ONLY the specific corrections listed. Do NOT change sections that are already verified correct. Minimal targeted edits only.`
+            : '';
 
         const promptText = `Rewrite these study notes so they clearly improve on the earlier version using ONLY the evidence below.
 
@@ -6954,7 +6968,7 @@ Rules:
 - Do not mention verification, scores, Tavily, Groq, or provider limits inside the notes.
 - If the report shows uncertainty, rewrite cautiously instead of inventing facts.
 - Do NOT reproduce the previous notes verbatim. Write genuinely new, improved content.
-- Include all 5 sections with conceptual headings. Target score: 85+.
+- Include all 5 sections with conceptual headings. Target score: 85+.${highScoreGuard}
 - Return ONLY valid JSON with this exact shape (no markdown fences):
 {
   "notes": {
