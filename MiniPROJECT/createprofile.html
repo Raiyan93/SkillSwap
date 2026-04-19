@@ -501,6 +501,7 @@ body.embedded-edit .form-card{border-radius:20px;padding:28px;animation:none}
   </div>
 </main>
 
+<script src="config.js"></script>
 <script src="skill-pricing.js"></script>
 
 <!-- Firebase Module -->
@@ -668,7 +669,7 @@ function updateCreditPreview(){
   const preview=document.getElementById('creditPreview'),rows=document.getElementById('creditRows'),total=document.getElementById('totalCredits');
   if(!window.offerSkills||!window.offerSkills.length){preview.style.display='none';return;}
   preview.style.display='block';rows.innerHTML='';let sum=0;
-  window.offerSkills.forEach(s=>{const c=typeof s.credits==='number'?s.credits:getCredits(s.name,s.level);sum+=c;const d=getDiffBadge(s.name);const row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.05);';row.innerHTML=`<span style="flex:1;font-size:.88rem;">${s.name}</span><span style="font-size:.72rem;padding:2px 10px;border-radius:50px;background:rgba(255,255,255,.06);color:${d.color};border:1px solid ${d.color}44;">${d.label}</span><span style="font-size:.75rem;color:var(--muted);text-transform:capitalize;min-width:80px;text-align:center;">${s.level}</span><span style="font-family:'Syne',sans-serif;font-weight:800;color:#f59e0b;min-width:55px;text-align:right;">+${c} cr</span>`;rows.appendChild(row);});
+  window.offerSkills.forEach(s=>{const c=typeof s.credits==='number'?s.credits:getCredits(s.name,s.level);sum+=c;const row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.05);';row.innerHTML=`<span style="flex:1;font-size:.88rem;">${s.name}</span><span style="font-size:.75rem;color:var(--muted);text-transform:capitalize;min-width:80px;text-align:center;">${s.level}</span><span style="font-family:'Syne',sans-serif;font-weight:800;color:#f59e0b;min-width:55px;text-align:right;">+${c} cr</span>`;rows.appendChild(row);});
   total.textContent='+'+Math.round(sum/window.offerSkills.length)+' credits avg';
 }
 window._updateCreditPreview=updateCreditPreview;

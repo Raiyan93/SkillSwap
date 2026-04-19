@@ -9,14 +9,14 @@
  * 3. All previous fixes retained.
  */
 
-const path    = require('path');
+const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env'), override: true });
 const express = require('express');
-const cors    = require('cors');
-const axios   = require('axios');
-const crypto  = require('crypto');
-const fs      = require('fs');
-const admin   = require('firebase-admin');
+const cors = require('cors');
+const axios = require('axios');
+const crypto = require('crypto');
+const fs = require('fs');
+const admin = require('firebase-admin');
 const { google } = require('googleapis');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const skillPricing = require(path.join(__dirname, 'skill-pricing.js'));
@@ -50,9 +50,9 @@ app.use(express.json({ limit: '2mb' }));
 // ─────────────────────────────────────────────────────────────
 // INPUT VALIDATION
 // ─────────────────────────────────────────────────────────────
-const MAX_SKILLS    = 200;
+const MAX_SKILLS = 200;
 const MAX_EXPERTISE = 500;
-const MAX_URL       = 300;
+const MAX_URL = 300;
 
 function sanitize(input, maxLen, field) {
     if (!input) return { value: '', error: null };
@@ -74,7 +74,7 @@ function sanitize(input, maxLen, field) {
 // ─────────────────────────────────────────────────────────────
 const OWNERSHIP_CODE = 'SkillSwap2026';
 const UNVERIFIED_CAP = 40;
-const TIMEOUT_MS     = 35000;
+const TIMEOUT_MS = 35000;
 
 const PRIMARY_GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 const GEMINI_FALLBACK_MODELS = String(process.env.GEMINI_FALLBACK_MODELS || '')
@@ -89,9 +89,9 @@ const MODEL_CONFIG = {
 };
 
 const LEVEL_CONTEXT = {
-    beginner:     'BEGINNER — low bar. Basic syntax, 1-2 small projects sufficient.',
+    beginner: 'BEGINNER — low bar. Basic syntax, 1-2 small projects sufficient.',
     intermediate: 'INTERMEDIATE — medium bar. Real working projects required.',
-    expert:       'EXPERT — HIGH bar. Production quality, multiple substantial projects, depth required.'
+    expert: 'EXPERT — HIGH bar. Production quality, multiple substantial projects, depth required.'
 };
 
 const CERTIFICATE_METHOD_MAX_SCORE = 80;
@@ -179,12 +179,12 @@ const GITHUB_SKILL_SYNONYMS = {
 };
 
 const KNOWN_ISSUERS = [
-    'Coursera','edX','Udemy','Google','Microsoft','AWS','Meta','IBM',
-    'Stanford','MIT','Harvard','IIT','FreeCodeCamp','LinkedIn Learning',
-    'Shaw Academy','Alison','Khan Academy','Codecademy','Pluralsight',
-    'DataCamp','HackerRank','MongoDB University','Salesforce','Oracle',
-    'Adobe','Autodesk','Cisco','CompTIA','NVIDIA','Infosys','TCS','NPTEL',
-    'Simplilearn','Great Learning','upGrad','Scaler','GeeksforGeeks'
+    'Coursera', 'edX', 'Udemy', 'Google', 'Microsoft', 'AWS', 'Meta', 'IBM',
+    'Stanford', 'MIT', 'Harvard', 'IIT', 'FreeCodeCamp', 'LinkedIn Learning',
+    'Shaw Academy', 'Alison', 'Khan Academy', 'Codecademy', 'Pluralsight',
+    'DataCamp', 'HackerRank', 'MongoDB University', 'Salesforce', 'Oracle',
+    'Adobe', 'Autodesk', 'Cisco', 'CompTIA', 'NVIDIA', 'Infosys', 'TCS', 'NPTEL',
+    'Simplilearn', 'Great Learning', 'upGrad', 'Scaler', 'GeeksforGeeks'
 ];
 
 const CERT_LINK_PLATFORMS = [
@@ -3180,7 +3180,7 @@ const getRepos = async u => {
     const r = await ghGet(`/users/${u}/repos?sort=updated&per_page=100`);
     return r.data.map(r => ({
         name: r.name, desc: r.description, language: r.language,
-        stars: r.stargazers_count, forks: r.forks_count, topics: r.topics||[],
+        stars: r.stargazers_count, forks: r.forks_count, topics: r.topics || [],
         updatedAt: r.updated_at, createdAt: r.created_at,
         size: r.size, isFork: r.fork,
     }));
@@ -3188,25 +3188,25 @@ const getRepos = async u => {
 
 const getLangs = async (u, repos) => {
     const targets = repos.filter(r => !r.isFork && r.size > 10).slice(0, 6);
-    const lc      = {};
+    const lc = {};
     await Promise.all(targets.map(r =>
         ghGet(`/repos/${u}/${r.name}/languages`).then(res => {
-            for (const [l, b] of Object.entries(res.data)) lc[l] = (lc[l]||0) + b;
-        }).catch(() => {})
+            for (const [l, b] of Object.entries(res.data)) lc[l] = (lc[l] || 0) + b;
+        }).catch(() => { })
     ));
-    return Object.entries(lc).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([l])=>l);
+    return Object.entries(lc).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([l]) => l);
 };
 
 const detectClones = async (u, repos) => {
     const suspects = [];
-    for (const r of repos.filter(r=>!r.isFork&&r.size>50).sort((a,b)=>b.size-a.size).slice(0,4)) {
+    for (const r of repos.filter(r => !r.isFork && r.size > 50).sort((a, b) => b.size - a.size).slice(0, 4)) {
         try {
-            const res  = await ghGet(`/repos/${u}/${r.name}/contributors`);
-            const user = res.data.find(c => c.login.toLowerCase()===u.toLowerCase());
-            const n    = user ? user.contributions : 0;
+            const res = await ghGet(`/repos/${u}/${r.name}/contributors`);
+            const user = res.data.find(c => c.login.toLowerCase() === u.toLowerCase());
+            const n = user ? user.contributions : 0;
             if (n === 0) suspects.push({ name: r.name, reason: '0 commits by owner — likely cloned' });
             else if (n < 3 && r.stars > 30) suspects.push({ name: r.name, reason: `Only ${n} commit(s), ${r.stars} stars` });
-        } catch (_) {}
+        } catch (_) { }
     }
     return suspects;
 };
@@ -3216,7 +3216,7 @@ const detectClones = async (u, repos) => {
 // ─────────────────────────────────────────────────────────────
 const fetchB64 = async url => {
     try {
-        const r    = await axios.get(url, { responseType: 'arraybuffer', timeout: 12000 });
+        const r = await axios.get(url, { responseType: 'arraybuffer', timeout: 12000 });
         const mime = r.headers['content-type'] || 'image/jpeg';
         if (mime.includes('pdf') || url.toLowerCase().endsWith('.pdf')) return null;
         return { inlineData: { data: Buffer.from(r.data).toString('base64'), mimeType: mime } };
@@ -3487,8 +3487,8 @@ function buildCertificateReasoning({
         : nameMismatch
             ? 'The recipient name on the certificate does not match the profile owner, so the certificate cannot be accepted as yours.'
             : recipientName && recipientName !== 'not shown'
-            ? `The certificate recipient is shown as ${recipientName}.`
-            : 'The certificate recipient name was not clearly visible on the public page.';
+                ? `The certificate recipient is shown as ${recipientName}.`
+                : 'The certificate recipient name was not clearly visible on the public page.';
     let dateLine = 'No reliable completion date could be validated from the public certificate data.';
     if (completionDate && completionDate !== 'not shown') {
         dateLine = completionDateFuture
@@ -3914,24 +3914,24 @@ function extractCertificateSubjectFromPage(page, platform) {
 // MAIN ROUTE
 // ─────────────────────────────────────────────────────────────
 app.post('/api/verify', async (req, res) => {
-    const { type, skillLevels={}, portfolioUrls } = req.body;
+    const { type, skillLevels = {}, portfolioUrls } = req.body;
 
-    const svSkills    = sanitize(req.body.skills,    MAX_SKILLS,    'skills');
+    const svSkills = sanitize(req.body.skills, MAX_SKILLS, 'skills');
     const svExpertise = sanitize(req.body.expertise, MAX_EXPERTISE, 'expertise');
-    if (svSkills.error)  return res.status(400).json({ error: svSkills.error });
+    if (svSkills.error) return res.status(400).json({ error: svSkills.error });
     if (!svSkills.value) return res.status(400).json({ error: 'No skills provided.' });
     if (typeof skillLevels !== 'object' || Array.isArray(skillLevels))
         return res.status(400).json({ error: 'skillLevels must be an object.' });
     if (Object.keys(skillLevels).length > 15)
         return res.status(400).json({ error: 'Too many skills (max 15).' });
 
-    const skills    = svSkills.value;
+    const skills = svSkills.value;
     const expertise = svExpertise.value;
 
     // Profile owner name — used for certificate name matching
     const firstName = (req.body.profileFirstName || '').trim().toLowerCase();
-    const lastName  = (req.body.profileLastName  || '').trim().toLowerCase();
-    const fullName  = `${firstName} ${lastName}`.trim();
+    const lastName = (req.body.profileLastName || '').trim().toLowerCase();
+    const fullName = `${firstName} ${lastName}`.trim();
 
     try {
         const model = genAI.getGenerativeModel(MODEL_CONFIG);
@@ -3952,7 +3952,7 @@ app.post('/api/verify', async (req, res) => {
                 throw e;
             }
 
-            const bio               = profile.bio || '';
+            const bio = profile.bio || '';
             const ownershipVerified = bio.toLowerCase().includes(OWNERSHIP_CODE.toLowerCase());
 
             const [langNames, clones] = await Promise.all([
@@ -3960,22 +3960,22 @@ app.post('/api/verify', async (req, res) => {
                 detectClones(username, repos)
             ]);
 
-            const orig   = repos.filter(r => !r.isFork && r.size > 0);
-            const fresh  = orig.filter(r => (Date.now()-new Date(r.createdAt))/(1000*60*60*24) < 7);
-            const lvlLines = Object.entries(skillLevels).map(([s,l])=>`  - ${s}: ${LEVEL_CONTEXT[l]||LEVEL_CONTEXT.intermediate}`).join('\n') || `  ${skills}`;
+            const orig = repos.filter(r => !r.isFork && r.size > 0);
+            const fresh = orig.filter(r => (Date.now() - new Date(r.createdAt)) / (1000 * 60 * 60 * 24) < 7);
+            const lvlLines = Object.entries(skillLevels).map(([s, l]) => `  - ${s}: ${LEVEL_CONTEXT[l] || LEVEL_CONTEXT.intermediate}`).join('\n') || `  ${skills}`;
 
             const aiPrompt = `Rate this developer's original code quality 1-10. Do NOT produce a confidence score.
 
 Developer: ${profile.login} | Created: ${profile.created_at} | Followers: ${profile.followers}
 Skills claimed:
 ${lvlLines}
-Languages in original repos: ${langNames.join(', ')||'none'}
-Original repos: ${orig.length} | Forks: ${repos.filter(r=>r.isFork).length}
-${fresh.length?`⚠️ Fresh repos (<7 days): ${fresh.map(r=>r.name).join(', ')}`:''}
-${clones.length?`⚠️ Clone suspects:\n${clones.map(s=>`- ${s.name}: ${s.reason}`).join('\n')}`:''}
+Languages in original repos: ${langNames.join(', ') || 'none'}
+Original repos: ${orig.length} | Forks: ${repos.filter(r => r.isFork).length}
+${fresh.length ? `⚠️ Fresh repos (<7 days): ${fresh.map(r => r.name).join(', ')}` : ''}
+${clones.length ? `⚠️ Clone suspects:\n${clones.map(s => `- ${s.name}: ${s.reason}`).join('\n')}` : ''}
 
 Top original repos:
-${JSON.stringify(orig.slice(0,15).map(r=>({name:r.name,desc:r.desc,language:r.language,stars:r.stars,topics:r.topics,size:r.size})),null,2)}
+${JSON.stringify(orig.slice(0, 15).map(r => ({ name: r.name, desc: r.desc, language: r.language, stars: r.stars, topics: r.topics, size: r.size })), null, 2)}
 
 User description: "${expertise}"
 
@@ -3993,29 +3993,29 @@ Respond ONLY in valid JSON (no markdown):
             const unverifiedSkills = skillEvaluations.filter(item => item.status === 'unverified').map(item => item.skill);
 
             let finalScore = score, clonePenalty = 0;
-            if (clones.length >= 3) { clonePenalty = 25; finalScore = Math.max(0, score-25); }
-            else if (clones.length >= 1) { clonePenalty = 10; finalScore = Math.max(0, score-10); }
+            if (clones.length >= 3) { clonePenalty = 25; finalScore = Math.max(0, score - 25); }
+            else if (clones.length >= 1) { clonePenalty = 10; finalScore = Math.max(0, score - 10); }
 
             const result = {
-                isVerified:       finalScore >= 60 && verifiedSkills.length > 0,
-                confidenceScore:  finalScore,
+                isVerified: finalScore >= 60 && verifiedSkills.length > 0,
+                confidenceScore: finalScore,
                 verifiedSkills,
                 unverifiedSkills,
                 partialSkills,
-                scoreBreakdown:   breakdown,
-                cloneWarning:     clones.length > 0,
-                cloneDetails:     clones,
+                scoreBreakdown: breakdown,
+                cloneWarning: clones.length > 0,
+                cloneDetails: clones,
                 clonePenalty,
                 originalRepoCount: orig.length,
-                forkedRepoCount:   repos.filter(r=>r.isFork).length,
-                languagesFound:   langNames,
-                analysisSource:   'gemini',
-                reasoning:        normalizeWhitespace(ai.developerSummary || buildGitHubReasoning(skillEvaluations)),
+                forkedRepoCount: repos.filter(r => r.isFork).length,
+                languagesFound: langNames,
+                analysisSource: 'gemini',
+                reasoning: normalizeWhitespace(ai.developerSummary || buildGitHubReasoning(skillEvaluations)),
                 ownershipVerified,
             };
 
             if (!ownershipVerified) {
-                result.isVerified      = false;
+                result.isVerified = false;
                 result.confidenceScore = Math.min(finalScore, UNVERIFIED_CAP);
                 result.ownershipWarning = `Score capped at ${UNVERIFIED_CAP}/100. Actual score: ${finalScore}/100. Add "${OWNERSHIP_CODE}" to your GitHub bio to unlock.`;
             }
@@ -4033,18 +4033,22 @@ Respond ONLY in valid JSON (no markdown):
             for (let i = 0; i < portfolioUrls.length; i++) {
                 const url = portfolioUrls[i];
                 if (url?.toLowerCase().endsWith('.pdf') || url?.includes('/raw/')) {
-                    imageResults.push({ index:i+1, isVerified:false, confidenceScore:0, tamperDetected:false,
-                        error:'PDF cannot be analyzed. Export as PNG or JPG and re-upload.' });
+                    imageResults.push({
+                        index: i + 1, isVerified: false, confidenceScore: 0, tamperDetected: false,
+                        error: 'PDF cannot be analyzed. Export as PNG or JPG and re-upload.'
+                    });
                     continue;
                 }
                 const part = await fetchB64(url);
                 if (!part) {
-                    imageResults.push({ index:i+1, isVerified:false, confidenceScore:0,
-                        error:'Could not load image. If PDF, export as PNG/JPG first.' });
+                    imageResults.push({
+                        index: i + 1, isVerified: false, confidenceScore: 0,
+                        error: 'Could not load image. If PDF, export as PNG/JPG first.'
+                    });
                     continue;
                 }
 
-                const lvlLines = Object.entries(skillLevels).map(([s,l])=>`- ${s}: claimed as ${l}`).join('\n') || skills;
+                const lvlLines = Object.entries(skillLevels).map(([s, l]) => `- ${s}: claimed as ${l}`).join('\n') || skills;
 
                 // NAME CHECK INSTRUCTION — core fix
                 const nameInstruction = fullName
@@ -4066,7 +4070,7 @@ ${lvlLines}
 User description: "${expertise}"
 Credible issuers: ${KNOWN_ISSUERS.join(', ')}
 
-Image ${i+1} of ${portfolioUrls.length} — analyze this one only.
+Image ${i + 1} of ${portfolioUrls.length} — analyze this one only.
 
 NAME VERIFICATION (do this first before anything else):
 1. Find the name of the person this certificate was awarded to
@@ -4173,34 +4177,36 @@ Respond ONLY in valid JSON (no markdown, no backticks):
                 j.confidenceScore = Math.max(0, Math.min(CERTIFICATE_METHOD_MAX_SCORE, Math.round(Number(j.confidenceScore) || 0)));
                 j.isVerified = j.confidenceScore >= 50 && !j.nameMismatch && !j.tamperDetected && !j.aiGeneratedSuspicion && j.skillMatch !== 'none';
 
-                imageResults.push({ index: i+1, url, ...j });
+                imageResults.push({ index: i + 1, url, ...j });
             }
 
-            const forged      = imageResults.filter(r => r.tamperDetected && r.tamperConfidence==='high');
+            const forged = imageResults.filter(r => r.tamperDetected && r.tamperConfidence === 'high');
             const namesFailed = imageResults.filter(r => r.nameMismatch);
-            const verified    = imageResults.filter(r => r.isVerified);
-            const valid       = imageResults.filter(r => !r.error);
-            const avgScore    = valid.length ? Math.round(valid.reduce((a,b)=>a+(b.confidenceScore||0),0)/valid.length) : 0;
+            const verified = imageResults.filter(r => r.isVerified);
+            const valid = imageResults.filter(r => !r.error);
+            const avgScore = valid.length ? Math.round(valid.reduce((a, b) => a + (b.confidenceScore || 0), 0) / valid.length) : 0;
 
             if (imageResults.every(r => r.error?.includes('PDF'))) {
-                return res.json({ isVerified:false, confidenceScore:0, imageResults, pdfError:true,
-                    summary:'All files are PDFs. Export as PNG or JPG and re-upload.' });
+                return res.json({
+                    isVerified: false, confidenceScore: 0, imageResults, pdfError: true,
+                    summary: 'All files are PDFs. Export as PNG or JPG and re-upload.'
+                });
             }
 
             let summary;
-            if (namesFailed.length)  summary = `Name mismatch on ${namesFailed.length} cert(s). Certificate must be issued to "${fullName || 'you'}".`;
-            else if (forged.length)  summary = `FORGERY on ${forged.length} image(s). Rejected.`;
+            if (namesFailed.length) summary = `Name mismatch on ${namesFailed.length} cert(s). Certificate must be issued to "${fullName || 'you'}".`;
+            else if (forged.length) summary = `FORGERY on ${forged.length} image(s). Rejected.`;
             else if (verified.length) summary = `${verified.length}/${imageResults.length} cert(s) verified.`;
             else summary = 'No certificates verified. Check skill match and image quality.';
 
             return res.json({
-                isVerified:        namesFailed.length===0 && forged.length===0 && verified.length>0,
-                confidenceScore:   (namesFailed.length||forged.length) ? 0 : avgScore,
-                imageCount:        imageResults.length,
+                isVerified: namesFailed.length === 0 && forged.length === 0 && verified.length > 0,
+                confidenceScore: (namesFailed.length || forged.length) ? 0 : avgScore,
+                imageCount: imageResults.length,
                 imageResults,
-                forgedCount:       forged.length,
+                forgedCount: forged.length,
                 nameMismatchCount: namesFailed.length,
-                verifiedCount:     verified.length,
+                verifiedCount: verified.length,
                 summary,
             });
         }
@@ -4411,16 +4417,16 @@ Respond ONLY in valid JSON:
         if (err.isGeminiVerificationRateLimit) {
             const min = err.remainingMinutes || 60;
             return res.status(429).json({
-                error: `AI verification limit reached (5 per hour). Please try again in ${min} minute${min === 1 ? '' : 's'}, or ask the admin to restart the server to reset the limit.`,
+                error: `AI verification limit reached (5 per hour). Please try again in ${min} minute${min === 1 ? '' : 's'}`,
                 rateLimited: true,
                 remainingMinutes: min
             });
         }
-        if (err.message?.includes('SAFETY'))  return res.status(400).json({ error: 'Content flagged by safety filters.' });
-        if (err instanceof SyntaxError)       return res.status(500).json({ error: 'AI returned malformed response. Try again.' });
-        if (err.response?.status === 401)     return res.status(500).json({ error: 'GitHub token invalid.' });
-        if (err.response?.status === 403)     return res.status(503).json({ error: 'GitHub API rate limit. Wait ~1 hour.' });
-        if (isGeminiQuotaError(err))          return res.status(429).json({ error: buildGeminiQuotaMessage(err) });
+        if (err.message?.includes('SAFETY')) return res.status(400).json({ error: 'Content flagged by safety filters.' });
+        if (err instanceof SyntaxError) return res.status(500).json({ error: 'AI returned malformed response. Try again.' });
+        if (err.response?.status === 401) return res.status(500).json({ error: 'GitHub token invalid.' });
+        if (err.response?.status === 403) return res.status(503).json({ error: 'GitHub API rate limit. Wait ~1 hour.' });
+        if (isGeminiQuotaError(err)) return res.status(429).json({ error: buildGeminiQuotaMessage(err) });
         if (err.message?.includes('Timeout')) return res.status(504).json({ error: 'Analysis timed out. Try again.' });
         res.status(500).json({ error: err.message });
     }
@@ -4450,7 +4456,7 @@ app.post('/api/generate-study-materials', async (req, res) => {
 
         // Build prompt based on type
         let prompt = '';
-        
+
         if (type === 'mindmap') {
             prompt = `You are an expert educator. Create a comprehensive mind map for learning "${sanitizedTopic}".
 
@@ -4520,18 +4526,18 @@ Create 3-5 branches, 10+ flashcards, 5+ quiz questions. Make it comprehensive an
         );
 
         let aiText = response.data.choices[0].message.content.trim();
-        
+
         // Clean markdown artifacts
         aiText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
-        
+
         // Parse JSON
         const result = JSON.parse(aiText);
-        
+
         res.json(result);
 
     } catch (err) {
         console.error('[generate-study-materials]', err.message);
-        
+
         if (err.response?.status === 401) {
             return res.status(401).json({ error: 'Invalid Groq API key. Check .env file.' });
         }
@@ -4541,7 +4547,7 @@ Create 3-5 branches, 10+ flashcards, 5+ quiz questions. Make it comprehensive an
         if (err instanceof SyntaxError) {
             return res.status(500).json({ error: 'AI returned invalid JSON. Try again.' });
         }
-        
+
         res.status(500).json({ error: err.message || 'Failed to generate study materials' });
     }
 });
@@ -5324,13 +5330,13 @@ function normalizeAdminSkillList(items) {
     if (!Array.isArray(items)) return [];
     return items
         .map((item) => {
-        if (!item) return '';
-        if (typeof item === 'string') return item.trim();
-        if (typeof item === 'object') {
-            return String(item.name || item.skill || item.title || '').trim();
-        }
-        return String(item).trim();
-    })
+            if (!item) return '';
+            if (typeof item === 'string') return item.trim();
+            if (typeof item === 'object') {
+                return String(item.name || item.skill || item.title || '').trim();
+            }
+            return String(item).trim();
+        })
         .filter(Boolean);
 }
 
@@ -5622,12 +5628,12 @@ async function buildUserRelationshipGroups(uid, detail = {}) {
     }
     return Array.from(groups.values())
         .map((group) => ({
-        ...group,
-        roles: Array.from(group.roles),
-        sessions: group.sessions.sort((a, b) => toMillis(b.updatedAt || b.startAt) - toMillis(a.updatedAt || a.startAt)),
-        requests: group.requests.sort((a, b) => toMillis(b.updatedAt || b.createdAt) - toMillis(a.updatedAt || a.createdAt)),
-        connections: group.connections.sort((a, b) => toMillis(b.updatedAt || b.createdAt) - toMillis(a.updatedAt || a.createdAt))
-    }))
+            ...group,
+            roles: Array.from(group.roles),
+            sessions: group.sessions.sort((a, b) => toMillis(b.updatedAt || b.startAt) - toMillis(a.updatedAt || a.startAt)),
+            requests: group.requests.sort((a, b) => toMillis(b.updatedAt || b.createdAt) - toMillis(a.updatedAt || a.createdAt)),
+            connections: group.connections.sort((a, b) => toMillis(b.updatedAt || b.createdAt) - toMillis(a.updatedAt || a.createdAt))
+        }))
         .sort((a, b) => toMillis(b.latestInteractionAt) - toMillis(a.latestInteractionAt));
 }
 
@@ -5824,7 +5830,7 @@ async function performAdminUserAction(targetUid, adminProfile, action, options =
             },
             authDisabled: false
         });
-        await admin.auth().updateUser(targetUid, { disabled: false }).catch(() => {});
+        await admin.auth().updateUser(targetUid, { disabled: false }).catch(() => { });
         await appendAdminAuditLog(targetUid, {
             action: 'user_suspended',
             category,
@@ -5850,7 +5856,7 @@ async function performAdminUserAction(targetUid, adminProfile, action, options =
             accountStatus: 'active',
             authDisabled: false
         });
-        await admin.auth().updateUser(targetUid, { disabled: false }).catch(() => {});
+        await admin.auth().updateUser(targetUid, { disabled: false }).catch(() => { });
         await appendAdminAuditLog(targetUid, {
             action: 'user_reactivated',
             category,
@@ -5890,7 +5896,7 @@ async function performAdminUserAction(targetUid, adminProfile, action, options =
                 createdAt: new Date().toISOString()
             }
         });
-        await admin.auth().updateUser(targetUid, { disabled: true }).catch(() => {});
+        await admin.auth().updateUser(targetUid, { disabled: true }).catch(() => { });
         await appendAdminAuditLog(targetUid, {
             action: 'user_terminated',
             category,
@@ -6093,7 +6099,7 @@ async function resolveRecoveryAppeal(appealId, adminProfile, action, body = {}) 
             probation,
             authDisabled: false
         });
-        await admin.auth().updateUser(appeal.uid, { disabled: false }).catch(() => {});
+        await admin.auth().updateUser(appeal.uid, { disabled: false }).catch(() => { });
         await appealRef.set({
             status: 'approved',
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -6997,8 +7003,8 @@ Rules:
     ]
   }
 }`;
-// Note: mindmap, flashcards, quiz, flowchart are intentionally excluded. 
-// We preserve the initial AI generation for those.
+        // Note: mindmap, flashcards, quiz, flowchart are intentionally excluded. 
+        // We preserve the initial AI generation for those.
 
         const rawImprovedNotes = await callGroqChatWithRetry(
             [
@@ -7044,4 +7050,3 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🤖 Groq AI: ${process.env.GROQ_API_KEY ? 'Configured ✅' : 'NOT configured ❌'}`);
     if (!process.env.GROQ_API_KEY) console.warn('[WARNING] GROQ_API_KEY not set — AI features disabled.');
 });
- 
