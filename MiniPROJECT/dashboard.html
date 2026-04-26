@@ -3682,7 +3682,7 @@ async function regenerateImprovedNotes() {
   }
   // Warn if notes are already high quality — over-editing high-score notes tends to reduce quality
   var currentScore = lastAiData.verification && (lastAiData.verification.score || 0);
-  if (currentScore >= 88 && !window._forceRegenerate) {
+  if (currentScore >= 85 && !window._forceRegenerate) {
     window._forceRegenerate = true;
     showToast('⭐', 'Notes Already High Quality', 'Your notes scored ' + currentScore + '%. Further improvements may reduce quality. Click Regenerate again to proceed anyway.');
     return;

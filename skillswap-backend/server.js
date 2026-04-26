@@ -3031,24 +3031,34 @@ async function executeGeminiCall(model, prompt, imageParts, label) {
     return parseGeminiJsonResponse(response.response.text());
 }
 
-// ── GEMINI VERIFICATION RATE LIMITER ────────────────────────────────────────
-// Max 5 AI verifications per hour. Resets automatically after 1 hour elapses
-// OR instantly when admin restarts the server (in-memory — no persistence).
+// ── GEMINI VERIFICATION RATE LIMITER (per-user) ──────────────────────────────
+// Max 5 AI verifications per UID per hour. Each user gets an independent window.
+// Resets automatically after 1 hour elapses per user, or on server restart.
+const GEMINI_RATE_MAX = 5;
+const GEMINI_RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+
+// Map<uid, { count: number, windowStartMs: number|null }>
+const _geminiRateBuckets = new Map();
+
+function _getOrCreateBucket(uid) {
+    if (!_geminiRateBuckets.has(uid)) {
+        _geminiRateBuckets.set(uid, { count: 0, windowStartMs: null });
+    }
+    return _geminiRateBuckets.get(uid);
+}
+
 const geminiVerificationRateLimit = {
-    count: 0,
-    windowStartMs: null,
-    MAX_PER_HOUR: 5,
-    WINDOW_MS: 60 * 60 * 1000, // 1 hour in ms
-    check() {
+    check(uid) {
+        const bucket = _getOrCreateBucket(uid);
         const now = Date.now();
-        // Auto-reset if the 1-hour window has fully elapsed
-        if (this.windowStartMs !== null && (now - this.windowStartMs) >= this.WINDOW_MS) {
-            this.count = 0;
-            this.windowStartMs = null;
+        // Auto-reset if the 1-hour window has fully elapsed for this user
+        if (bucket.windowStartMs !== null && (now - bucket.windowStartMs) >= GEMINI_RATE_WINDOW_MS) {
+            bucket.count = 0;
+            bucket.windowStartMs = null;
         }
-        if (this.count >= this.MAX_PER_HOUR) {
-            const elapsed = this.windowStartMs ? now - this.windowStartMs : 0;
-            const remainingMs = Math.max(0, this.WINDOW_MS - elapsed);
+        if (bucket.count >= GEMINI_RATE_MAX) {
+            const elapsed = bucket.windowStartMs ? now - bucket.windowStartMs : 0;
+            const remainingMs = Math.max(0, GEMINI_RATE_WINDOW_MS - elapsed);
             const remainingMin = Math.ceil(remainingMs / 60000);
             const err = new Error('GEMINI_VERIFICATION_RATE_LIMITED');
             err.isGeminiVerificationRateLimit = true;
@@ -3056,28 +3066,30 @@ const geminiVerificationRateLimit = {
             throw err;
         }
     },
-    increment() {
-        if (this.windowStartMs === null) this.windowStartMs = Date.now();
-        this.count++;
+    increment(uid) {
+        const bucket = _getOrCreateBucket(uid);
+        if (bucket.windowStartMs === null) bucket.windowStartMs = Date.now();
+        bucket.count++;
     },
-    status() {
+    status(uid) {
+        const bucket = _getOrCreateBucket(uid);
         const now = Date.now();
-        if (this.windowStartMs !== null && (now - this.windowStartMs) >= this.WINDOW_MS) {
-            return { count: 0, remaining: this.MAX_PER_HOUR, resetIn: 0 };
+        if (bucket.windowStartMs !== null && (now - bucket.windowStartMs) >= GEMINI_RATE_WINDOW_MS) {
+            return { count: 0, remaining: GEMINI_RATE_MAX, resetIn: 0 };
         }
-        const elapsed = this.windowStartMs ? now - this.windowStartMs : 0;
-        const resetIn = this.windowStartMs ? Math.max(0, Math.ceil((this.WINDOW_MS - elapsed) / 60000)) : 0;
+        const elapsed = bucket.windowStartMs ? now - bucket.windowStartMs : 0;
+        const resetIn = bucket.windowStartMs ? Math.max(0, Math.ceil((GEMINI_RATE_WINDOW_MS - elapsed) / 60000)) : 0;
         return {
-            count: this.count,
-            remaining: Math.max(0, this.MAX_PER_HOUR - this.count),
+            count: bucket.count,
+            remaining: Math.max(0, GEMINI_RATE_MAX - bucket.count),
             resetIn
         };
     }
 };
 
-async function callGemini(model, prompt, imageParts) {
-    // Enforce verification rate limit (5/hour, resets on restart or after 1 hour)
-    geminiVerificationRateLimit.check();
+async function callGemini(model, prompt, imageParts, uid) {
+    // Enforce per-user verification rate limit (5/hour per UID)
+    geminiVerificationRateLimit.check(uid);
 
     const candidates = [
         { name: PRIMARY_GEMINI_MODEL, client: model },
@@ -3088,14 +3100,14 @@ async function callGemini(model, prompt, imageParts) {
     for (const candidate of candidates) {
         try {
             const result = await executeGeminiCall(candidate.client, prompt, imageParts, `Gemini ${candidate.name}`);
-            geminiVerificationRateLimit.increment(); // count only on success
+            geminiVerificationRateLimit.increment(uid); // count only on success
             return result;
         } catch (e) {
             if (e instanceof SyntaxError) {
                 const strict = prompt + '\n\nCRITICAL: Valid JSON only. No markdown. Start { end }.';
                 try {
                     const strictResult = await executeGeminiCall(candidate.client, strict, imageParts, `Gemini strict ${candidate.name}`);
-                    geminiVerificationRateLimit.increment(); // count strict retry too
+                    geminiVerificationRateLimit.increment(uid); // count strict retry too
                     return strictResult;
                 } catch (strictError) {
                     if (isGeminiQuotaError(strictError)) {
@@ -3916,6 +3928,12 @@ function extractCertificateSubjectFromPage(page, platform) {
 app.post('/api/verify', async (req, res) => {
     const { type, skillLevels = {}, portfolioUrls } = req.body;
 
+    // UID is used for per-user rate limiting — falls back to a safe placeholder
+    // so unauthenticated/anonymous requests share one bucket rather than bypassing limits.
+    const callerUid = (typeof req.body.uid === 'string' && req.body.uid.trim())
+        ? req.body.uid.trim()
+        : 'anonymous';
+
     const svSkills = sanitize(req.body.skills, MAX_SKILLS, 'skills');
     const svExpertise = sanitize(req.body.expertise, MAX_EXPERTISE, 'expertise');
     if (svSkills.error) return res.status(400).json({ error: svSkills.error });
@@ -3986,7 +4004,7 @@ Respond ONLY in valid JSON (no markdown):
   "developerSummary": "5-7 sentences. Mention only the claimed skills and specific supporting repositories. Do not mention unrelated stack items."
 }`;
 
-            const ai = await callGemini(model, aiPrompt, null);
+            const ai = await callGemini(model, aiPrompt, null, callerUid);
             const { score, breakdown, skillEvaluations } = calcGitHubScore(profile, repos, langNames, skillLevels, ai);
             const verifiedSkills = skillEvaluations.filter(item => item.status === 'verified').map(item => item.skill);
             const partialSkills = skillEvaluations.filter(item => item.status === 'partial').map(item => item.skill);
@@ -4134,7 +4152,7 @@ Respond ONLY in valid JSON (no markdown, no backticks):
   "reasoning": "4 sentences: name check, tamper assessment, skill match, level comparison"
 }`;
 
-                const j = await callGemini(model, prompt, [part]);
+                const j = await callGemini(model, prompt, [part], callerUid);
 
                 // Hard: name mismatch = fail
                 if (j.nameMismatch) { j.isVerified = false; j.confidenceScore = 0; }
@@ -4281,7 +4299,7 @@ Respond ONLY in valid JSON:
   "limitation": "Short note about this verification method."
 }`;
 
-            const certAnalysis = await callGemini(model, certPrompt, null);
+            const certAnalysis = await callGemini(model, certPrompt, null, callerUid);
             const rawRecipientName = normalizeWhitespace(certAnalysis.recipientName || 'not shown');
             const initialNameCheck = evaluateCertificateNameCheck(fullName, rawRecipientName);
             const explicitNameMismatch = !!certAnalysis.nameMismatch;
@@ -6372,8 +6390,10 @@ function normalizeVerificationReport(rawReport, options = {}) {
     if (scoreMode === 'fallback' && status === 'verified') {
         status = hasEvidence ? 'partial' : 'unavailable';
     }
-    if (!hasEvidence && status === 'verified') {
-        status = scoreMode === 'full' ? 'partial' : 'unavailable';
+    // Only force partial when there's no evidence AND we're in fallback mode.
+    // In full (Groq) mode, a score-based 'verified' from the AI is kept as-is.
+    if (!hasEvidence && status === 'verified' && scoreMode !== 'full') {
+        status = 'partial';
     }
 
     let overview = toCleanText(report.overview || report.summary);
@@ -6940,7 +6960,7 @@ app.post('/api/regenerate-notes-with-feedback', async (req, res) => {
         // Build compact payloads — no pretty-print, strip sources (already in TAVILY EVIDENCE)
         // Raise notes cap to 6000 so improved notes aren't truncated on re-improvement
         const currentScore = normalizedVerification.score || 0;
-        const isHighScore = currentScore >= 88;
+        const isHighScore = currentScore >= 85;
         const compactVerification = isHighScore
             ? {
                 // High-score notes: only send real corrections and missing concepts
@@ -6984,7 +7004,7 @@ Rules:
 - Preserve useful accurate parts when possible.
 - Treat the prior mistakes as a hard do-not-repeat list.
 - Improve the overview, key points, and sections so the notes are clearly better than before.
-- Aim for notes that could earn a 90-plus score on a strict Tavily verification by being accurate, complete, clear, and sufficiently deep.
+- Aim for notes that could earn an 85-plus score on a strict Tavily verification by being accurate, complete, clear, and sufficiently deep.
 - Do not mention verification, scores, Tavily, Groq, or provider limits inside the notes.
 - If the report shows uncertainty, rewrite cautiously instead of inventing facts.
 - Do NOT reproduce the previous notes verbatim. Write genuinely new, improved content.

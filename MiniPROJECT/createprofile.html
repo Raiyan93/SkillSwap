@@ -403,7 +403,7 @@ body.embedded-edit .form-card{border-radius:20px;padding:28px;animation:none}
 
         <div class="notice" style="background:rgba(251,191,36,.06);border-color:rgba(251,191,36,.2);">
           <span class="icon">⚠️</span>
-          <span style="color:var(--warn);">The certificate page must be <strong>publicly accessible</strong> without login, and Gemini must be available to verify it. Score is capped at <strong>80/100</strong> for this method, and certificate level is judged from the certificate’s own title or subject rather than generic platform text (use GitHub for higher scores). Submitting someone else's certificate link is a permanent ban offence.</span>
+          <span style="color:var(--warn);">The certificate page must be <strong>publicly accessible</strong> without login, and AI must be available to verify it. Score is capped at <strong>80/100</strong> for this method, and certificate level is judged from the certificate’s own title or subject rather than generic platform text (use GitHub for higher scores). Submitting someone else's certificate link is a permanent ban offence.</span>
         </div>
       </div>
 
@@ -534,6 +534,7 @@ if (isEmbeddedEditMode) {
 onAuthStateChanged(auth,async(user)=>{
   if(!user){window.location.href='Registration.html';return;}
   currentUser=user;
+  window.currentUser=user; // expose to non-module scripts (e.g. verifyWithAI)
   const ef=document.getElementById('email');if(ef)ef.value=user.email||'';
 
   try{
@@ -1025,6 +1026,7 @@ window.verifyWithAI=async function(){
       type:_currentVerifyType,skills:skillsStr,skillLevels,expertise,
       profileFirstName:_profileFirstName,
       profileLastName:_profileLastName,
+      uid: window.currentUser ? window.currentUser.uid : '',
     };
 
     if(_currentVerifyType==='technical'){
